@@ -57,6 +57,12 @@ TOKEN_ENCRYPTION_KEY=32-char-random-string-here
 
 ---
 
+## Current Build Status
+
+This scaffold ships with **core UI + Supabase** fully wired. Pricing and eBay API routes are **stubbed** — they return deterministic mock data and update the database so all UI states are exercisable without real API credentials. eBay OAuth targets **sandbox** by default; leave `EBAY_CLIENT_ID` blank to use the built-in stub OAuth flow during local development.
+
+---
+
 ## Getting Started
 
 ```bash
