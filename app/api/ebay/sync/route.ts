@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 // TODO: Replace with real eBay GetItem polling for sold status
 export async function POST() {
   const supabase = await createClient();

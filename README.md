@@ -59,7 +59,11 @@ TOKEN_ENCRYPTION_KEY=32-char-random-string-here
 
 ## Current Build Status
 
-This scaffold ships with **core UI + Supabase** fully wired. Pricing and eBay API routes are **stubbed** — they return deterministic mock data and update the database so all UI states are exercisable without real API credentials. eBay OAuth targets **sandbox** by default; leave `EBAY_CLIENT_ID` blank to use the built-in stub OAuth flow during local development.
+- **Auth + Catalog + CSV import + Photo upload:** fully wired against Supabase.
+- **Pricing (Discogs):** live — fetches condition-graded suggestions via the `/marketplace/price_suggestions` and `/marketplace/stats` endpoints, with smart catalog-#/artist/title normalization and a 24h cache.
+- **Pricing (eBay):** live — uses the Browse API (`client_credentials` app token, no user OAuth) as a fallback when Discogs has no match. Sandbox returns very few real listings; production credentials return real comparables.
+- **eBay listing OAuth:** sandbox-ready. Set `EBAY_CLIENT_ID`/`EBAY_CLIENT_SECRET`/`EBAY_RU_NAME`. Leaving `EBAY_CLIENT_ID` blank enables a stub OAuth flow for UI testing.
+- **eBay listing creation:** stubbed — `/api/ebay/list` returns a fake listing ID and stores the album as listed. Replace with Trading API `AddFixedPriceItem` when ready.
 
 ---
 
@@ -218,17 +222,83 @@ vinylvault/
 
 ---
 
-## Deployment (Vercel)
+## Deploy to Vercel
+
+VinylVault is configured for one-click Vercel deployment. The repo includes a `vercel.json` that pins the build/install commands, picks the `iad1` (US East) region, and raises the serverless function timeout to 60s for the pricing/import routes (the default 10s isn't enough for sequential Discogs calls with rate limiting).
+
+### Step-by-step
+
+1. **Push to GitHub** (already done if you're reading this in the repo).
+
+2. **Import the project on Vercel**
+   - Go to [vercel.com/new](https://vercel.com/new)
+   - Pick this repo
+   - Framework preset auto-detects as **Next.js** — leave the defaults
+
+3. **Set environment variables** (Vercel → Project → Settings → Environment Variables)
+
+   **Required:**
+   | Variable | Where to get it |
+   |---|---|
+   | `NEXT_PUBLIC_SUPABASE_URL` | Supabase → Project Settings → API |
+   | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Project Settings → API |
+   | `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → API |
+   | `NEXT_PUBLIC_APP_URL` | Your Vercel URL, e.g. `https://your-app.vercel.app` |
+
+   **Recommended (pricing):**
+   | Variable | Where to get it |
+   |---|---|
+   | `DISCOGS_PERSONAL_ACCESS_TOKEN` | [discogs.com/settings/developers](https://www.discogs.com/settings/developers) — "Generate new token" |
+   | `DISCOGS_USER_AGENT` | Any string, e.g. `VinylVault/1.0` |
+
+   **Optional (eBay):**
+   | Variable | Where to get it |
+   |---|---|
+   | `EBAY_CLIENT_ID` | [developer.ebay.com/my/keys](https://developer.ebay.com/my/keys) (use **Production** keys for real data) |
+   | `EBAY_CLIENT_SECRET` | Same keyset |
+   | `EBAY_RU_NAME` | Same keyset → "User Tokens" tab |
+   | `EBAY_REDIRECT_URI` | `https://your-app.vercel.app/api/ebay/callback` |
+   | `EBAY_ENVIRONMENT` | `sandbox` or `production` |
+   | `TOKEN_ENCRYPTION_KEY` | Run `openssl rand -base64 32 \| head -c 32` |
+
+   Apply all three environments (**Production**, **Preview**, **Development**) unless you have a reason not to.
+
+4. **Deploy** — click **Deploy**. Vercel builds + deploys; takes ~90s.
+
+5. **Update Supabase Auth redirects** so the production callback works:
+   - Supabase → **Authentication** → **URL Configuration**
+   - Set **Site URL** to `https://your-app.vercel.app`
+   - Add `https://your-app.vercel.app/**` under **Redirect URLs**
+
+6. **Run database migrations** against your Supabase project if you haven't:
+   - Open the Supabase SQL editor and paste each file in `supabase/migrations/` in order (`001_initial.sql`, `002_album_photos_public.sql`, `003_pricing_cache_unique.sql`).
+
+7. **(If using real eBay OAuth)** Update the eBay Developer portal:
+   - Go to [developer.ebay.com/my/keys](https://developer.ebay.com/my/keys) → your keyset → **User Tokens**
+   - Set the **auth-accepted URL** to `https://your-app.vercel.app/api/ebay/callback`
+   - Copy the resulting RuName into `EBAY_RU_NAME`
+
+### CLI alternative
 
 ```bash
-# Install Vercel CLI
 npm i -g vercel
-
-# Deploy
-vercel --prod
+vercel             # first run: link the project
+vercel env add     # add each env var interactively
+vercel --prod      # deploy production
 ```
 
-Set all environment variables in the Vercel dashboard under **Project → Settings → Environment Variables**.
+### Function configuration
+
+`vercel.json` raises timeouts for the long-running routes:
+
+| Route | maxDuration | Why |
+|---|---|---|
+| `/api/pricing/fetch` | 60s | Up to 12 sequential Discogs API calls × 1.1s rate limit + eBay fallback |
+| `/api/pricing/bulk` | 60s | Sequential pricing — server caps at 15 albums/request, client auto-chunks larger selections |
+| `/api/albums/import` | 60s | CSV imports of large catalogs |
+| `/api/ebay/list`, `/api/ebay/callback`, `/api/ebay/sync` | 30s | Network-bound eBay API calls |
+
+On Vercel **Hobby** plans, 60s is the maximum function duration. If you need longer (e.g. bulk pricing 100+ albums in one shot), upgrade to **Pro** which allows up to 300s and adjust `maxDuration` accordingly.
 
 ---
 

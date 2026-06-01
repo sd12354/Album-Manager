@@ -9,6 +9,10 @@ import {
 import { EBAY_MAX_PHOTOS, getOriginalPublicUrl } from "@/lib/photos";
 import type { Album } from "@/types";
 
+export const runtime = "nodejs";
+export const maxDuration = 30;
+export const dynamic = "force-dynamic";
+
 // TODO: Replace with real eBay Trading API AddItem call
 export async function POST(request: Request) {
   const supabase = await createClient();

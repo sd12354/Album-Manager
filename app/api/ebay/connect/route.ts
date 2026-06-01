@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { EBAY_AUTH_URL } from "@/lib/ebay";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 const EBAY_SCOPE = [
   "https://api.ebay.com/oauth/api_scope",
   "https://api.ebay.com/oauth/api_scope/sell.inventory",

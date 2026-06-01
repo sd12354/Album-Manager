@@ -1,0 +1,15 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "regions": ["iad1"],
+  "buildCommand": "next build",
+  "installCommand": "npm install",
+  "functions": {
+    "app/api/pricing/fetch/route.ts": { "maxDuration": 60 },
+    "app/api/pricing/bulk/route.ts": { "maxDuration": 60 },
+    "app/api/ebay/callback/route.ts": { "maxDuration": 30 },
+    "app/api/ebay/list/route.ts": { "maxDuration": 30 },
+    "app/api/ebay/sync/route.ts": { "maxDuration": 30 },
+    "app/api/albums/import/route.ts": { "maxDuration": 60 }
+  }
+}

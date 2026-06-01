@@ -5,6 +5,12 @@ import { searchEbayActiveListings, type EbayPriceResult } from "@/lib/ebay";
 import { buildCombinedPricing } from "@/lib/pricing";
 import type { Album, AlbumCondition, PricingResult } from "@/types";
 
+// Single-album fetch can issue ~12 sequential Discogs requests at 1.1s each
+// (plus an eBay fallback). Pin to Node runtime + raise timeout for Vercel.
+export const runtime = "nodejs";
+export const maxDuration = 60;
+export const dynamic = "force-dynamic";
+
 /** Skip remote fetches if we have a cached entry younger than this. */
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
