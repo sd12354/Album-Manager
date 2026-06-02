@@ -104,16 +104,26 @@ export function AlbumDetailClient({
     });
     if (res.ok) {
       const data = await res.json();
-      setAlbum((prev) => ({
-        ...prev,
-        status: "listed",
-        ebay_listing_id: data.listingId,
-        ebay_listing_url: data.listingUrl,
-        list_price: parseFloat(listPrice),
-      }));
-      toast.success("Listed on eBay");
+      if (data.stub) {
+        toast.warning(
+          data.message ??
+            "Preview only — eBay listing isn't wired up yet, so nothing was posted.",
+          { duration: 10000 }
+        );
+      } else {
+        setAlbum((prev) => ({
+          ...prev,
+          status: "listed",
+          ebay_listing_id: data.listingId,
+          ebay_listing_url: data.listingUrl,
+          list_price: parseFloat(listPrice),
+        }));
+        toast.success("Listed on eBay");
+        router.refresh();
+      }
     } else {
-      toast.error("Failed to list on eBay");
+      const err = await res.json().catch(() => ({}));
+      toast.error(err.error ?? "Failed to list on eBay");
     }
     setListing(false);
   }

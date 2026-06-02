@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { Sidebar } from "@/components/sidebar";
+import { AppShell } from "@/components/app-shell";
 
 export default async function AppLayout({
   children,
@@ -18,12 +18,8 @@ export default async function AppLayout({
     .maybeSingle();
 
   return (
-    <div className="min-h-screen bg-base">
-      <Sidebar
-        userEmail={user?.email}
-        ebayConnected={!!ebayCreds}
-      />
-      <main className="ml-60 min-h-screen p-8">{children}</main>
-    </div>
+    <AppShell userEmail={user?.email} ebayConnected={!!ebayCreds}>
+      {children}
+    </AppShell>
   );
 }

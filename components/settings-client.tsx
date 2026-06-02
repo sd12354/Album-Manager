@@ -28,6 +28,7 @@ import type { AlbumCondition } from "@/types";
 interface SettingsClientProps {
   ebayConnected: boolean;
   ebayUsername?: string;
+  ebayEnvironment?: "production" | "sandbox" | "stub";
   ebayError?: string;
   discogsEnvTokenConfigured: boolean;
   userSettings: {
@@ -42,6 +43,7 @@ interface SettingsClientProps {
 export function SettingsClient({
   ebayConnected: initialConnected,
   ebayUsername,
+  ebayEnvironment,
   ebayError,
   discogsEnvTokenConfigured,
   userSettings,
@@ -121,6 +123,7 @@ export function SettingsClient({
             <EbayConnectButton
               connected={ebayConnected}
               username={ebayUsername}
+              environment={ebayEnvironment}
               onStatusChange={setEbayConnected}
             />
 

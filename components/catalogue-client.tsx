@@ -234,15 +234,39 @@ export function CatalogueClient({ albums }: CatalogueClientProps) {
 
   const handleBulkList = useCallback(async () => {
     setBulkLoading("list");
+    let listed = 0;
+    let previewed = 0;
+    let failed = 0;
     for (const id of selectedIds) {
-      await fetch("/api/ebay/list", {
+      const res = await fetch("/api/ebay/list", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ albumId: id }),
       });
+      if (!res.ok) {
+        failed += 1;
+        continue;
+      }
+      const data = await res.json().catch(() => ({}));
+      if (data.stub) previewed += 1;
+      else listed += 1;
     }
-    toast.success(`Listed ${selectedIds.length} albums on eBay`);
-    router.refresh();
+
+    if (previewed > 0 && listed === 0) {
+      toast.warning(
+        `Preview only — eBay listing isn't wired up yet, so ${previewed} ${
+          previewed === 1 ? "album was" : "albums were"
+        } not posted.`,
+        { duration: 10000 }
+      );
+    } else {
+      const parts: string[] = [];
+      if (listed > 0) parts.push(`${listed} listed`);
+      if (previewed > 0) parts.push(`${previewed} preview-only`);
+      if (failed > 0) parts.push(`${failed} failed`);
+      toast.success(parts.join(" · "));
+      router.refresh();
+    }
     setBulkLoading(null);
   }, [selectedIds, router]);
 

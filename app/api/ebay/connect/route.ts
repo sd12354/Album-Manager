@@ -7,6 +7,7 @@ export const dynamic = "force-dynamic";
 const EBAY_SCOPE = [
   "https://api.ebay.com/oauth/api_scope",
   "https://api.ebay.com/oauth/api_scope/sell.inventory",
+  "https://api.ebay.com/oauth/api_scope/commerce.identity.readonly",
 ].join(" ");
 
 export async function GET(request: Request) {

@@ -15,6 +15,12 @@ export const EBAY_BROWSE_URL =
     ? "https://api.ebay.com/buy/browse/v1"
     : "https://api.sandbox.ebay.com/buy/browse/v1";
 
+// Identity API uses the apiz.* subdomain (not api.*) — easy to miss.
+export const EBAY_IDENTITY_URL =
+  EBAY_ENVIRONMENT === "production"
+    ? "https://apiz.ebay.com/commerce/identity/v1/user/"
+    : "https://apiz.sandbox.ebay.com/commerce/identity/v1/user/";
+
 export const EBAY_TRADING_URL =
   EBAY_ENVIRONMENT === "production"
     ? "https://api.ebay.com/ws/api.dll"

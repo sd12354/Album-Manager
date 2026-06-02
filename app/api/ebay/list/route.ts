@@ -4,7 +4,6 @@ import {
   buildListingDescription,
   buildListingTitle,
   getCategoryForGenre,
-  getSandboxListingUrl,
 } from "@/lib/ebay";
 import { EBAY_MAX_PHOTOS, getOriginalPublicUrl } from "@/lib/photos";
 import type { Album } from "@/types";
@@ -13,7 +12,24 @@ export const runtime = "nodejs";
 export const maxDuration = 30;
 export const dynamic = "force-dynamic";
 
-// TODO: Replace with real eBay Trading API AddItem call
+/**
+ * eBay AddItem stub.
+ *
+ * Real Trading API integration is NOT yet implemented. Calling this endpoint
+ * builds the payload that *would* be sent to eBay and returns it as a
+ * preview, but does not actually create a listing. We intentionally do NOT
+ * update the album to status='listed' because that would make the UI lie.
+ *
+ * To wire up real listing we need to:
+ *   1. POST XML to https://api.ebay.com/ws/api.dll with the user's OAuth
+ *      token via the X-EBAY-API-IAF-TOKEN header.
+ *   2. Use a verb of AddFixedPriceItem (or AddItem) with the payload below
+ *      serialized to the Trading XML schema.
+ *   3. Configure business policies on the eBay account (shipping, returns,
+ *      payment) and reference them by ID in the request.
+ *   4. Map condition + genre to eBay item specifics (Format=Vinyl, etc.).
+ *   5. Handle the long tail of validation errors eBay returns.
+ */
 export async function POST(request: Request) {
   const supabase = await createClient();
   const {
@@ -55,8 +71,6 @@ export async function POST(request: Request) {
 
   const typedAlbum = album as Album;
   const price = listPrice ?? typedAlbum.list_price ?? typedAlbum.suggested_price ?? 9.99;
-  const listingId = `STUB-${Date.now()}`;
-  const listingUrl = getSandboxListingUrl(listingId);
 
   // Pass through full-resolution photo URLs unchanged. eBay's Picture Service
   // (EPS) fetches each URL and hosts the original master internally — they
@@ -66,12 +80,7 @@ export async function POST(request: Request) {
     .slice(0, EBAY_MAX_PHOTOS)
     .map(getOriginalPublicUrl);
 
-  // TODO: When the real Trading API call lands, this maps directly to:
-  //   <PictureDetails>
-  //     <PhotoDisplay>PicturePack</PhotoDisplay>
-  //     {pictureUrls.map(u => <PictureURL>{u}</PictureURL>)}
-  //   </PictureDetails>
-  const _payload = {
+  const payload = {
     title: buildListingTitle(typedAlbum.artist, typedAlbum.title, typedAlbum.condition),
     description: buildListingDescription(
       typedAlbum.artist,
@@ -86,20 +95,13 @@ export async function POST(request: Request) {
     pictureUrls,
   };
 
-  await supabase
-    .from("albums")
-    .update({
-      status: "listed",
-      ebay_listing_id: listingId,
-      ebay_listing_url: listingUrl,
-      list_price: price,
-    })
-    .eq("id", albumId);
-
+  // Honest stub: surface the payload but do NOT mutate the album, do NOT
+  // generate fake listing IDs/URLs, and return `stub: true` so the UI can
+  // tell the user this was a preview.
   return NextResponse.json({
-    listingId,
-    listingUrl,
-    payload: _payload,
     stub: true,
+    message:
+      "Preview only — eBay AddItem isn't wired up yet, so nothing was posted. The payload below is what would be sent.",
+    payload,
   });
 }

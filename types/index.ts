@@ -85,4 +85,5 @@ export interface UserSettings {
   email_on_sale?: boolean;
   shipping_profile?: string;
   ebay_username?: string;
+  ebay_environment?: "production" | "sandbox" | "stub";
 }

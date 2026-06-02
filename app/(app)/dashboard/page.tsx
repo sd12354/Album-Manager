@@ -3,12 +3,70 @@ import { Upload, Plus, DollarSign, TrendingUp } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { SalesChart, type SalesPoint } from "@/components/sales-chart";
 import { formatCurrency, formatRelativeTime, getActivityDescription } from "@/lib/utils";
 import type { Album } from "@/types";
 
 function getStartOfMonth(): string {
   const now = new Date();
   return new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+}
+
+/**
+ * Builds a 12-month rolling window of {label, revenue, count}, oldest first.
+ * Months with no sales are kept as zero-bars so the X-axis is contiguous and
+ * the chart doesn't lie about cadence.
+ */
+function buildMonthlySales(albums: Album[]): SalesPoint[] {
+  const now = new Date();
+  const buckets = new Map<string, { revenue: number; count: number }>();
+
+  // Seed 12 months in order so empty months still render.
+  const monthOrder: string[] = [];
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    monthOrder.push(key);
+    buckets.set(key, { revenue: 0, count: 0 });
+  }
+
+  for (const album of albums) {
+    if (album.status !== "sold" || !album.sold_at) continue;
+    const d = new Date(album.sold_at);
+    if (Number.isNaN(d.getTime())) continue;
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const bucket = buckets.get(key);
+    if (!bucket) continue; // Older than our 12-month window — ignore.
+    bucket.revenue += album.sold_price ?? 0;
+    bucket.count += 1;
+  }
+
+  const monthNames = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  ];
+  const showYear = new Set<number>();
+  // Add year label to January and the very first bucket to anchor the timeline.
+  monthOrder.forEach((key, i) => {
+    const [, m] = key.split("-").map(Number);
+    if (m === 1 || i === 0) showYear.add(i);
+  });
+
+  return monthOrder.map((key, i) => {
+    const [yearStr, monthStr] = key.split("-");
+    const m = Number(monthStr) - 1;
+    const yy = yearStr.slice(2);
+    const label = showYear.has(i)
+      ? `${monthNames[m]} '${yy}`
+      : monthNames[m];
+    const bucket = buckets.get(key)!;
+    return {
+      monthKey: key,
+      label,
+      revenue: Math.round(bucket.revenue * 100) / 100,
+      count: bucket.count,
+    };
+  });
 }
 
 export default async function DashboardPage() {
@@ -32,6 +90,7 @@ export default async function DashboardPage() {
   );
 
   const recentActivity = allAlbums.slice(0, 10);
+  const monthlySales = buildMonthlySales(allAlbums);
 
   const stats = [
     { label: "Total Albums", value: totalAlbums.toString(), trend: null },
@@ -78,6 +137,10 @@ export default async function DashboardPage() {
         ))}
       </div>
 
+      <div className="mt-8">
+        <SalesChart data={monthlySales} />
+      </div>
+
       <div className="mt-8 animate-fade-in-up stagger-5">
         <h2 className="mb-4 font-display text-xl font-bold">Quick Actions</h2>
         <div className="flex flex-wrap gap-3">
@@ -119,21 +182,24 @@ export default async function DashboardPage() {
             ) : (
               <div className="divide-y divide-white/8">
                 {recentActivity.map((album, i) => (
-                  <div
+                  <Link
                     key={album.id}
-                    className={`flex items-center justify-between px-6 py-4 transition-colors hover:bg-white/[0.02] animate-fade-in-up stagger-${Math.min(i + 1, 5)}`}
+                    href={`/albums/${album.id}`}
+                    className={`group flex items-center justify-between gap-4 px-6 py-4 transition-colors hover:bg-white/[0.03] focus-visible:bg-white/[0.04] focus-visible:outline-none animate-fade-in-up stagger-${Math.min(i + 1, 5)}`}
                   >
-                    <div>
-                      <p className="font-medium">{album.title}</p>
-                      <p className="text-sm text-muted-foreground">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium transition-colors group-hover:text-accent">
+                        {album.title}
+                      </p>
+                      <p className="truncate text-sm text-muted-foreground">
                         {album.artist} ·{" "}
                         {getActivityDescription(album.status, album.sold_price)}
                       </p>
                     </div>
-                    <span className="text-xs text-muted-foreground">
+                    <span className="shrink-0 text-xs text-muted-foreground">
                       {formatRelativeTime(album.updated_at)}
                     </span>
-                  </div>
+                  </Link>
                 ))}
               </div>
             )}

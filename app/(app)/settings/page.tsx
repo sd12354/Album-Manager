@@ -25,6 +25,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
     <SettingsClient
       ebayConnected={!!ebayCreds}
       ebayUsername={userSettings.ebay_username ?? "vinyl_collector_pro"}
+      ebayEnvironment={userSettings.ebay_environment}
       ebayError={params?.ebay_error}
       discogsEnvTokenConfigured={!!process.env.DISCOGS_PERSONAL_ACCESS_TOKEN}
       userSettings={userSettings}
