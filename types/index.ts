@@ -22,6 +22,12 @@ export interface Album {
   discogs_release_id?: number | null;
   sold_price?: number | null;
   sold_at?: string | null;
+  tracking_number?: string | null;
+  shipping_label_url?: string | null;
+  shipping_carrier?: string | null;
+  shipping_rate?: number | null;
+  buyer_name?: string | null;
+  buyer_address_raw?: string | null;
   photo_urls?: string[] | null;
   created_at: string;
   updated_at: string;
@@ -89,4 +95,12 @@ export interface UserSettings {
   shipping_profile?: string;
   ebay_username?: string;
   ebay_environment?: "production" | "sandbox" | "stub";
+  shippo_api_key?: string;
+  seller_name?: string;
+  seller_street1?: string;
+  seller_street2?: string;
+  seller_city?: string;
+  seller_state?: string;
+  seller_zip?: string;
+  seller_country?: string;
 }

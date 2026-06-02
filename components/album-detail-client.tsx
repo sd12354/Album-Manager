@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Disc2, ExternalLink, RefreshCw, ShoppingBag, Upload } from "lucide-react";
+import { ArrowLeft, Disc2, ExternalLink, Package, RefreshCw, ShoppingBag, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { AlbumStatusBadge } from "@/components/album-status-badge";
 import { ConditionBadge } from "@/components/condition-badge";
@@ -31,6 +31,51 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/utils";
 import type { Album, AlbumCondition, PricingResult } from "@/types";
+
+interface LabelResult {
+  trackingNumber: string;
+  labelUrl: string;
+  carrier: string;
+  serviceLevel: string;
+}
+
+function CreateLabelButton({
+  albumId,
+  onCreated,
+}: {
+  albumId: string;
+  onCreated: (label: LabelResult) => void;
+}) {
+  const [loading, setLoading] = useState(false);
+
+  async function handleCreate() {
+    setLoading(true);
+    const res = await fetch("/api/shipping/label", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ albumId }),
+    });
+    if (res.ok) {
+      const data: LabelResult = await res.json();
+      onCreated(data);
+      toast.success("Shipping label created");
+    } else {
+      const err = await res.json().catch(() => ({}));
+      toast.error(err.error ?? "Label creation failed");
+    }
+    setLoading(false);
+  }
+
+  return (
+    <button
+      onClick={handleCreate}
+      disabled={loading}
+      className="text-accent hover:underline disabled:opacity-50"
+    >
+      {loading ? "Creating..." : "create one now"}
+    </button>
+  );
+}
 
 interface AlbumDetailClientProps {
   album: Album;
@@ -178,10 +223,22 @@ export function AlbumDetailClient({
           status: "sold",
           sold_price: data.soldPrice ?? prev.list_price,
           sold_at: new Date().toISOString(),
+          tracking_number: data.label?.trackingNumber ?? prev.tracking_number,
+          shipping_label_url: data.label?.labelUrl ?? prev.shipping_label_url,
+          shipping_carrier: data.label?.carrier
+            ? `${data.label.carrier} — ${data.label.serviceLevel}`
+            : prev.shipping_carrier,
+          buyer_address_raw: data.buyerAddressRaw ?? prev.buyer_address_raw,
         }));
-        toast.success(
-          `Sold on ${data.soldOn === "ebay" ? "eBay" : "Discogs"} — other listing cancelled`
-        );
+        const platform = data.soldOn === "ebay" ? "eBay" : "Discogs";
+        if (data.label) {
+          toast.success(`Sold on ${platform} — shipping label created`);
+        } else {
+          toast.success(`Sold on ${platform} — other listing cancelled`);
+          if (data.labelError) {
+            toast.warning(data.labelError, { duration: 10000 });
+          }
+        }
         router.refresh();
       } else {
         toast.info("No sale detected yet on either platform");
@@ -643,34 +700,109 @@ export function AlbumDetailClient({
 
           {/* Sold card */}
           {album.status === "sold" && (
-            <div className="rounded-xl border border-white/8 bg-card p-5 animate-fade-in-up">
-              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Sold
-              </p>
-              <p className="mt-2 font-display text-3xl font-bold tabular-nums">
-                {formatCurrency(album.sold_price)}
-              </p>
-              {album.sold_at && (
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {new Date(album.sold_at).toLocaleDateString("en-US", {
-                    month: "long",
-                    day: "numeric",
-                    year: "numeric",
-                  })}
+            <div className="rounded-xl border border-white/8 bg-card overflow-hidden animate-fade-in-up">
+              {/* Sale summary */}
+              <div className="p-5">
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Sold
                 </p>
-              )}
-              {profit !== null && (
-                <p
-                  className={`mt-3 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium ${
-                    profit >= 0
-                      ? "bg-green-500/10 text-green-400"
-                      : "bg-red-500/10 text-red-400"
-                  }`}
-                >
-                  {profit >= 0 ? "+" : ""}
-                  {formatCurrency(profit)} vs purchase price
+                <p className="mt-2 font-display text-3xl font-bold tabular-nums">
+                  {formatCurrency(album.sold_price)}
                 </p>
-              )}
+                {album.sold_at && (
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {new Date(album.sold_at).toLocaleDateString("en-US", {
+                      month: "long",
+                      day: "numeric",
+                      year: "numeric",
+                    })}
+                  </p>
+                )}
+                {profit !== null && (
+                  <p
+                    className={`mt-3 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium ${
+                      profit >= 0
+                        ? "bg-green-500/10 text-green-400"
+                        : "bg-red-500/10 text-red-400"
+                    }`}
+                  >
+                    {profit >= 0 ? "+" : ""}
+                    {formatCurrency(profit)} vs purchase price
+                  </p>
+                )}
+              </div>
+
+              {/* Shipping / label section */}
+              <div className="border-t border-white/8 p-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <Package className="h-4 w-4 text-muted-foreground" />
+                  <p className="text-sm font-medium">Shipping</p>
+                </div>
+
+                {album.tracking_number ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Carrier</span>
+                      <span className="font-medium">{album.shipping_carrier ?? "—"}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Tracking</span>
+                      <span className="font-mono text-xs">{album.tracking_number}</span>
+                    </div>
+                    {album.buyer_address_raw && (
+                      <div className="mt-2 rounded-lg border border-white/8 bg-white/[0.02] p-3">
+                        <p className="text-xs text-muted-foreground mb-1">Ship to</p>
+                        <pre className="text-xs font-sans whitespace-pre-wrap text-[#F5F4F0]">
+                          {album.buyer_address_raw}
+                        </pre>
+                      </div>
+                    )}
+                    <div className="flex gap-2 pt-1">
+                      {album.shipping_label_url && (
+                        <a
+                          href={album.shipping_label_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-accent/15 px-3 py-1.5 text-xs font-medium text-accent hover:bg-accent/25 transition-colors"
+                        >
+                          <Package className="h-3 w-3" />
+                          Download label (PDF)
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {album.buyer_address_raw && (
+                      <div className="rounded-lg border border-white/8 bg-white/[0.02] p-3">
+                        <p className="text-xs text-muted-foreground mb-1">Buyer address</p>
+                        <pre className="text-xs font-sans whitespace-pre-wrap text-[#F5F4F0]">
+                          {album.buyer_address_raw}
+                        </pre>
+                      </div>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      No label yet.{" "}
+                      {!album.buyer_address_raw &&
+                        "Buyer address not captured — "}
+                      Configure Shippo in{" "}
+                      <a href="/settings" className="text-accent hover:underline">
+                        Settings → Shipping
+                      </a>{" "}
+                      to auto-generate labels on future sales, or{" "}
+                      <CreateLabelButton albumId={album.id} onCreated={(label) =>
+                        setAlbum((prev) => ({
+                          ...prev,
+                          tracking_number: label.trackingNumber,
+                          shipping_label_url: label.labelUrl,
+                          shipping_carrier: `${label.carrier} — ${label.serviceLevel}`,
+                        }))
+                      } />
+                      .
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>

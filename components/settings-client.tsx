@@ -37,6 +37,14 @@ interface SettingsClientProps {
     email_on_sale?: boolean;
     shipping_profile?: string;
     condition_multipliers?: Partial<Record<AlbumCondition, number>>;
+    shippo_api_key?: string;
+    seller_name?: string;
+    seller_street1?: string;
+    seller_street2?: string;
+    seller_city?: string;
+    seller_state?: string;
+    seller_zip?: string;
+    seller_country?: string;
   };
 }
 
@@ -62,7 +70,19 @@ export function SettingsClient({
     userSettings.shipping_profile ?? "standard"
   );
   const [testingDiscogs, setTestingDiscogs] = useState(false);
+  const [testingShippo, setTestingShippo] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  // Shippo + seller address state
+  const [shippoKey, setShippoKey] = useState(userSettings.shippo_api_key ?? "");
+  const [sellerName, setSellerName] = useState(userSettings.seller_name ?? "");
+  const [sellerStreet1, setSellerStreet1] = useState(userSettings.seller_street1 ?? "");
+  const [sellerStreet2, setSellerStreet2] = useState(userSettings.seller_street2 ?? "");
+  const [sellerCity, setSellerCity] = useState(userSettings.seller_city ?? "");
+  const [sellerState, setSellerState] = useState(userSettings.seller_state ?? "");
+  const [sellerZip, setSellerZip] = useState(userSettings.seller_zip ?? "");
+  const [sellerCountry, setSellerCountry] = useState(userSettings.seller_country ?? "US");
+
   const supabase = createClient();
 
   async function saveSettings(updates: Record<string, unknown>) {
@@ -77,6 +97,26 @@ export function SettingsClient({
       toast.success("Settings saved");
     }
     setSaving(false);
+  }
+
+  async function testShippo() {
+    setTestingShippo(true);
+    try {
+      const res = await fetch("/api/integrations/shippo/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apiKey: shippoKey }),
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        toast.success("Shippo connected successfully");
+      } else {
+        toast.error(data.error ?? "Shippo connection failed");
+      }
+    } catch {
+      toast.error("Network error");
+    }
+    setTestingShippo(false);
   }
 
   async function testDiscogs() {
@@ -302,6 +342,169 @@ export function SettingsClient({
                   saveSettings({ email_on_sale: checked });
                 }}
               />
+            </div>
+          </AccordionContent>
+        </AccordionItem>
+
+        <AccordionItem value="shipping" className="animate-fade-in-up stagger-5">
+          <AccordionTrigger className="font-display text-lg">
+            <div className="flex items-center gap-2">
+              <span>Shipping</span>
+              {(shippoKey || process.env.NEXT_PUBLIC_SHIPPO_CONFIGURED) ? (
+                <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-emerald-400">
+                  Configured
+                </span>
+              ) : (
+                <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-amber-400">
+                  Not configured
+                </span>
+              )}
+            </div>
+          </AccordionTrigger>
+          <AccordionContent className="space-y-5">
+            <p className="text-sm text-muted-foreground">
+              VinylVault uses{" "}
+              <a
+                href="https://goshippo.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-accent hover:underline"
+              >
+                Shippo
+              </a>{" "}
+              to generate prepaid shipping labels automatically when a sale is
+              detected. Labels default to USPS Media Mail — the cheapest option
+              for vinyl records.
+            </p>
+
+            {/* Shippo API key */}
+            <div className="space-y-2">
+              <Label htmlFor="shippo_key">Shippo API Key</Label>
+              <Input
+                id="shippo_key"
+                type="password"
+                placeholder="shippo_test_... or shippo_live_..."
+                value={shippoKey}
+                onChange={(e) => setShippoKey(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Get your key at{" "}
+                <a
+                  href="https://app.goshippo.com/user/apikeys"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-accent hover:underline"
+                >
+                  app.goshippo.com/user/apikeys
+                </a>
+                . Use a test key while setting up; switch to live when ready to
+                purchase real labels.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={testShippo}
+                disabled={testingShippo || !shippoKey}
+              >
+                {testingShippo ? (
+                  <>
+                    <VinylSpinner size="xs" />
+                    Testing...
+                  </>
+                ) : (
+                  "Test Connection"
+                )}
+              </Button>
+              <Button
+                onClick={() => saveSettings({ shippo_api_key: shippoKey })}
+                disabled={saving}
+              >
+                Save Key
+              </Button>
+            </div>
+
+            {/* Seller / ship-from address */}
+            <div className="space-y-3 rounded-xl border border-white/8 p-4">
+              <p className="text-sm font-medium">Ship-from address</p>
+              <div className="space-y-2">
+                <Label>Your Name / Business</Label>
+                <Input
+                  value={sellerName}
+                  onChange={(e) => setSellerName(e.target.value)}
+                  placeholder="Jane Smith"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Street Address</Label>
+                <Input
+                  value={sellerStreet1}
+                  onChange={(e) => setSellerStreet1(e.target.value)}
+                  placeholder="123 Main St"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Apt / Suite (optional)</Label>
+                <Input
+                  value={sellerStreet2}
+                  onChange={(e) => setSellerStreet2(e.target.value)}
+                  placeholder="Apt 2B"
+                />
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-2 space-y-2">
+                  <Label>City</Label>
+                  <Input
+                    value={sellerCity}
+                    onChange={(e) => setSellerCity(e.target.value)}
+                    placeholder="Portland"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>State</Label>
+                  <Input
+                    value={sellerState}
+                    onChange={(e) => setSellerState(e.target.value)}
+                    placeholder="OR"
+                    maxLength={2}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label>ZIP</Label>
+                  <Input
+                    value={sellerZip}
+                    onChange={(e) => setSellerZip(e.target.value)}
+                    placeholder="97201"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Country</Label>
+                  <Input
+                    value={sellerCountry}
+                    onChange={(e) => setSellerCountry(e.target.value)}
+                    placeholder="US"
+                    maxLength={2}
+                  />
+                </div>
+              </div>
+              <Button
+                onClick={() =>
+                  saveSettings({
+                    seller_name: sellerName,
+                    seller_street1: sellerStreet1,
+                    seller_street2: sellerStreet2,
+                    seller_city: sellerCity,
+                    seller_state: sellerState,
+                    seller_zip: sellerZip,
+                    seller_country: sellerCountry,
+                  })
+                }
+                disabled={saving}
+              >
+                Save Address
+              </Button>
             </div>
           </AccordionContent>
         </AccordionItem>

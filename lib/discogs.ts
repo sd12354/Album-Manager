@@ -565,6 +565,128 @@ export async function getDiscogsListingStatus(
   }
 }
 
+// ============================================================================
+// Discogs Marketplace — order lookup for buyer address
+// ============================================================================
+
+interface DiscogsOrderItem {
+  id: number;
+}
+
+interface DiscogsOrder {
+  id: string;
+  status: string;
+  shipping_address: string;
+  buyer: { username: string };
+  items: DiscogsOrderItem[];
+}
+
+interface DiscogsOrdersResponse {
+  orders: DiscogsOrder[];
+  pagination: { pages: number; page: number };
+}
+
+export async function getDiscogsOrderForListing(
+  listingId: number,
+  token: string
+): Promise<{ orderId: string; shippingAddress: string; buyerName: string } | null> {
+  // Check the first 3 pages of recent orders (newest first)
+  for (let page = 1; page <= 3; page++) {
+    let data: DiscogsOrdersResponse;
+    try {
+      data = await discogsFetch<DiscogsOrdersResponse>(
+        `/marketplace/orders?per_page=50&page=${page}&sort=last_activity&sort_order=desc`,
+        token
+      );
+    } catch {
+      return null;
+    }
+
+    const match = (data.orders ?? []).find((order) =>
+      order.items?.some((item) => item.id === listingId)
+    );
+
+    if (match) {
+      return {
+        orderId: match.id,
+        shippingAddress: match.shipping_address ?? "",
+        buyerName: match.buyer?.username ?? "",
+      };
+    }
+
+    if (page >= (data.pagination?.pages ?? 1)) break;
+  }
+
+  return null;
+}
+
+export interface ParsedAddress {
+  name: string;
+  street1: string;
+  street2?: string;
+  city: string;
+  state: string;
+  zip: string;
+  country: string;
+}
+
+/**
+ * Best-effort parser for Discogs's free-text shipping_address field.
+ * Common formats (newline-delimited):
+ *   "Name\nStreet\nCity, ST ZIP\nCountry"
+ *   "Name\nStreet\nCity ST ZIP\nCountry"
+ *   "Name\nStreet\nApt\nCity, ST ZIP\nCountry"
+ */
+export function parseDiscogsShippingAddress(
+  raw: string,
+  buyerUsername: string
+): ParsedAddress | null {
+  const lines = raw
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  if (lines.length < 3) return null;
+
+  const name = lines[0] || buyerUsername;
+  const country = lines[lines.length - 1];
+
+  // City/State/ZIP line is second-to-last
+  const cityStateZipLine = lines[lines.length - 2];
+  // Try "City, ST 12345" or "City ST 12345"
+  const usMatch = cityStateZipLine.match(
+    /^(.+?),?\s+([A-Z]{2})\s+(\d{5}(?:-\d{4})?)$/
+  );
+
+  let city = "";
+  let state = "";
+  let zip = "";
+
+  if (usMatch) {
+    city = usMatch[1].trim();
+    state = usMatch[2];
+    zip = usMatch[3];
+  } else {
+    // International: "City PostalCode" or just "City"
+    const intlMatch = cityStateZipLine.match(/^(.+?)\s+([\w\d\s-]{3,10})$/);
+    if (intlMatch) {
+      city = intlMatch[1].trim();
+      zip = intlMatch[2].trim();
+    } else {
+      city = cityStateZipLine;
+    }
+  }
+
+  // Street lines are everything between name and city/state/zip
+  const streetLines = lines.slice(1, lines.length - 2);
+  const street1 = streetLines[0] ?? "";
+  const street2 = streetLines[1];
+
+  if (!name || !street1 || !city) return null;
+
+  return { name, street1, street2, city, state, zip, country };
+}
+
 export async function testDiscogsConnection(token: string): Promise<boolean> {
   try {
     await discogsFetch<{ id: number }>(`/oauth/identity`, token);

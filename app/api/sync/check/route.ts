@@ -3,14 +3,22 @@ import { createClient } from "@/lib/supabase/server";
 import {
   checkEbayItemSold,
   endEbayListing,
+  getEbayOrderForItem,
   getValidEbayToken,
+  type EbayBuyerAddress,
   type EbayTokenCredentials,
 } from "@/lib/ebay";
-import { deleteDiscogsListing, getDiscogsListingStatus } from "@/lib/discogs";
-import type { Album } from "@/types";
+import {
+  deleteDiscogsListing,
+  getDiscogsListingStatus,
+  getDiscogsOrderForListing,
+  parseDiscogsShippingAddress,
+} from "@/lib/discogs";
+import { createShippingLabel, type ShippoAddress } from "@/lib/shippo";
+import type { Album, UserSettings } from "@/types";
 
 export const runtime = "nodejs";
-export const maxDuration = 30;
+export const maxDuration = 45;
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
@@ -44,9 +52,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ status: "sold", changed: false });
   }
 
-  const userToken = (user.user_metadata as { discogs_token?: string } | null)
-    ?.discogs_token;
-  const discogsToken = userToken || process.env.DISCOGS_PERSONAL_ACCESS_TOKEN;
+  const userMeta = (user.user_metadata ?? {}) as UserSettings;
+  const discogsToken =
+    userMeta.discogs_token || process.env.DISCOGS_PERSONAL_ACCESS_TOKEN;
 
   const { data: ebayCreds } = await supabase
     .from("ebay_credentials")
@@ -54,22 +62,23 @@ export async function POST(request: Request) {
     .eq("user_id", user.id)
     .maybeSingle();
 
-  const ebayEnvironment =
-    (user.user_metadata as { ebay_environment?: string } | null)
-      ?.ebay_environment ?? "stub";
+  const ebayEnvironment = userMeta.ebay_environment ?? "stub";
+  const isRealEbay =
+    ebayEnvironment !== "stub" &&
+    ebayCreds?.access_token !== "stub-access-token";
 
   let soldOn: "ebay" | "discogs" | null = null;
   let soldPrice: number | undefined;
+  let buyerAddress: EbayBuyerAddress | null = null;
+  let buyerAddressRaw: string | null = null;
+  let ebayToken: string | null = null;
 
   // ── Check eBay ──────────────────────────────────────────────────────────────
-  if (
-    typedAlbum.ebay_listing_id &&
-    ebayCreds &&
-    ebayEnvironment !== "stub" &&
-    ebayCreds.access_token !== "stub-access-token"
-  ) {
+  if (typedAlbum.ebay_listing_id && ebayCreds && isRealEbay) {
     try {
-      const tokenResult = await getValidEbayToken(ebayCreds as EbayTokenCredentials);
+      const tokenResult = await getValidEbayToken(
+        ebayCreds as EbayTokenCredentials
+      );
       if (tokenResult.refreshed) {
         await supabase
           .from("ebay_credentials")
@@ -80,6 +89,7 @@ export async function POST(request: Request) {
           })
           .eq("user_id", user.id);
       }
+      ebayToken = tokenResult.token;
 
       const { sold, price } = await checkEbayItemSold(
         typedAlbum.ebay_listing_id,
@@ -89,6 +99,12 @@ export async function POST(request: Request) {
       if (sold) {
         soldOn = "ebay";
         soldPrice = price ?? typedAlbum.list_price ?? undefined;
+
+        // Fetch buyer address from GetOrders
+        buyerAddress = await getEbayOrderForItem(
+          typedAlbum.ebay_listing_id,
+          tokenResult.token
+        ).catch(() => null);
       }
     } catch {
       // Non-fatal — continue to check Discogs
@@ -106,6 +122,23 @@ export async function POST(request: Request) {
       if (result?.status === "Sold") {
         soldOn = "discogs";
         soldPrice = result.price ?? typedAlbum.list_price ?? undefined;
+
+        // Fetch buyer address from Discogs order
+        const order = await getDiscogsOrderForListing(
+          parseInt(typedAlbum.discogs_listing_id, 10),
+          discogsToken
+        ).catch(() => null);
+
+        if (order?.shippingAddress) {
+          buyerAddressRaw = order.shippingAddress;
+          const parsed = parseDiscogsShippingAddress(
+            order.shippingAddress,
+            order.buyerName
+          );
+          if (parsed) {
+            buyerAddress = parsed;
+          }
+        }
       }
     } catch {
       // Non-fatal
@@ -116,37 +149,77 @@ export async function POST(request: Request) {
     return NextResponse.json({ status: typedAlbum.status, changed: false });
   }
 
-  // ── Mark sold and cross-cancel ────────────────────────────────────────────────
+  // ── Mark sold ────────────────────────────────────────────────────────────────
   await supabase
     .from("albums")
     .update({
       status: "sold",
       sold_price: soldPrice ?? null,
       sold_at: new Date().toISOString(),
+      buyer_name: buyerAddress?.name ?? null,
+      buyer_address_raw:
+        buyerAddressRaw ??
+        (buyerAddress ? formatAddress(buyerAddress) : null),
     })
     .eq("id", albumId);
 
-  // Cancel the other platform's listing in the background — non-fatal if it fails.
+  // ── Cross-cancel other platform ───────────────────────────────────────────────
   if (soldOn === "ebay" && typedAlbum.discogs_listing_id && discogsToken) {
-    try {
-      await deleteDiscogsListing(
-        parseInt(typedAlbum.discogs_listing_id, 10),
-        discogsToken
-      );
-    } catch {
-      // Discogs removal failed — not critical, it will expire naturally
-    }
+    await deleteDiscogsListing(
+      parseInt(typedAlbum.discogs_listing_id, 10),
+      discogsToken
+    ).catch(() => null);
   }
 
-  if (soldOn === "discogs" && typedAlbum.ebay_listing_id && ebayCreds) {
+  if (soldOn === "discogs" && typedAlbum.ebay_listing_id && ebayCreds && isRealEbay && ebayToken) {
+    await endEbayListing(typedAlbum.ebay_listing_id, ebayToken).catch(() => null);
+  }
+
+  // ── Auto-create shipping label ────────────────────────────────────────────────
+  let label: { trackingNumber: string; labelUrl: string; carrier: string; serviceLevel: string; rate: number } | null = null;
+  let labelError: string | null = null;
+
+  const shippoKey = userMeta.shippo_api_key || process.env.SHIPPO_API_KEY;
+  const sellerReady =
+    userMeta.seller_name && userMeta.seller_street1 && userMeta.seller_city;
+
+  if (shippoKey && sellerReady && buyerAddress) {
+    const from: ShippoAddress = {
+      name: userMeta.seller_name!,
+      street1: userMeta.seller_street1!,
+      street2: userMeta.seller_street2,
+      city: userMeta.seller_city!,
+      state: userMeta.seller_state ?? "",
+      zip: userMeta.seller_zip ?? "",
+      country: userMeta.seller_country ?? "US",
+    };
+
     try {
-      const tokenResult = await getValidEbayToken(ebayCreds as EbayTokenCredentials);
-      if (ebayEnvironment !== "stub" && ebayCreds.access_token !== "stub-access-token") {
-        await endEbayListing(typedAlbum.ebay_listing_id, tokenResult.token);
-      }
-    } catch {
-      // eBay removal failed — not critical
+      label = await createShippingLabel({
+        from,
+        to: buyerAddress,
+        apiKey: shippoKey,
+      });
+
+      await supabase
+        .from("albums")
+        .update({
+          tracking_number: label.trackingNumber,
+          shipping_label_url: label.labelUrl,
+          shipping_carrier: `${label.carrier} — ${label.serviceLevel}`,
+          shipping_rate: label.rate,
+        })
+        .eq("id", albumId);
+    } catch (err) {
+      labelError =
+        err instanceof Error ? err.message : "Label creation failed";
     }
+  } else if (shippoKey && sellerReady && !buyerAddress) {
+    labelError = "Buyer address unavailable — create the label manually from the album page.";
+  } else if (!shippoKey) {
+    labelError = "Shippo not configured — add your API key in Settings → Shipping.";
+  } else if (!sellerReady) {
+    labelError = "Seller address incomplete — fill it in Settings → Shipping.";
   }
 
   return NextResponse.json({
@@ -154,5 +227,22 @@ export async function POST(request: Request) {
     soldOn,
     soldPrice,
     changed: true,
+    label,
+    labelError,
+    buyerAddressRaw,
   });
+}
+
+function formatAddress(a: {
+  name: string;
+  street1: string;
+  street2?: string;
+  city: string;
+  state: string;
+  zip: string;
+  country: string;
+}): string {
+  return [a.name, a.street1, a.street2, `${a.city}, ${a.state} ${a.zip}`, a.country]
+    .filter(Boolean)
+    .join("\n");
 }

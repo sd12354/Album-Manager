@@ -328,6 +328,87 @@ export async function checkEbayItemSold(
 }
 
 // ============================================================================
+// eBay Trading API — fetch buyer address from a completed order
+// ============================================================================
+
+export interface EbayBuyerAddress {
+  name: string;
+  street1: string;
+  street2?: string;
+  city: string;
+  state: string;
+  zip: string;
+  country: string;
+}
+
+function extractAllMatches(xml: string, tag: string): string[] {
+  const results: string[] = [];
+  const re = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, "g");
+  let m;
+  while ((m = re.exec(xml)) !== null) {
+    results.push(m[1].trim());
+  }
+  return results;
+}
+
+export async function getEbayOrderForItem(
+  itemId: string,
+  accessToken: string
+): Promise<EbayBuyerAddress | null> {
+  const xml = `<?xml version="1.0" encoding="utf-8"?>
+<GetOrdersRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+  <NumberOfDays>30</NumberOfDays>
+  <OrderRole>Seller</OrderRole>
+  <OrderStatus>All</OrderStatus>
+  <Detail>ReturnAll</Detail>
+</GetOrdersRequest>`;
+
+  let responseXml: string;
+  try {
+    responseXml = await callTradingApi("GetOrders", xml, accessToken);
+  } catch {
+    return null;
+  }
+
+  // Split into individual <Order> blocks and search for our ItemID.
+  const orderBlocks: string[] = [];
+  const orderRe = /<Order\b[\s\S]*?<\/Order>/g;
+  let m;
+  while ((m = orderRe.exec(responseXml)) !== null) {
+    orderBlocks.push(m[0]);
+  }
+
+  for (const block of orderBlocks) {
+    const itemIds = extractAllMatches(block, "ItemID");
+    if (!itemIds.includes(itemId)) continue;
+
+    // Found the order — extract ShippingAddress
+    const shippingBlock = block.match(/<ShippingAddress[\s\S]*?<\/ShippingAddress>/)?.[0] ?? "";
+    const name = extractXmlTag(shippingBlock, "Name");
+    const street1 = extractXmlTag(shippingBlock, "Street1");
+    const street2 = extractXmlTag(shippingBlock, "Street2");
+    const city = extractXmlTag(shippingBlock, "CityName");
+    const state = extractXmlTag(shippingBlock, "StateOrProvince");
+    const zip = extractXmlTag(shippingBlock, "PostalCode");
+    const country = extractXmlTag(shippingBlock, "Country");
+
+    if (name && street1 && city && zip) {
+      return {
+        name,
+        street1,
+        street2: street2 || undefined,
+        city,
+        state: state ?? "",
+        zip,
+        country: country ?? "US",
+      };
+    }
+  }
+
+  return null;
+}
+
+// ============================================================================
 // eBay Application Token (client_credentials grant) — used for the Browse API
 // to fetch pricing comparables. Distinct from per-user OAuth tokens used for
 // listing items. Tokens last 2h; we cache and refresh ~5 min before expiry.
