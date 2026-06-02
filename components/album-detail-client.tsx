@@ -35,12 +35,16 @@ import type { Album, AlbumCondition, PricingResult } from "@/types";
 interface AlbumDetailClientProps {
   album: Album;
   ebayConnected: boolean;
+  discogsConnected: boolean;
+  discogsReleaseId: number | null;
   initialPricing?: PricingResult | null;
 }
 
 export function AlbumDetailClient({
   album: initialAlbum,
   ebayConnected,
+  discogsConnected,
+  discogsReleaseId,
   initialPricing,
 }: AlbumDetailClientProps) {
   const router = useRouter();
@@ -54,6 +58,8 @@ export function AlbumDetailClient({
   );
   const [fetching, setFetching] = useState(false);
   const [listing, setListing] = useState(false);
+  const [listingDiscogs, setListingDiscogs] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
 
@@ -126,6 +132,61 @@ export function AlbumDetailClient({
       toast.error(err.error ?? "Failed to list on eBay");
     }
     setListing(false);
+  }
+
+  async function handleListOnDiscogs() {
+    setListingDiscogs(true);
+    const res = await fetch("/api/discogs/list", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ albumId: album.id, listPrice: parseFloat(listPrice) }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      setAlbum((prev) => ({
+        ...prev,
+        status: "listed",
+        discogs_listing_id: String(data.listingId),
+        discogs_listing_url: data.listingUrl,
+        list_price: parseFloat(listPrice),
+      }));
+      toast.success("Listed on Discogs");
+      router.refresh();
+    } else {
+      const err = await res.json().catch(() => ({}));
+      toast.error(err.error ?? "Failed to list on Discogs");
+    }
+    setListingDiscogs(false);
+  }
+
+  async function handleSyncSales() {
+    setSyncing(true);
+    const res = await fetch("/api/sync/check", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ albumId: album.id }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.changed && data.status === "sold") {
+        setAlbum((prev) => ({
+          ...prev,
+          status: "sold",
+          sold_price: data.soldPrice ?? prev.list_price,
+          sold_at: new Date().toISOString(),
+        }));
+        toast.success(
+          `Sold on ${data.soldOn === "ebay" ? "eBay" : "Discogs"} — other listing cancelled`
+        );
+        router.refresh();
+      } else {
+        toast.info("No sale detected yet on either platform");
+      }
+    } else {
+      const err = await res.json().catch(() => ({}));
+      toast.error(err.error ?? "Sync failed");
+    }
+    setSyncing(false);
   }
 
   async function handleSave() {
@@ -449,7 +510,7 @@ export function AlbumDetailClient({
                   "Fetch Latest Prices"
                 )}
               </Button>
-              {album.status !== "listed" && album.status !== "sold" && (
+              {album.status !== "sold" && !album.ebay_listing_id && (
                 <Button
                   onClick={handleListOnEbay}
                   disabled={listing || !ebayConnected}
@@ -464,16 +525,55 @@ export function AlbumDetailClient({
                   )}
                 </Button>
               )}
+              {album.status !== "sold" && !album.discogs_listing_id && (
+                <Button
+                  variant="outline"
+                  onClick={handleListOnDiscogs}
+                  disabled={listingDiscogs || !discogsConnected || !discogsReleaseId}
+                >
+                  {listingDiscogs ? (
+                    <>
+                      <VinylSpinner size="xs" />
+                      Listing...
+                    </>
+                  ) : (
+                    "List on Discogs"
+                  )}
+                </Button>
+              )}
+              {(album.ebay_listing_id || album.discogs_listing_id) &&
+                album.status !== "sold" && (
+                  <Button variant="outline" onClick={handleSyncSales} disabled={syncing}>
+                    {syncing ? (
+                      <>
+                        <VinylSpinner size="xs" />
+                        Checking...
+                      </>
+                    ) : (
+                      "Check if Sold"
+                    )}
+                  </Button>
+                )}
             </div>
 
-            {!ebayConnected && (
+            {!ebayConnected && !album.ebay_listing_id && (
               <p className="mt-2 text-xs text-muted-foreground">
-                Connect your eBay account in Settings to list albums.
+                Connect your eBay account in Settings to list on eBay.
+              </p>
+            )}
+            {!discogsConnected && !album.discogs_listing_id && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Add a Discogs token in Settings to list on Discogs.
+              </p>
+            )}
+            {discogsConnected && !discogsReleaseId && !album.discogs_listing_id && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Fetch prices first — VinylVault needs to identify the Discogs release before listing.
               </p>
             )}
           </div>
 
-          {album.status === "listed" && album.ebay_listing_url && (
+          {album.ebay_listing_url && album.status !== "sold" && (
             <div className="rounded-xl border border-white/8 p-6">
               <p className="text-sm font-medium">Listed on eBay</p>
               <a
@@ -483,6 +583,20 @@ export function AlbumDetailClient({
                 className="mt-2 inline-flex items-center gap-1 text-sm text-accent hover:underline"
               >
                 View on eBay <ExternalLink className="h-3 w-3" />
+              </a>
+            </div>
+          )}
+
+          {album.discogs_listing_url && album.status !== "sold" && (
+            <div className="rounded-xl border border-white/8 p-6">
+              <p className="text-sm font-medium">Listed on Discogs</p>
+              <a
+                href={album.discogs_listing_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 inline-flex items-center gap-1 text-sm text-accent hover:underline"
+              >
+                View on Discogs <ExternalLink className="h-3 w-3" />
               </a>
             </div>
           )}

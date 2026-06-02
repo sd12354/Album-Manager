@@ -17,6 +17,9 @@ export interface Album {
   status: AlbumStatus;
   ebay_listing_id?: string | null;
   ebay_listing_url?: string | null;
+  discogs_listing_id?: string | null;
+  discogs_listing_url?: string | null;
+  discogs_release_id?: number | null;
   sold_price?: number | null;
   sold_at?: string | null;
   photo_urls?: string[] | null;

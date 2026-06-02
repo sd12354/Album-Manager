@@ -29,10 +29,41 @@ export default async function AlbumDetailPage({ params }: AlbumDetailPageProps) 
     notFound();
   }
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
   const { data: ebayCreds } = await supabase
     .from("ebay_credentials")
     .select("user_id")
     .maybeSingle();
+
+  const userMeta = (user?.user_metadata ?? {}) as {
+    discogs_token?: string;
+  };
+  const discogsConnected = !!(
+    userMeta.discogs_token || process.env.DISCOGS_PERSONAL_ACCESS_TOKEN
+  );
+
+  // Resolve Discogs release ID from album column (migration 004) or pricing cache
+  const typedForRelease = album as Album;
+  let discogsReleaseId: number | null =
+    (typedForRelease as Album & { discogs_release_id?: number | null })
+      .discogs_release_id ?? null;
+
+  if (!discogsReleaseId) {
+    const { data: discogsCache } = await supabase
+      .from("pricing_cache")
+      .select("raw_data")
+      .eq("album_id", id)
+      .eq("source", "discogs")
+      .order("fetched_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const raw = (discogsCache?.raw_data ?? {}) as Record<string, unknown>;
+    discogsReleaseId = (raw.releaseId as number | undefined) ?? null;
+  }
 
   const { data: cache } = await supabase
     .from("pricing_cache")
@@ -87,6 +118,8 @@ export default async function AlbumDetailPage({ params }: AlbumDetailPageProps) 
     <AlbumDetailClient
       album={album as Album}
       ebayConnected={!!ebayCreds}
+      discogsConnected={discogsConnected}
+      discogsReleaseId={discogsReleaseId}
       initialPricing={initialPricing}
     />
   );

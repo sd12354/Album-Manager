@@ -93,11 +93,238 @@ export function getSandboxListingUrl(listingId: string): string {
     : `https://sandbox.ebay.com/itm/${listingId}`;
 }
 
-// TODO: Implement real token refresh with encryption
+// ============================================================================
+// User OAuth token management — refresh when near expiry
+// ============================================================================
+
+export interface EbayTokenCredentials {
+  access_token: string;
+  refresh_token: string;
+  token_expiry: string;
+}
+
+export async function refreshEbayToken(
+  refreshToken: string
+): Promise<{ access_token: string; expires_in: number } | null> {
+  const clientId = process.env.EBAY_CLIENT_ID;
+  const clientSecret = process.env.EBAY_CLIENT_SECRET;
+  const ruName = process.env.EBAY_RU_NAME;
+  if (!clientId || !clientSecret || !ruName) return null;
+
+  const basic = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
+  const res = await fetch(EBAY_TOKEN_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${basic}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+      scope: [
+        "https://api.ebay.com/oauth/api_scope",
+        "https://api.ebay.com/oauth/api_scope/sell.inventory",
+      ].join(" "),
+    }).toString(),
+    cache: "no-store",
+  });
+
+  if (!res.ok) return null;
+  const data = (await res.json()) as { access_token: string; expires_in: number };
+  return data;
+}
+
 export async function getValidEbayToken(
-  _userId: string
-): Promise<string | null> {
+  credentials: EbayTokenCredentials
+): Promise<{ token: string; refreshed: false } | { token: string; refreshed: true; expiry: string }> {
+  const expiresAt = new Date(credentials.token_expiry).getTime();
+  const bufferMs = 5 * 60 * 1000;
+  if (Date.now() + bufferMs < expiresAt) {
+    return { token: credentials.access_token, refreshed: false };
+  }
+  const refreshed = await refreshEbayToken(credentials.refresh_token);
+  if (!refreshed) {
+    return { token: credentials.access_token, refreshed: false };
+  }
+  const expiry = new Date(Date.now() + refreshed.expires_in * 1000).toISOString();
+  return { token: refreshed.access_token, refreshed: true, expiry };
+}
+
+// ============================================================================
+// eBay Trading API — XML helper
+// ============================================================================
+
+function escapeXml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function extractXmlTag(xml: string, tag: string): string | undefined {
+  const m = xml.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`));
+  return m?.[1]?.trim();
+}
+
+function extractXmlError(xml: string): string | null {
+  const severity = extractXmlTag(xml, "SeverityCode");
+  if (severity === "Error") {
+    return (
+      extractXmlTag(xml, "LongMessage") ??
+      extractXmlTag(xml, "ShortMessage") ??
+      "Unknown eBay error"
+    );
+  }
   return null;
+}
+
+async function callTradingApi(
+  callName: string,
+  xmlBody: string,
+  accessToken: string
+): Promise<string> {
+  const res = await fetch(EBAY_TRADING_URL, {
+    method: "POST",
+    headers: {
+      "X-EBAY-API-SITEID": "0",
+      "X-EBAY-API-COMPATIBILITY-LEVEL": "967",
+      "X-EBAY-API-CALL-NAME": callName,
+      "X-EBAY-API-IAF-TOKEN": accessToken,
+      "Content-Type": "text/xml",
+    },
+    body: xmlBody,
+    cache: "no-store",
+  });
+
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(`eBay Trading API HTTP ${res.status}: ${text.slice(0, 300)}`);
+  }
+  return text;
+}
+
+// ============================================================================
+// eBay Trading API — create / end listings
+// ============================================================================
+
+import type { Album } from "@/types";
+import { EBAY_MAX_PHOTOS, getOriginalPublicUrl } from "@/lib/photos";
+
+export async function createEbayListing(
+  album: Album,
+  price: number,
+  accessToken: string
+): Promise<{ itemId: string; listingUrl: string }> {
+  const pictureUrlsXml = (album.photo_urls ?? [])
+    .slice(0, EBAY_MAX_PHOTOS)
+    .map((u) => `<PictureURL>${escapeXml(getOriginalPublicUrl(u))}</PictureURL>`)
+    .join("");
+
+  const itemSpecificsXml = [
+    "<NameValueList><Name>Format</Name><Value>Vinyl</Value></NameValueList>",
+    album.genre
+      ? `<NameValueList><Name>Genre</Name><Value>${escapeXml(album.genre)}</Value></NameValueList>`
+      : "",
+    album.catalog_number
+      ? `<NameValueList><Name>Catalog Number</Name><Value>${escapeXml(album.catalog_number)}</Value></NameValueList>`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("");
+
+  const categoryId = getCategoryForGenre(album.genre);
+  const conditionId = CONDITION_TO_EBAY[album.condition] ?? 3000;
+
+  const xml = `<?xml version="1.0" encoding="utf-8"?>
+<AddFixedPriceItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+  <Item>
+    <Title>${escapeXml(buildListingTitle(album.artist, album.title, album.condition))}</Title>
+    <Description><![CDATA[${buildListingDescription(album.artist, album.title, album.condition, album.genre, album.catalog_number)}]]></Description>
+    <PrimaryCategory><CategoryID>${categoryId}</CategoryID></PrimaryCategory>
+    <StartPrice>${price.toFixed(2)}</StartPrice>
+    <ConditionID>${conditionId}</ConditionID>
+    <Country>US</Country>
+    <Currency>USD</Currency>
+    <DispatchTimeMax>3</DispatchTimeMax>
+    <ListingDuration>GTC</ListingDuration>
+    <ListingType>FixedPriceItem</ListingType>
+    <Quantity>1</Quantity>
+    ${pictureUrlsXml ? `<PictureDetails>${pictureUrlsXml}</PictureDetails>` : ""}
+    <ItemSpecifics>${itemSpecificsXml}</ItemSpecifics>
+    <ShippingDetails>
+      <ShippingType>Flat</ShippingType>
+      <ShippingServiceOptions>
+        <ShippingServicePriority>1</ShippingServicePriority>
+        <ShippingService>USPSMedia</ShippingService>
+        <ShippingServiceCost>4.00</ShippingServiceCost>
+      </ShippingServiceOptions>
+    </ShippingDetails>
+    <ReturnPolicy>
+      <ReturnsAcceptedOption>ReturnsAccepted</ReturnsAcceptedOption>
+      <RefundOption>MoneyBack</RefundOption>
+      <ReturnsWithinOption>Days_30</ReturnsWithinOption>
+      <ShippingCostPaidByOption>Buyer</ShippingCostPaidByOption>
+    </ReturnPolicy>
+    <Site>US</Site>
+  </Item>
+</AddFixedPriceItemRequest>`;
+
+  const responseXml = await callTradingApi("AddFixedPriceItem", xml, accessToken);
+
+  const ebayError = extractXmlError(responseXml);
+  if (ebayError) throw new Error(ebayError);
+
+  const itemId = extractXmlTag(responseXml, "ItemID");
+  if (!itemId) throw new Error("eBay did not return an ItemID");
+
+  return {
+    itemId,
+    listingUrl: getSandboxListingUrl(itemId),
+  };
+}
+
+export async function endEbayListing(
+  itemId: string,
+  accessToken: string
+): Promise<void> {
+  const xml = `<?xml version="1.0" encoding="utf-8"?>
+<EndFixedPriceItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+  <ItemID>${escapeXml(itemId)}</ItemID>
+  <EndingReason>NotAvailable</EndingReason>
+</EndFixedPriceItemRequest>`;
+
+  const responseXml = await callTradingApi("EndFixedPriceItem", xml, accessToken);
+  const ebayError = extractXmlError(responseXml);
+  if (ebayError) throw new Error(ebayError);
+}
+
+export async function checkEbayItemSold(
+  itemId: string,
+  accessToken: string
+): Promise<{ sold: boolean; price?: number }> {
+  const xml = `<?xml version="1.0" encoding="utf-8"?>
+<GetItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+  <ItemID>${escapeXml(itemId)}</ItemID>
+  <IncludeItemSpecifics>false</IncludeItemSpecifics>
+</GetItemRequest>`;
+
+  const responseXml = await callTradingApi("GetItem", xml, accessToken);
+  const ebayError = extractXmlError(responseXml);
+  if (ebayError) throw new Error(ebayError);
+
+  const listingStatus = extractXmlTag(responseXml, "ListingStatus");
+  const quantitySold = extractXmlTag(responseXml, "QuantitySold");
+  const currentPrice = extractXmlTag(responseXml, "CurrentPrice");
+
+  const sold =
+    listingStatus === "Completed" ||
+    (quantitySold != null && parseInt(quantitySold, 10) > 0);
+
+  return {
+    sold,
+    price: currentPrice ? parseFloat(currentPrice) : undefined,
+  };
 }
 
 // ============================================================================

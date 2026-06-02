@@ -1,35 +1,16 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import {
-  buildListingDescription,
-  buildListingTitle,
-  getCategoryForGenre,
+  createEbayListing,
+  getValidEbayToken,
+  type EbayTokenCredentials,
 } from "@/lib/ebay";
-import { EBAY_MAX_PHOTOS, getOriginalPublicUrl } from "@/lib/photos";
 import type { Album } from "@/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
 export const dynamic = "force-dynamic";
 
-/**
- * eBay AddItem stub.
- *
- * Real Trading API integration is NOT yet implemented. Calling this endpoint
- * builds the payload that *would* be sent to eBay and returns it as a
- * preview, but does not actually create a listing. We intentionally do NOT
- * update the album to status='listed' because that would make the UI lie.
- *
- * To wire up real listing we need to:
- *   1. POST XML to https://api.ebay.com/ws/api.dll with the user's OAuth
- *      token via the X-EBAY-API-IAF-TOKEN header.
- *   2. Use a verb of AddFixedPriceItem (or AddItem) with the payload below
- *      serialized to the Trading XML schema.
- *   3. Configure business policies on the eBay account (shipping, returns,
- *      payment) and reference them by ID in the request.
- *   4. Map condition + genre to eBay item specifics (Format=Vinyl, etc.).
- *   5. Handle the long tail of validation errors eBay returns.
- */
 export async function POST(request: Request) {
   const supabase = await createClient();
   const {
@@ -41,7 +22,6 @@ export async function POST(request: Request) {
   }
 
   const { albumId, listPrice } = await request.json();
-
   if (!albumId) {
     return NextResponse.json({ error: "albumId required" }, { status: 400 });
   }
@@ -53,10 +33,7 @@ export async function POST(request: Request) {
     .maybeSingle();
 
   if (!creds) {
-    return NextResponse.json(
-      { error: "eBay account not connected" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "eBay account not connected" }, { status: 400 });
   }
 
   const { data: album, error } = await supabase
@@ -70,38 +47,71 @@ export async function POST(request: Request) {
   }
 
   const typedAlbum = album as Album;
-  const price = listPrice ?? typedAlbum.list_price ?? typedAlbum.suggested_price ?? 9.99;
+  const price =
+    listPrice ?? typedAlbum.list_price ?? typedAlbum.suggested_price ?? 9.99;
 
-  // Pass through full-resolution photo URLs unchanged. eBay's Picture Service
-  // (EPS) fetches each URL and hosts the original master internally — they
-  // generate their own thumbnails, so we must NOT pre-shrink. We strip any
-  // Supabase transform query params as a belt-and-braces guard.
-  const pictureUrls = (typedAlbum.photo_urls ?? [])
-    .slice(0, EBAY_MAX_PHOTOS)
-    .map(getOriginalPublicUrl);
+  const ebayEnvironment =
+    (user.user_metadata as { ebay_environment?: string } | null)
+      ?.ebay_environment ?? "stub";
 
-  const payload = {
-    title: buildListingTitle(typedAlbum.artist, typedAlbum.title, typedAlbum.condition),
-    description: buildListingDescription(
-      typedAlbum.artist,
-      typedAlbum.title,
-      typedAlbum.condition,
-      typedAlbum.genre,
-      typedAlbum.catalog_number
-    ),
-    categoryId: getCategoryForGenre(typedAlbum.genre),
-    price,
-    condition: typedAlbum.condition,
-    pictureUrls,
-  };
+  // Stub mode: generate a fake listing so the UI can show the listed state.
+  if (
+    ebayEnvironment === "stub" ||
+    creds.access_token === "stub-access-token"
+  ) {
+    const fakeItemId = `STUB-${Date.now()}`;
+    await supabase
+      .from("albums")
+      .update({
+        status: "listed",
+        ebay_listing_id: fakeItemId,
+        ebay_listing_url: `https://sandbox.ebay.com/itm/${fakeItemId}`,
+        list_price: price,
+      })
+      .eq("id", albumId);
 
-  // Honest stub: surface the payload but do NOT mutate the album, do NOT
-  // generate fake listing IDs/URLs, and return `stub: true` so the UI can
-  // tell the user this was a preview.
-  return NextResponse.json({
-    stub: true,
-    message:
-      "Preview only — eBay AddItem isn't wired up yet, so nothing was posted. The payload below is what would be sent.",
-    payload,
-  });
+    return NextResponse.json({
+      stub: true,
+      listingId: fakeItemId,
+      listingUrl: `https://sandbox.ebay.com/itm/${fakeItemId}`,
+      message: "Stub listing created — connect a real eBay sandbox/production account to post live listings.",
+    });
+  }
+
+  // Real listing via Trading API.
+  const tokenResult = await getValidEbayToken(creds as EbayTokenCredentials);
+
+  if (tokenResult.refreshed) {
+    await supabase
+      .from("ebay_credentials")
+      .update({
+        access_token: tokenResult.token,
+        token_expiry: tokenResult.expiry,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("user_id", user.id);
+  }
+
+  try {
+    const { itemId, listingUrl } = await createEbayListing(
+      typedAlbum,
+      price,
+      tokenResult.token
+    );
+
+    await supabase
+      .from("albums")
+      .update({
+        status: "listed",
+        ebay_listing_id: itemId,
+        ebay_listing_url: listingUrl,
+        list_price: price,
+      })
+      .eq("id", albumId);
+
+    return NextResponse.json({ listingId: itemId, listingUrl });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "eBay listing failed";
+    return NextResponse.json({ error: message }, { status: 502 });
+  }
 }

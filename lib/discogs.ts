@@ -457,6 +457,114 @@ export async function fetchDiscogsPricing(
   };
 }
 
+// ============================================================================
+// Discogs Marketplace — listing management
+// ============================================================================
+
+const CONDITION_TO_DISCOGS_GRADE: Record<AlbumCondition, string> = {
+  Mint: "Mint (M)",
+  Great: "Near Mint (NM or M-)",
+  Good: "Very Good Plus (VG+)",
+  Fair: "Good (G)",
+  Poor: "Poor (P)",
+};
+
+async function discogsPost<T>(
+  path: string,
+  body: unknown,
+  token: string
+): Promise<T> {
+  await rateLimit();
+  const res = await fetch(`${DISCOGS_BASE}${path}`, {
+    method: "POST",
+    headers: {
+      "User-Agent": USER_AGENT,
+      Authorization: `Discogs token=${token}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(body),
+    cache: "no-store",
+  });
+
+  if (res.status === 429) throw new DiscogsError(429, "Discogs rate limit hit.");
+  if (res.status === 401) throw new DiscogsError(401, "Discogs token is invalid.");
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new DiscogsError(res.status, `Discogs ${res.status}: ${text.slice(0, 200)}`);
+  }
+  return res.json() as Promise<T>;
+}
+
+async function discogsDelete(path: string, token: string): Promise<void> {
+  await rateLimit();
+  const res = await fetch(`${DISCOGS_BASE}${path}`, {
+    method: "DELETE",
+    headers: {
+      "User-Agent": USER_AGENT,
+      Authorization: `Discogs token=${token}`,
+    },
+    cache: "no-store",
+  });
+
+  if (res.status === 429) throw new DiscogsError(429, "Discogs rate limit hit.");
+  if (res.status === 401) throw new DiscogsError(401, "Discogs token is invalid.");
+  if (res.status === 404) return; // already gone
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new DiscogsError(res.status, `Discogs ${res.status}: ${text.slice(0, 200)}`);
+  }
+}
+
+export async function createDiscogsListing(params: {
+  releaseId: number;
+  condition: AlbumCondition;
+  price: number;
+  token: string;
+  comments?: string;
+}): Promise<{ listingId: number; listingUrl: string }> {
+  const grade = CONDITION_TO_DISCOGS_GRADE[params.condition];
+  const data = await discogsPost<{ listing_id: number; resource_url: string }>(
+    "/marketplace/listings",
+    {
+      release_id: params.releaseId,
+      condition: grade,
+      sleeve_condition: grade,
+      price: params.price,
+      status: "For Sale",
+      comments: params.comments ?? "Ships from USA. Securely packed.",
+    },
+    params.token
+  );
+  return {
+    listingId: data.listing_id,
+    listingUrl: `https://www.discogs.com/sell/item/${data.listing_id}`,
+  };
+}
+
+export async function deleteDiscogsListing(
+  listingId: number,
+  token: string
+): Promise<void> {
+  await discogsDelete(`/marketplace/listings/${listingId}`, token);
+}
+
+export async function getDiscogsListingStatus(
+  listingId: number,
+  token: string
+): Promise<{ status: string; price: number } | null> {
+  try {
+    const data = await discogsFetch<{ status: string; price: { value: number } }>(
+      `/marketplace/listings/${listingId}`,
+      token
+    );
+    return { status: data.status, price: data.price?.value ?? 0 };
+  } catch (err) {
+    if (err instanceof DiscogsError && err.status === 404) return null;
+    throw err;
+  }
+}
+
 export async function testDiscogsConnection(token: string): Promise<boolean> {
   try {
     await discogsFetch<{ id: number }>(`/oauth/identity`, token);
