@@ -84,6 +84,15 @@ export async function POST(request: Request) {
       comments: typedAlbum.notes ?? undefined,
     });
 
+    // Verify the listing landed as "For Sale" — if it comes back as anything
+    // else the seller account setup is incomplete on Discogs.
+    const { getDiscogsListingStatus } = await import("@/lib/discogs");
+    const status = await getDiscogsListingStatus(listingId, discogsToken).catch(() => null);
+    const sellerWarning =
+      status && status.status !== "For Sale"
+        ? `Listing created but status is "${status.status}" — visit discogs.com/sell/manage to complete your seller setup and make it public.`
+        : undefined;
+
     await supabase
       .from("albums")
       .update({
@@ -95,7 +104,7 @@ export async function POST(request: Request) {
       })
       .eq("id", albumId);
 
-    return NextResponse.json({ listingId, listingUrl });
+    return NextResponse.json({ listingId, listingUrl, warning: sellerWarning });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Discogs listing failed";
     return NextResponse.json({ error: message }, { status: 502 });

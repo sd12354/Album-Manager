@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ExternalLink, Upload } from "lucide-react";
+import { ArrowLeft, Disc2, ExternalLink, RefreshCw, ShoppingBag, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { AlbumStatusBadge } from "@/components/album-status-badge";
 import { ConditionBadge } from "@/components/condition-badge";
@@ -150,7 +150,11 @@ export function AlbumDetailClient({
         discogs_listing_url: data.listingUrl,
         list_price: parseFloat(listPrice),
       }));
-      toast.success("Listed on Discogs");
+      if (data.warning) {
+        toast.warning(data.warning, { duration: 12000 });
+      } else {
+        toast.success("Listed on Discogs");
+      }
       router.refresh();
     } else {
       const err = await res.json().catch(() => ({}));
@@ -312,15 +316,15 @@ export function AlbumDetailClient({
         Back to Catalogue
       </Link>
 
-      <div className="flex items-start justify-between animate-fade-in-up">
+      <div className="flex items-start justify-between gap-4 animate-fade-in-up">
         <div>
-          <h1 className="font-display text-3xl font-bold">{album.title}</h1>
-          <p className="mt-1 text-muted-foreground">{album.artist}</p>
+          <h1 className="font-display text-3xl font-bold leading-tight">{album.title}</h1>
+          <p className="mt-1.5 text-lg text-muted-foreground">{album.artist}</p>
         </div>
         <AlbumStatusBadge status={album.status} />
       </div>
 
-      <div className="mt-8 grid gap-8 lg:grid-cols-2">
+      <div className="mt-6 grid gap-6 lg:grid-cols-2">
         <div className="space-y-6">
           <div>
             <Label className="mb-3 block">Photos</Label>
@@ -356,7 +360,7 @@ export function AlbumDetailClient({
               )}
             </div>
             <p className="mt-2 text-xs text-muted-foreground">
-              Originals are stored at full quality and passed straight through to eBay (no resizing or re-encoding). JPEG, PNG, WebP, GIF, BMP, or TIFF — at least 500px on the longest side, 1600px+ recommended.
+              JPEG, PNG, WebP, TIFF — stored at full quality, passed to eBay as-is. Min 500px, 1600px+ recommended.
             </p>
           </div>
 
@@ -450,7 +454,8 @@ export function AlbumDetailClient({
           </div>
         </div>
 
-        <div className="space-y-6">
+        <div className="space-y-4">
+          {/* Pricing notice */}
           {pricing?.notice && (
             <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm text-amber-200 animate-fade-in-up">
               <p className="font-medium">Pricing notice</p>
@@ -467,155 +472,199 @@ export function AlbumDetailClient({
               )}
             </div>
           )}
+
+          {/* Pricing data */}
           {pricing && <PricingCard pricing={pricing} />}
 
-          <div className="rounded-xl border border-white/8 p-6 animate-fade-in-up stagger-2">
-            <div className="flex items-center justify-between">
+          {/* Action panel */}
+          <div className="rounded-xl border border-white/8 bg-card animate-fade-in-up stagger-2 overflow-hidden">
+            {/* Suggested price */}
+            <div className="flex items-start justify-between px-5 pt-5 pb-4">
               <div>
-                <p className="text-sm text-muted-foreground">Suggested Price</p>
-                <p className="font-display text-4xl font-bold text-accent tabular-nums">
-                  {formatCurrency(
-                    pricing?.suggestedPrice ?? album.suggested_price
-                  )}
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Suggested Price
+                </p>
+                <p className="mt-1 font-display text-4xl font-bold text-accent tabular-nums">
+                  {formatCurrency(pricing?.suggestedPrice ?? album.suggested_price)}
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {multiplier}× condition multiplier applied
+                  {multiplier}× condition multiplier
                 </p>
               </div>
               <ConditionBadge condition={album.condition} />
             </div>
 
-            <div className="mt-4 space-y-2">
-              <Label>List Price Override</Label>
-              <Input
-                type="number"
-                step="0.01"
-                value={listPrice}
-                onChange={(e) => setListPrice(e.target.value)}
-              />
-            </div>
+            <div className="border-t border-white/8" />
 
-            <div className="mt-4 flex flex-wrap gap-3">
-              <Button
-                variant="outline"
-                onClick={handleFetchPrices}
-                disabled={fetching}
-              >
-                {fetching ? (
-                  <>
-                    <VinylSpinner size="xs" />
-                    Fetching prices...
-                  </>
-                ) : (
-                  "Fetch Latest Prices"
-                )}
-              </Button>
-              {album.status !== "sold" && !album.ebay_listing_id && (
-                <Button
-                  onClick={handleListOnEbay}
-                  disabled={listing || !ebayConnected}
-                >
-                  {listing ? (
-                    <>
-                      <VinylSpinner size="xs" />
-                      Listing...
-                    </>
-                  ) : (
-                    "List on eBay"
-                  )}
-                </Button>
-              )}
-              {album.status !== "sold" && !album.discogs_listing_id && (
+            {/* Price input + refresh */}
+            <div className="px-5 pt-4 pb-4 space-y-3">
+              <div className="flex items-end gap-3">
+                <div className="flex-1 space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">List Price (USD)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={listPrice}
+                    onChange={(e) => setListPrice(e.target.value)}
+                  />
+                </div>
                 <Button
                   variant="outline"
-                  onClick={handleListOnDiscogs}
-                  disabled={listingDiscogs || !discogsConnected || !discogsReleaseId}
+                  size="icon"
+                  onClick={handleFetchPrices}
+                  disabled={fetching}
+                  title="Refresh prices"
+                  className="shrink-0 h-10 w-10"
                 >
-                  {listingDiscogs ? (
-                    <>
-                      <VinylSpinner size="xs" />
-                      Listing...
-                    </>
+                  {fetching ? (
+                    <VinylSpinner size="xs" />
                   ) : (
-                    "List on Discogs"
+                    <RefreshCw className="h-4 w-4" />
                   )}
                 </Button>
-              )}
-              {(album.ebay_listing_id || album.discogs_listing_id) &&
-                album.status !== "sold" && (
-                  <Button variant="outline" onClick={handleSyncSales} disabled={syncing}>
+              </div>
+            </div>
+
+            {/* Platform listing buttons */}
+            {album.status !== "sold" && (
+              <div className="border-t border-white/8 px-5 py-4 space-y-2">
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-3">
+                  List on
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  {!album.ebay_listing_id ? (
+                    <Button
+                      onClick={handleListOnEbay}
+                      disabled={listing || !ebayConnected}
+                      className="w-full justify-center gap-2"
+                    >
+                      {listing ? (
+                        <VinylSpinner size="xs" />
+                      ) : (
+                        <ShoppingBag className="h-4 w-4" />
+                      )}
+                      eBay
+                    </Button>
+                  ) : (
+                    <div className="flex items-center gap-2 rounded-lg border border-green-500/20 bg-green-500/5 px-3 py-2">
+                      <span className="h-2 w-2 rounded-full bg-green-500 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium text-green-400">Listed on eBay</p>
+                        <a
+                          href={album.ebay_listing_url ?? "#"}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-0.5 text-[11px] text-muted-foreground hover:text-accent transition-colors"
+                        >
+                          View listing <ExternalLink className="h-2.5 w-2.5" />
+                        </a>
+                      </div>
+                    </div>
+                  )}
+
+                  {!album.discogs_listing_id ? (
+                    <Button
+                      variant="outline"
+                      onClick={handleListOnDiscogs}
+                      disabled={listingDiscogs || !discogsConnected || !discogsReleaseId}
+                      className="w-full justify-center gap-2"
+                    >
+                      {listingDiscogs ? (
+                        <VinylSpinner size="xs" />
+                      ) : (
+                        <Disc2 className="h-4 w-4" />
+                      )}
+                      Discogs
+                    </Button>
+                  ) : (
+                    <div className="flex items-center gap-2 rounded-lg border border-green-500/20 bg-green-500/5 px-3 py-2">
+                      <span className="h-2 w-2 rounded-full bg-green-500 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium text-green-400">Listed on Discogs</p>
+                        <a
+                          href={album.discogs_listing_url ?? "#"}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-0.5 text-[11px] text-muted-foreground hover:text-accent transition-colors"
+                        >
+                          View listing <ExternalLink className="h-2.5 w-2.5" />
+                        </a>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Check if sold */}
+                {(album.ebay_listing_id || album.discogs_listing_id) && (
+                  <Button
+                    variant="ghost"
+                    className="mt-1 w-full text-muted-foreground hover:text-[#F5F4F0]"
+                    onClick={handleSyncSales}
+                    disabled={syncing}
+                  >
                     {syncing ? (
                       <>
                         <VinylSpinner size="xs" />
-                        Checking...
+                        Checking platforms...
                       </>
                     ) : (
-                      "Check if Sold"
+                      "Check if sold on any platform"
                     )}
                   </Button>
                 )}
-            </div>
 
-            {!ebayConnected && !album.ebay_listing_id && (
-              <p className="mt-2 text-xs text-muted-foreground">
-                Connect your eBay account in Settings to list on eBay.
-              </p>
-            )}
-            {!discogsConnected && !album.discogs_listing_id && (
-              <p className="mt-2 text-xs text-muted-foreground">
-                Add a Discogs token in Settings to list on Discogs.
-              </p>
-            )}
-            {discogsConnected && !discogsReleaseId && !album.discogs_listing_id && (
-              <p className="mt-2 text-xs text-muted-foreground">
-                Fetch prices first — VinylVault needs to identify the Discogs release before listing.
-              </p>
+                {/* Connection hints */}
+                {!ebayConnected && !album.ebay_listing_id && (
+                  <p className="text-xs text-muted-foreground">
+                    Connect eBay in{" "}
+                    <a href="/settings" className="text-accent hover:underline">
+                      Settings
+                    </a>{" "}
+                    to list on eBay.
+                  </p>
+                )}
+                {!discogsConnected && !album.discogs_listing_id && (
+                  <p className="text-xs text-muted-foreground">
+                    Add a Discogs token in{" "}
+                    <a href="/settings" className="text-accent hover:underline">
+                      Settings
+                    </a>{" "}
+                    to list on Discogs.
+                  </p>
+                )}
+                {discogsConnected && !discogsReleaseId && !album.discogs_listing_id && (
+                  <p className="text-xs text-muted-foreground">
+                    Refresh prices first so VinylVault can identify the Discogs release.
+                  </p>
+                )}
+              </div>
             )}
           </div>
 
-          {album.ebay_listing_url && album.status !== "sold" && (
-            <div className="rounded-xl border border-white/8 p-6">
-              <p className="text-sm font-medium">Listed on eBay</p>
-              <a
-                href={album.ebay_listing_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-2 inline-flex items-center gap-1 text-sm text-accent hover:underline"
-              >
-                View on eBay <ExternalLink className="h-3 w-3" />
-              </a>
-            </div>
-          )}
-
-          {album.discogs_listing_url && album.status !== "sold" && (
-            <div className="rounded-xl border border-white/8 p-6">
-              <p className="text-sm font-medium">Listed on Discogs</p>
-              <a
-                href={album.discogs_listing_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-2 inline-flex items-center gap-1 text-sm text-accent hover:underline"
-              >
-                View on Discogs <ExternalLink className="h-3 w-3" />
-              </a>
-            </div>
-          )}
-
+          {/* Sold card */}
           {album.status === "sold" && (
-            <div className="rounded-xl border border-white/8 p-6 animate-fade-in-up">
-              <p className="text-sm font-medium">Sold</p>
-              <p className="mt-2 font-display text-2xl font-bold tabular-nums">
+            <div className="rounded-xl border border-white/8 bg-card p-5 animate-fade-in-up">
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Sold
+              </p>
+              <p className="mt-2 font-display text-3xl font-bold tabular-nums">
                 {formatCurrency(album.sold_price)}
               </p>
               {album.sold_at && (
-                <p className="text-sm text-muted-foreground">
-                  {new Date(album.sold_at).toLocaleDateString()}
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {new Date(album.sold_at).toLocaleDateString("en-US", {
+                    month: "long",
+                    day: "numeric",
+                    year: "numeric",
+                  })}
                 </p>
               )}
               {profit !== null && (
                 <p
-                  className={`mt-2 text-sm font-medium ${
-                    profit >= 0 ? "text-green-400" : "text-red-400"
+                  className={`mt-3 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium ${
+                    profit >= 0
+                      ? "bg-green-500/10 text-green-400"
+                      : "bg-red-500/10 text-red-400"
                   }`}
                 >
                   {profit >= 0 ? "+" : ""}
