@@ -18,6 +18,14 @@ export async function POST(request: Request) {
   }
 
   const settings = (user.user_metadata ?? {}) as UserSettings;
+
+  if (!settings.shippo_enabled) {
+    return NextResponse.json(
+      { error: "Shippo is not enabled. Turn it on in Settings → Shipping." },
+      { status: 400 }
+    );
+  }
+
   const shippoKey =
     settings.shippo_api_key || process.env.SHIPPO_API_KEY;
 

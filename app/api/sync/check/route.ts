@@ -179,11 +179,12 @@ export async function POST(request: Request) {
   let label: { trackingNumber: string; labelUrl: string; carrier: string; serviceLevel: string; rate: number } | null = null;
   let labelError: string | null = null;
 
+  const shippoEnabled = userMeta.shippo_enabled ?? false;
   const shippoKey = userMeta.shippo_api_key || process.env.SHIPPO_API_KEY;
   const sellerReady =
     userMeta.seller_name && userMeta.seller_street1 && userMeta.seller_city;
 
-  if (shippoKey && sellerReady && buyerAddress) {
+  if (shippoEnabled && shippoKey && sellerReady && buyerAddress) {
     const from: ShippoAddress = {
       name: userMeta.seller_name!,
       street1: userMeta.seller_street1!,
@@ -214,13 +215,14 @@ export async function POST(request: Request) {
       labelError =
         err instanceof Error ? err.message : "Label creation failed";
     }
-  } else if (shippoKey && sellerReady && !buyerAddress) {
+  } else if (shippoEnabled && shippoKey && sellerReady && !buyerAddress) {
     labelError = "Buyer address unavailable — create the label manually from the album page.";
-  } else if (!shippoKey) {
-    labelError = "Shippo not configured — add your API key in Settings → Shipping.";
-  } else if (!sellerReady) {
+  } else if (shippoEnabled && shippoKey && !sellerReady) {
     labelError = "Seller address incomplete — fill it in Settings → Shipping.";
+  } else if (shippoEnabled && !shippoKey) {
+    labelError = "Shippo API key not set — add it in Settings → Shipping.";
   }
+  // If shippoEnabled is false, labelError stays null — silent, no nagging.
 
   return NextResponse.json({
     status: "sold",

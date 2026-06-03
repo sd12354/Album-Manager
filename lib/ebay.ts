@@ -211,10 +211,18 @@ async function callTradingApi(
 import type { Album } from "@/types";
 import { EBAY_MAX_PHOTOS, getOriginalPublicUrl } from "@/lib/photos";
 
+export interface SellerLocation {
+  city?: string;
+  state?: string;
+  zip?: string;
+  country?: string;
+}
+
 export async function createEbayListing(
   album: Album,
   price: number,
-  accessToken: string
+  accessToken: string,
+  sellerLocation?: SellerLocation
 ): Promise<{ itemId: string; listingUrl: string }> {
   const pictureUrlsXml = (album.photo_urls ?? [])
     .slice(0, EBAY_MAX_PHOTOS)
@@ -240,6 +248,14 @@ export async function createEbayListing(
 
   const categoryId = getCategoryForGenre(album.genre);
   const conditionId = CONDITION_TO_EBAY[album.condition] ?? 3000;
+  const country = sellerLocation?.country || "US";
+
+  // Build location string: "City, ST" or just "US" as a fallback.
+  // eBay requires <Location> — without it the API returns
+  // "Your item's location was not filled in."
+  const locationParts = [sellerLocation?.city, sellerLocation?.state].filter(Boolean);
+  const locationStr = locationParts.length > 0 ? locationParts.join(", ") : country;
+  const postalCode = sellerLocation?.zip || "";
 
   const xml = `<?xml version="1.0" encoding="utf-8"?>
 <AddFixedPriceItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
@@ -249,8 +265,10 @@ export async function createEbayListing(
     <PrimaryCategory><CategoryID>${categoryId}</CategoryID></PrimaryCategory>
     <StartPrice>${price.toFixed(2)}</StartPrice>
     <ConditionID>${conditionId}</ConditionID>
-    <Country>US</Country>
+    <Country>${escapeXml(country)}</Country>
     <Currency>USD</Currency>
+    <Location>${escapeXml(locationStr)}</Location>
+    ${postalCode ? `<PostalCode>${escapeXml(postalCode)}</PostalCode>` : ""}
     <DispatchTimeMax>3</DispatchTimeMax>
     <ListingDuration>GTC</ListingDuration>
     <ListingType>FixedPriceItem</ListingType>

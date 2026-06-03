@@ -4,8 +4,9 @@ import {
   createEbayListing,
   getValidEbayToken,
   type EbayTokenCredentials,
+  type SellerLocation,
 } from "@/lib/ebay";
-import type { Album } from "@/types";
+import type { Album, UserSettings } from "@/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -92,11 +93,21 @@ export async function POST(request: Request) {
       .eq("user_id", user.id);
   }
 
+  // Pull seller location from user settings so eBay gets a valid <Location>.
+  const userMeta = (user.user_metadata ?? {}) as UserSettings;
+  const sellerLocation: SellerLocation = {
+    city: userMeta.seller_city,
+    state: userMeta.seller_state,
+    zip: userMeta.seller_zip,
+    country: userMeta.seller_country || "US",
+  };
+
   try {
     const { itemId, listingUrl } = await createEbayListing(
       typedAlbum,
       price,
-      tokenResult.token
+      tokenResult.token,
+      sellerLocation
     );
 
     await supabase

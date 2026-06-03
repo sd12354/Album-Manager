@@ -95,6 +95,7 @@ export interface UserSettings {
   shipping_profile?: string;
   ebay_username?: string;
   ebay_environment?: "production" | "sandbox" | "stub";
+  shippo_enabled?: boolean;
   shippo_api_key?: string;
   seller_name?: string;
   seller_street1?: string;

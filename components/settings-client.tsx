@@ -37,6 +37,7 @@ interface SettingsClientProps {
     email_on_sale?: boolean;
     shipping_profile?: string;
     condition_multipliers?: Partial<Record<AlbumCondition, number>>;
+    shippo_enabled?: boolean;
     shippo_api_key?: string;
     seller_name?: string;
     seller_street1?: string;
@@ -74,6 +75,7 @@ export function SettingsClient({
   const [saving, setSaving] = useState(false);
 
   // Shippo + seller address state
+  const [shippoEnabled, setShippoEnabled] = useState(userSettings.shippo_enabled ?? false);
   const [shippoKey, setShippoKey] = useState(userSettings.shippo_api_key ?? "");
   const [sellerName, setSellerName] = useState(userSettings.seller_name ?? "");
   const [sellerStreet1, setSellerStreet1] = useState(userSettings.seller_street1 ?? "");
@@ -363,7 +365,7 @@ export function SettingsClient({
           </AccordionTrigger>
           <AccordionContent className="space-y-5">
             <p className="text-sm text-muted-foreground">
-              VinylVault uses{" "}
+              Optionally connect{" "}
               <a
                 href="https://goshippo.com"
                 target="_blank"
@@ -372,10 +374,31 @@ export function SettingsClient({
               >
                 Shippo
               </a>{" "}
-              to generate prepaid shipping labels automatically when a sale is
-              detected. Labels default to USPS Media Mail — the cheapest option
-              for vinyl records.
+              to auto-generate prepaid USPS Media Mail labels when a sale is detected.
+              If disabled, sales still record normally — you&apos;ll just handle shipping manually.
             </p>
+
+            {/* Enable / disable toggle */}
+            <div className="flex items-center justify-between rounded-xl border border-border bg-secondary/30 px-4 py-3">
+              <div>
+                <p className="text-sm font-medium">Auto-generate shipping labels</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  When enabled, a Shippo label is created automatically every time a sale is detected.
+                  Disable to manage shipping outside VinylVault.
+                </p>
+              </div>
+              <Switch
+                checked={shippoEnabled}
+                onCheckedChange={(checked) => {
+                  setShippoEnabled(checked);
+                  saveSettings({ shippo_enabled: checked });
+                }}
+              />
+            </div>
+
+            {/* API key + address — only shown when enabled */}
+            {shippoEnabled && (
+              <>
 
             {/* Shippo API key */}
             <div className="space-y-2">
@@ -506,6 +529,9 @@ export function SettingsClient({
                 Save Address
               </Button>
             </div>
+
+              </> // end shippoEnabled conditional
+            )}
           </AccordionContent>
         </AccordionItem>
       </Accordion>

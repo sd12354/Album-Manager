@@ -402,13 +402,13 @@ export function LandingPage({ isLoggedIn = false }: { isLoggedIn?: boolean }) {
             {features.map(({ icon: Icon, title, desc, color }) => (
               <div
                 key={title}
-                className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-6 backdrop-blur-sm transition-all hover:border-white/15 hover:bg-white/[0.04]"
+                className="rounded-2xl border border-white/[0.10] bg-[#0e0e10] p-6 transition-all hover:border-white/20 hover:bg-[#121214]"
               >
                 <div className={`mb-4 inline-flex h-10 w-10 items-center justify-center rounded-xl ${color}`}>
                   <Icon className="h-5 w-5" />
                 </div>
-                <h3 className="font-display text-base font-semibold mb-2">{title}</h3>
-                <p className="text-sm text-white/50 leading-relaxed">{desc}</p>
+                <h3 className="font-display text-base font-semibold text-white mb-2">{title}</h3>
+                <p className="text-sm text-white/70 leading-relaxed">{desc}</p>
               </div>
             ))}
           </div>
