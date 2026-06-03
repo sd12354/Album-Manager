@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { CursorEffect } from "@/components/cursor-effect";
 import {
   ArrowRight,
   Disc2,
@@ -267,7 +268,8 @@ export function LandingPage({ isLoggedIn = false }: { isLoggedIn?: boolean }) {
   const [activeTab, setActiveTab] = useState<"dashboard" | "catalogue">("dashboard");
 
   return (
-    <div className="min-h-screen bg-[#050507] text-white selection:bg-accent/30">
+    <div className="min-h-screen bg-[#050507] text-white selection:bg-accent/30 [&_*]:cursor-none cursor-none">
+      <CursorEffect />
       <style>{`
         @keyframes blob {
           0%, 100% { transform: translate(0, 0) scale(1); }
@@ -301,7 +303,7 @@ export function LandingPage({ isLoggedIn = false }: { isLoggedIn?: boolean }) {
       <MarketingNav active="home" isLoggedIn={isLoggedIn} />
 
       {/* ── Hero ──────────────────────────────────────────────────────────── */}
-      <section className="relative flex flex-col items-center justify-center px-6 pb-24 pt-40 text-center md:pt-48">
+      <section data-cursor-hero className="relative flex flex-col items-center justify-center px-6 pb-24 pt-40 text-center md:pt-48">
         <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/5 px-4 py-1.5 text-sm text-accent">
           <Disc2 className="h-3.5 w-3.5" />
           Now with Discogs + eBay dual-listing
