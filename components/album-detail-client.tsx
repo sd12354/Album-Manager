@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Disc2, ExternalLink, Package, RefreshCw, ShoppingBag, Upload } from "lucide-react";
+import { ArrowLeft, Disc2, ExternalLink, Package, RefreshCw, ShoppingBag, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { AlbumStatusBadge } from "@/components/album-status-badge";
 import { ConditionBadge } from "@/components/condition-badge";
@@ -106,6 +106,10 @@ export function AlbumDetailClient({
   const [listingDiscogs, setListingDiscogs] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [delistingEbay, setDelistingEbay] = useState(false);
+  const [delistingDiscogs, setDelistingDiscogs] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [uploading, setUploading] = useState(false);
 
   async function handleFetchPrices() {
@@ -248,6 +252,61 @@ export function AlbumDetailClient({
       toast.error(err.error ?? "Sync failed");
     }
     setSyncing(false);
+  }
+
+  async function handleDelistEbay() {
+    setDelistingEbay(true);
+    const res = await fetch("/api/ebay/delist", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ albumId: album.id }),
+    });
+    if (res.ok) {
+      setAlbum((prev) => ({ ...prev, ebay_listing_id: null, ebay_listing_url: null, status: prev.discogs_listing_id ? "listed" : "unlisted" }));
+      toast.success("Removed from eBay");
+      router.refresh();
+    } else {
+      const err = await res.json().catch(() => ({}));
+      toast.error(err.error ?? "Failed to delist from eBay");
+    }
+    setDelistingEbay(false);
+  }
+
+  async function handleDelistDiscogs() {
+    setDelistingDiscogs(true);
+    const res = await fetch("/api/discogs/delist", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ albumId: album.id }),
+    });
+    if (res.ok) {
+      setAlbum((prev) => ({ ...prev, discogs_listing_id: null, discogs_listing_url: null, status: prev.ebay_listing_id ? "listed" : "unlisted" }));
+      toast.success("Removed from Discogs");
+      router.refresh();
+    } else {
+      const err = await res.json().catch(() => ({}));
+      toast.error(err.error ?? "Failed to delist from Discogs");
+    }
+    setDelistingDiscogs(false);
+  }
+
+  async function handleDelete() {
+    if (!confirmDelete) { setConfirmDelete(true); return; }
+    setDeleting(true);
+    const res = await fetch("/api/albums/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ albumIds: [album.id] }),
+    });
+    if (res.ok) {
+      toast.success("Album deleted");
+      router.push("/albums");
+    } else {
+      const err = await res.json().catch(() => ({}));
+      toast.error(err.error ?? "Delete failed");
+      setDeleting(false);
+      setConfirmDelete(false);
+    }
   }
 
   async function handleSave() {
@@ -605,17 +664,18 @@ export function AlbumDetailClient({
                   ) : (
                     <div className="flex items-center gap-2 rounded-lg border border-green-500/20 bg-green-500/5 px-3 py-2">
                       <span className="h-2 w-2 rounded-full bg-green-500 shrink-0" />
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <p className="text-xs font-medium text-green-400">Listed on eBay</p>
-                        <a
-                          href={album.ebay_listing_url ?? "#"}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-0.5 text-[11px] text-muted-foreground hover:text-accent transition-colors"
-                        >
-                          View listing <ExternalLink className="h-2.5 w-2.5" />
+                        <a href={album.ebay_listing_url ?? "#"} target="_blank" rel="noopener noreferrer"
+                          className="inline-flex items-center gap-0.5 text-[11px] text-muted-foreground hover:text-accent transition-colors">
+                          View <ExternalLink className="h-2.5 w-2.5" />
                         </a>
                       </div>
+                      <button onClick={handleDelistEbay} disabled={delistingEbay}
+                        className="text-[11px] text-muted-foreground hover:text-red-400 transition-colors shrink-0"
+                        title="Remove eBay listing">
+                        {delistingEbay ? <VinylSpinner size="xs" /> : "Delist"}
+                      </button>
                     </div>
                   )}
 
@@ -636,17 +696,18 @@ export function AlbumDetailClient({
                   ) : (
                     <div className="flex items-center gap-2 rounded-lg border border-green-500/20 bg-green-500/5 px-3 py-2">
                       <span className="h-2 w-2 rounded-full bg-green-500 shrink-0" />
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <p className="text-xs font-medium text-green-400">Listed on Discogs</p>
-                        <a
-                          href={album.discogs_listing_url ?? "#"}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-0.5 text-[11px] text-muted-foreground hover:text-accent transition-colors"
-                        >
-                          View listing <ExternalLink className="h-2.5 w-2.5" />
+                        <a href={album.discogs_listing_url ?? "#"} target="_blank" rel="noopener noreferrer"
+                          className="inline-flex items-center gap-0.5 text-[11px] text-muted-foreground hover:text-accent transition-colors">
+                          View <ExternalLink className="h-2.5 w-2.5" />
                         </a>
                       </div>
+                      <button onClick={handleDelistDiscogs} disabled={delistingDiscogs}
+                        className="text-[11px] text-muted-foreground hover:text-red-400 transition-colors shrink-0"
+                        title="Remove Discogs listing">
+                        {delistingDiscogs ? <VinylSpinner size="xs" /> : "Delist"}
+                      </button>
                     </div>
                   )}
                 </div>
@@ -805,6 +866,26 @@ export function AlbumDetailClient({
               </div>
             </div>
           )}
+          {/* Delete album */}
+          <div className="flex items-center justify-end gap-3 pt-2">
+            {confirmDelete && (
+              <button onClick={() => setConfirmDelete(false)} className="text-xs text-muted-foreground hover:text-[#F5F4F0]">
+                Cancel
+              </button>
+            )}
+            <button
+              onClick={handleDelete}
+              disabled={deleting}
+              className={`inline-flex items-center gap-1.5 text-xs transition-colors ${
+                confirmDelete
+                  ? "font-medium text-red-400 hover:text-red-300"
+                  : "text-muted-foreground hover:text-red-400"
+              }`}
+            >
+              {deleting ? <VinylSpinner size="xs" /> : <Trash2 className="h-3.5 w-3.5" />}
+              {confirmDelete ? "Confirm — delete this album?" : "Delete album"}
+            </button>
+          </div>
         </div>
       </div>
     </div>

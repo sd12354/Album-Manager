@@ -10,7 +10,7 @@ import {
   type ColumnDef,
   type RowSelectionState,
 } from "@tanstack/react-table";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, Trash2 } from "lucide-react";
 import { VinylSpinner } from "@/components/vinyl-spinner";
 import { toast } from "sonner";
 import { AddAlbumDrawer } from "@/components/add-album-drawer";
@@ -50,7 +50,8 @@ export function CatalogueClient({ albums }: CatalogueClientProps) {
   const [conditionFilter, setConditionFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [bulkLoading, setBulkLoading] = useState<null | "price" | "list">(null);
+  const [bulkLoading, setBulkLoading] = useState<null | "price" | "list" | "delete">(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   useEffect(() => {
     if (searchParams.get("add") === "true") {
@@ -232,6 +233,27 @@ export function CatalogueClient({ albums }: CatalogueClientProps) {
     setBulkLoading(null);
   }, [selectedIds, router]);
 
+  const handleBulkDelete = useCallback(async () => {
+    if (!confirmDelete) { setConfirmDelete(true); return; }
+    setConfirmDelete(false);
+    setBulkLoading("delete");
+    const res = await fetch("/api/albums/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ albumIds: selectedIds }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      toast.success(`Deleted ${data.deleted} album${data.deleted !== 1 ? "s" : ""}`);
+      setRowSelection({});
+      router.refresh();
+    } else {
+      const err = await res.json().catch(() => ({}));
+      toast.error(err.error ?? "Delete failed");
+    }
+    setBulkLoading(null);
+  }, [selectedIds, confirmDelete, router]);
+
   const handleBulkList = useCallback(async () => {
     setBulkLoading("list");
     let listed = 0;
@@ -358,6 +380,29 @@ export function CatalogueClient({ albums }: CatalogueClientProps) {
               "List on eBay"
             )}
           </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => { if (!confirmDelete) { setConfirmDelete(true); } else { handleBulkDelete(); } }}
+            disabled={bulkLoading === "delete"}
+            className={confirmDelete ? "border-red-500/50 text-red-400 hover:bg-red-500/10" : "text-muted-foreground hover:text-red-400 hover:border-red-500/40 ml-auto"}
+          >
+            {bulkLoading === "delete" ? (
+              <><VinylSpinner size="xs" /> Deleting...</>
+            ) : confirmDelete ? (
+              <><Trash2 className="h-3.5 w-3.5" /> Confirm delete {selectedIds.length}?</>
+            ) : (
+              <><Trash2 className="h-3.5 w-3.5" /> Delete</>
+            )}
+          </Button>
+          {confirmDelete && (
+            <button
+              onClick={() => setConfirmDelete(false)}
+              className="text-xs text-muted-foreground hover:text-[#F5F4F0]"
+            >
+              Cancel
+            </button>
+          )}
         </div>
       )}
 

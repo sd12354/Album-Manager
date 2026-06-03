@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, CheckCircle2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, FileJson, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { CSVDropzone } from "@/components/csv-dropzone";
 import { VinylSpinner } from "@/components/vinyl-spinner";
@@ -34,8 +34,19 @@ import {
 const STEPS = ["Upload", "Preview", "Import"];
 const REQUIRED_TARGETS: TargetField[] = ["title", "artist", "condition"];
 
+type Mode = "csv" | "json";
+
+interface BoxFile {
+  name: string;
+  records: unknown[];
+  error?: string;
+}
+
 export default function ImportPage() {
   const router = useRouter();
+  const [mode, setMode] = useState<Mode>("csv");
+
+  // ── CSV state ──────────────────────────────────────────────────────────────
   const [step, setStep] = useState(0);
   const [file, setFile] = useState<File | null>(null);
   const [rawRows, setRawRows] = useState<Record<string, string>[]>([]);
@@ -48,19 +59,25 @@ export default function ImportPage() {
   const [importedCount, setImportedCount] = useState(0);
   const [showAllErrors, setShowAllErrors] = useState(false);
 
+  // ── JSON state ─────────────────────────────────────────────────────────────
+  const [boxFiles, setBoxFiles] = useState<BoxFile[]>([]);
+  const [jsonImporting, setJsonImporting] = useState(false);
+  const [jsonProgress, setJsonProgress] = useState(0);
+  const [jsonResult, setJsonResult] = useState<{ count: number; skipped: number } | null>(null);
+  const jsonInputRef = useRef<HTMLInputElement>(null);
+
+  // ── CSV derived ────────────────────────────────────────────────────────────
   const { rows, errors, invalidCount } = useMemo(
     () => deriveRows(rawRows, columnMapping),
     [rawRows, columnMapping]
   );
-
   const mappedTargets = useMemo(
     () => new Set(Object.values(columnMapping).filter((v) => v !== "skip")),
     [columnMapping]
   );
-  const missingRequired = REQUIRED_TARGETS.filter(
-    (t) => !mappedTargets.has(t)
-  );
+  const missingRequired = REQUIRED_TARGETS.filter((t) => !mappedTargets.has(t));
 
+  // ── CSV handlers ───────────────────────────────────────────────────────────
   async function handleFileSelect(selectedFile: File) {
     setFile(selectedFile);
     setParseError(null);
@@ -86,34 +103,26 @@ export default function ImportPage() {
   }
 
   function handleContinue() {
-    if (step === 0 && file && rawRows.length > 0) {
-      setStep(1);
-    } else if (step === 1 && rows.length > 0) {
-      setStep(2);
-      handleImport();
-    }
+    if (step === 0 && file && rawRows.length > 0) setStep(1);
+    else if (step === 1 && rows.length > 0) { setStep(2); handleImport(); }
   }
 
   async function handleImport() {
     setImporting(true);
     setProgress(10);
-
     try {
       const res = await fetch("/api/albums/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ albums: rows }),
       });
-
       setProgress(80);
-
       if (!res.ok) {
         const data = await res.json();
         toast.error(data.error ?? "Import failed");
         setImporting(false);
         return;
       }
-
       const data = await res.json();
       setImportedCount(data.count);
       setProgress(100);
@@ -124,282 +133,456 @@ export default function ImportPage() {
     setImporting(false);
   }
 
+  // ── JSON handlers ──────────────────────────────────────────────────────────
+  async function handleJsonFiles(fileList: FileList | null) {
+    if (!fileList) return;
+    const parsed: BoxFile[] = [...boxFiles];
+
+    for (const f of Array.from(fileList)) {
+      if (parsed.find((b) => b.name === f.name)) continue; // dedupe
+      try {
+        const text = await f.text();
+        const records = JSON.parse(text);
+        if (!Array.isArray(records)) throw new Error("Expected a JSON array");
+        parsed.push({ name: f.name, records });
+      } catch (err) {
+        parsed.push({
+          name: f.name,
+          records: [],
+          error: err instanceof Error ? err.message : "Parse error",
+        });
+      }
+    }
+
+    setBoxFiles(parsed);
+    setJsonResult(null);
+  }
+
+  function removeBoxFile(name: string) {
+    setBoxFiles((prev) => prev.filter((f) => f.name !== name));
+  }
+
+  async function handleJsonImport() {
+    const validFiles = boxFiles.filter((f) => !f.error && f.records.length > 0);
+    if (validFiles.length === 0) return;
+
+    setJsonImporting(true);
+    setJsonProgress(20);
+
+    try {
+      const res = await fetch("/api/albums/import-json", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          files: validFiles.map((f) => ({ name: f.name, records: f.records })),
+        }),
+      });
+      setJsonProgress(85);
+
+      if (!res.ok) {
+        const data = await res.json();
+        toast.error(data.error ?? "Import failed");
+        setJsonImporting(false);
+        return;
+      }
+
+      const data = await res.json();
+      setJsonResult({ count: data.count, skipped: data.skipped });
+      setJsonProgress(100);
+      toast.success(
+        `Imported ${data.count} albums${data.skipped ? ` (${data.skipped} skipped)` : ""}`
+      );
+    } catch {
+      toast.error("Import failed");
+    }
+    setJsonImporting(false);
+  }
+
+  const totalJsonRecords = boxFiles.reduce(
+    (s, f) => s + (f.error ? 0 : f.records.length),
+    0
+  );
   const visibleErrors = showAllErrors ? errors : errors.slice(0, 5);
   const allRowsFailed = rawRows.length > 0 && rows.length === 0;
 
   return (
     <div className="animate-fade-in">
-      <h1 className="font-display text-3xl font-bold">Import CSV</h1>
+      <h1 className="font-display text-3xl font-bold">Import</h1>
 
-      <div className="mx-auto mt-8 flex max-w-md items-center justify-center">
-        {STEPS.map((label, i) => (
-          <div key={label} className="flex items-center">
-            <div className="flex flex-col items-center">
-              <div
-                className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium transition-all duration-300 ${
-                  i <= step
-                    ? "bg-accent text-black scale-110"
-                    : "bg-[#1A1A1C] text-muted-foreground"
-                }`}
-              >
-                {i + 1}
-              </div>
-              <span className="mt-1 text-xs text-muted-foreground">{label}</span>
-            </div>
-            {i < STEPS.length - 1 && (
-              <div
-                className={`mx-4 h-0.5 w-16 transition-colors duration-500 ${
-                  i < step ? "bg-accent" : "bg-[#1A1A1C]"
-                }`}
-              />
-            )}
-          </div>
-        ))}
+      {/* Mode tabs */}
+      <div className="mt-6 flex gap-1 rounded-xl border border-white/8 bg-card p-1 w-fit">
+        <button
+          onClick={() => setMode("csv")}
+          className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+            mode === "csv"
+              ? "bg-accent text-black"
+              : "text-muted-foreground hover:text-[#F5F4F0]"
+          }`}
+        >
+          CSV File
+        </button>
+        <button
+          onClick={() => setMode("json")}
+          className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+            mode === "json"
+              ? "bg-accent text-black"
+              : "text-muted-foreground hover:text-[#F5F4F0]"
+          }`}
+        >
+          <FileJson className="h-4 w-4" />
+          Box JSON Files
+        </button>
       </div>
 
-      <div className="mx-auto mt-10 max-w-3xl">
-        {step === 0 && (
-          <>
-            <CSVDropzone onFileSelect={handleFileSelect} selectedFile={file} />
-            {parseError && (
-              <p className="mt-4 text-sm text-red-400">{parseError}</p>
-            )}
-            {file && rawRows.length > 0 && (
-              <p className="mt-4 text-sm text-muted-foreground">
-                Detected {rawRows.length} rows and {headers.length} columns.
-              </p>
-            )}
-            {file && rawRows.length > 0 && (
-              <div className="mt-6 flex justify-end">
-                <Button onClick={handleContinue}>Continue</Button>
-              </div>
-            )}
-          </>
-        )}
-
-        {step === 1 && (
-          <>
-            <div className="mb-6 rounded-xl border border-white/8 bg-card p-5">
-              <div className="mb-3 flex items-center justify-between">
-                <p className="font-display text-base font-semibold">
-                  Column mapping
-                </p>
-                <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
-                  <input
-                    type="checkbox"
-                    checked={headerless}
-                    onChange={(e) => reparseAs(!e.target.checked)}
-                    className="h-3.5 w-3.5 cursor-pointer accent-[#D4A843]"
-                  />
-                  First row is data, not headers
-                </label>
-              </div>
-
-              {headerless && (
-                <p className="mb-3 text-xs text-muted-foreground">
-                  No header row detected — columns are guessed by position
-                  (Title, Artist, Genre, Condition, Catalog #). Adjust below
-                  if the order is different.
-                </p>
-              )}
-
-              {missingRequired.length > 0 && (
-                <div className="mb-3 flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-400">
-                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                  <span>
-                    Missing required mapping{missingRequired.length > 1 ? "s" : ""}:{" "}
-                    {missingRequired
-                      .map((t) => TARGET_FIELDS.find((f) => f.key === t)?.label)
-                      .join(", ")}
-                    . Pick a column below.
-                  </span>
-                </div>
-              )}
-
-              <div className="space-y-2">
-                {headers.map((h) => {
-                  const sample = rawRows[0]?.[h] ?? "";
-                  const value = columnMapping[h] ?? "skip";
-                  const isDuplicate =
-                    value !== "skip" &&
-                    Object.entries(columnMapping).filter(
-                      ([k, v]) => v === value && k !== h
-                    ).length > 0;
-                  return (
-                    <div key={h} className="grid grid-cols-[1fr_auto_220px] items-center gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">{h}</p>
-                        {sample && (
-                          <p className="truncate text-xs text-muted-foreground">
-                            e.g. {sample}
-                          </p>
-                        )}
-                      </div>
-                      <span className="text-xs text-muted-foreground">→</span>
-                      <Select
-                        value={value}
-                        onValueChange={(v) =>
-                          setColumnMapping((prev) => ({ ...prev, [h]: v }))
-                        }
-                      >
-                        <SelectTrigger
-                          className={
-                            isDuplicate
-                              ? "border-amber-500/40"
-                              : value === "skip"
-                                ? "border-white/10 text-muted-foreground"
-                                : "border-accent/40"
-                          }
-                        >
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {TARGET_FIELDS.map((f) => (
-                            <SelectItem key={f.key} value={f.key}>
-                              {f.label}
-                              {f.required ? " *" : ""}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="mb-4 flex items-center gap-3 rounded-lg border border-white/8 bg-card px-4 py-3">
-              <CheckCircle2 className="h-4 w-4 text-green-400" />
-              <span className="text-sm">
-                <span className="font-medium text-[#F5F4F0]">{rows.length}</span>{" "}
-                of {rawRows.length} rows ready to import
-              </span>
-              {invalidCount > 0 && (
-                <span className="ml-auto text-xs text-amber-400">
-                  {invalidCount} skipped due to validation errors
-                </span>
-              )}
-            </div>
-
-            {errors.length > 0 && (
-              <div className="mb-4 rounded-lg border border-red-500/20 bg-red-500/5 p-4">
-                <p className="text-sm font-medium text-red-400">
-                  {errors.length} validation error{errors.length > 1 ? "s" : ""}
-                </p>
-                <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto pr-2">
-                  {visibleErrors.map((err, i) => (
-                    <li key={i} className="text-xs text-red-400">
-                      {err}
-                    </li>
-                  ))}
-                </ul>
-                {errors.length > 5 && (
-                  <button
-                    onClick={() => setShowAllErrors((v) => !v)}
-                    className="mt-2 text-xs text-accent hover:underline"
+      {/* ── CSV mode ────────────────────────────────────────────────────────── */}
+      {mode === "csv" && (
+        <>
+          <div className="mx-auto mt-8 flex max-w-md items-center justify-center">
+            {STEPS.map((label, i) => (
+              <div key={label} className="flex items-center">
+                <div className="flex flex-col items-center">
+                  <div
+                    className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium transition-all duration-300 ${
+                      i <= step ? "bg-accent text-black scale-110" : "bg-[#1A1A1C] text-muted-foreground"
+                    }`}
                   >
-                    {showAllErrors
-                      ? "Show less"
-                      : `Show all ${errors.length} errors`}
-                  </button>
+                    {i + 1}
+                  </div>
+                  <span className="mt-1 text-xs text-muted-foreground">{label}</span>
+                </div>
+                {i < STEPS.length - 1 && (
+                  <div className={`mx-4 h-0.5 w-16 transition-colors duration-500 ${i < step ? "bg-accent" : "bg-[#1A1A1C]"}`} />
                 )}
-                {allRowsFailed && (
-                  <p className="mt-3 border-t border-red-500/20 pt-3 text-xs text-red-300">
-                    All rows failed. Double-check the column mapping above —
-                    usually this means a required field is unmapped or the
-                    Condition column uses values we don&apos;t recognize.
+              </div>
+            ))}
+          </div>
+
+          <div className="mx-auto mt-10 max-w-3xl">
+            {step === 0 && (
+              <>
+                <CSVDropzone onFileSelect={handleFileSelect} selectedFile={file} />
+                {parseError && <p className="mt-4 text-sm text-red-400">{parseError}</p>}
+                {file && rawRows.length > 0 && (
+                  <p className="mt-4 text-sm text-muted-foreground">
+                    Detected {rawRows.length} rows and {headers.length} columns.
                   </p>
                 )}
-              </div>
-            )}
-
-            <div className="rounded-xl border border-white/8">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Title</TableHead>
-                    <TableHead>Artist</TableHead>
-                    <TableHead>Genre</TableHead>
-                    <TableHead>Condition</TableHead>
-                    <TableHead>Catalog #</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rows.length === 0 ? (
-                    <TableRow>
-                      <TableCell
-                        colSpan={5}
-                        className="h-24 text-center text-muted-foreground"
-                      >
-                        No valid rows yet — adjust the column mapping above.
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    rows.slice(0, 10).map((row, i) => (
-                      <TableRow key={i}>
-                        <TableCell>{row.title}</TableCell>
-                        <TableCell>{row.artist}</TableCell>
-                        <TableCell>{row.genre ?? "—"}</TableCell>
-                        <TableCell>{row.condition}</TableCell>
-                        <TableCell>{row.catalog_number ?? "—"}</TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-
-            {rows.length > 0 && (
-              <p className="mt-2 text-sm text-muted-foreground">
-                Showing {Math.min(rows.length, 10)} of {rows.length} valid rows
-              </p>
-            )}
-
-            <div className="mt-6 flex justify-between">
-              <Button variant="outline" onClick={() => setStep(0)}>
-                Back
-              </Button>
-              <Button
-                onClick={handleContinue}
-                disabled={rows.length === 0}
-              >
-                Import {rows.length} Album{rows.length === 1 ? "" : "s"}
-              </Button>
-            </div>
-          </>
-        )}
-
-        {step === 2 && (
-          <div className="text-center animate-fade-in">
-            {importing ? (
-              <>
-                <div className="flex justify-center">
-                  <VinylSpinner size="xl" />
-                </div>
-                <p className="mt-6 text-lg font-medium">Importing albums...</p>
-                <Progress value={progress} className="mt-4" />
+                {file && rawRows.length > 0 && (
+                  <div className="mt-6 flex justify-end">
+                    <Button onClick={handleContinue}>Continue</Button>
+                  </div>
+                )}
               </>
-            ) : (
-              <div className="animate-fade-in-up">
-                <p className="font-display text-2xl font-bold">
-                  Successfully imported {importedCount} albums
-                </p>
-                <div className="mt-6 flex justify-center gap-3">
-                  <Button asChild>
-                    <Link href="/albums">Go to Catalogue</Link>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => router.push("/albums?action=price-all")}
-                  >
-                    Price All Now
-                  </Button>
+            )}
+
+            {step === 1 && (
+              <>
+                <div className="mb-6 rounded-xl border border-white/8 bg-card p-5">
+                  <div className="mb-3 flex items-center justify-between">
+                    <p className="font-display text-base font-semibold">Column mapping</p>
+                    <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        checked={headerless}
+                        onChange={(e) => reparseAs(!e.target.checked)}
+                        className="h-3.5 w-3.5 cursor-pointer accent-[#D4A843]"
+                      />
+                      First row is data, not headers
+                    </label>
+                  </div>
+                  {headerless && (
+                    <p className="mb-3 text-xs text-muted-foreground">
+                      No header row detected — columns guessed by position. Adjust below if needed.
+                    </p>
+                  )}
+                  {missingRequired.length > 0 && (
+                    <div className="mb-3 flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-400">
+                      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                      <span>
+                        Missing required:{" "}
+                        {missingRequired.map((t) => TARGET_FIELDS.find((f) => f.key === t)?.label).join(", ")}
+                      </span>
+                    </div>
+                  )}
+                  <div className="space-y-2">
+                    {headers.map((h) => {
+                      const sample = rawRows[0]?.[h] ?? "";
+                      const value = columnMapping[h] ?? "skip";
+                      const isDuplicate =
+                        value !== "skip" &&
+                        Object.entries(columnMapping).filter(([k, v]) => v === value && k !== h).length > 0;
+                      return (
+                        <div key={h} className="grid grid-cols-[1fr_auto_220px] items-center gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium">{h}</p>
+                            {sample && <p className="truncate text-xs text-muted-foreground">e.g. {sample}</p>}
+                          </div>
+                          <span className="text-xs text-muted-foreground">→</span>
+                          <Select value={value} onValueChange={(v) => setColumnMapping((prev) => ({ ...prev, [h]: v }))}>
+                            <SelectTrigger className={isDuplicate ? "border-amber-500/40" : value === "skip" ? "border-white/10 text-muted-foreground" : "border-accent/40"}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {TARGET_FIELDS.map((f) => (
+                                <SelectItem key={f.key} value={f.key}>
+                                  {f.label}{f.required ? " *" : ""}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
+
+                <div className="mb-4 flex items-center gap-3 rounded-lg border border-white/8 bg-card px-4 py-3">
+                  <CheckCircle2 className="h-4 w-4 text-green-400" />
+                  <span className="text-sm">
+                    <span className="font-medium text-[#F5F4F0]">{rows.length}</span> of {rawRows.length} rows ready
+                  </span>
+                  {invalidCount > 0 && <span className="ml-auto text-xs text-amber-400">{invalidCount} skipped</span>}
+                </div>
+
+                {errors.length > 0 && (
+                  <div className="mb-4 rounded-lg border border-red-500/20 bg-red-500/5 p-4">
+                    <p className="text-sm font-medium text-red-400">{errors.length} validation error{errors.length > 1 ? "s" : ""}</p>
+                    <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto pr-2">
+                      {visibleErrors.map((err, i) => <li key={i} className="text-xs text-red-400">{err}</li>)}
+                    </ul>
+                    {errors.length > 5 && (
+                      <button onClick={() => setShowAllErrors((v) => !v)} className="mt-2 text-xs text-accent hover:underline">
+                        {showAllErrors ? "Show less" : `Show all ${errors.length} errors`}
+                      </button>
+                    )}
+                    {allRowsFailed && (
+                      <p className="mt-3 border-t border-red-500/20 pt-3 text-xs text-red-300">
+                        All rows failed. Check column mapping and Condition values.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                <div className="rounded-xl border border-white/8">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Title</TableHead>
+                        <TableHead>Artist</TableHead>
+                        <TableHead>Genre</TableHead>
+                        <TableHead>Condition</TableHead>
+                        <TableHead>Catalog #</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {rows.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                            No valid rows yet.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        rows.slice(0, 10).map((row, i) => (
+                          <TableRow key={i}>
+                            <TableCell>{row.title}</TableCell>
+                            <TableCell>{row.artist}</TableCell>
+                            <TableCell>{row.genre ?? "—"}</TableCell>
+                            <TableCell>{row.condition}</TableCell>
+                            <TableCell>{row.catalog_number ?? "—"}</TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+                {rows.length > 0 && <p className="mt-2 text-sm text-muted-foreground">Showing {Math.min(rows.length, 10)} of {rows.length} valid rows</p>}
+
+                <div className="mt-6 flex justify-between">
+                  <Button variant="outline" onClick={() => setStep(0)}>Back</Button>
+                  <Button onClick={handleContinue} disabled={rows.length === 0}>Import {rows.length} Album{rows.length === 1 ? "" : "s"}</Button>
+                </div>
+              </>
+            )}
+
+            {step === 2 && (
+              <div className="text-center animate-fade-in">
+                {importing ? (
+                  <>
+                    <div className="flex justify-center"><VinylSpinner size="xl" /></div>
+                    <p className="mt-6 text-lg font-medium">Importing albums...</p>
+                    <Progress value={progress} className="mt-4" />
+                  </>
+                ) : (
+                  <div className="animate-fade-in-up">
+                    <p className="font-display text-2xl font-bold">Successfully imported {importedCount} albums</p>
+                    <div className="mt-6 flex justify-center gap-3">
+                      <Button asChild><Link href="/albums">Go to Catalogue</Link></Button>
+                      <Button variant="outline" onClick={() => router.push("/albums?action=price-all")}>Price All Now</Button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
-        )}
-      </div>
+        </>
+      )}
+
+      {/* ── JSON / Box Files mode ─────────────────────────────────────────── */}
+      {mode === "json" && (
+        <div className="mx-auto mt-8 max-w-3xl">
+          {!jsonResult ? (
+            <>
+              <p className="text-sm text-muted-foreground mb-6">
+                Drop your <strong className="text-[#F5F4F0]">BOX_*_priced.json</strong> files here. Each file is
+                imported as-is — pricing, condition, and notes are mapped automatically. Multiple files can be
+                imported in one shot.
+              </p>
+
+              {/* Drop zone */}
+              <label
+                className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-white/10 bg-card px-6 py-10 text-center transition-colors hover:border-accent/40"
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => { e.preventDefault(); handleJsonFiles(e.dataTransfer.files); }}
+              >
+                <FileJson className="h-10 w-10 text-muted-foreground mb-3" />
+                <p className="text-sm font-medium">Drop JSON box files here</p>
+                <p className="mt-1 text-xs text-muted-foreground">or click to select multiple files</p>
+                <input
+                  ref={jsonInputRef}
+                  type="file"
+                  accept=".json"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => handleJsonFiles(e.target.files)}
+                />
+              </label>
+
+              {/* File list */}
+              {boxFiles.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  {boxFiles.map((f) => (
+                    <div
+                      key={f.name}
+                      className={`flex items-center justify-between rounded-lg border px-4 py-3 ${
+                        f.error ? "border-red-500/20 bg-red-500/5" : "border-white/8 bg-card"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <FileJson className={`h-4 w-4 shrink-0 ${f.error ? "text-red-400" : "text-accent"}`} />
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">{f.name}</p>
+                          {f.error ? (
+                            <p className="text-xs text-red-400">{f.error}</p>
+                          ) : (
+                            <p className="text-xs text-muted-foreground">
+                              {f.records.length} record{f.records.length !== 1 ? "s" : ""}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => removeBoxFile(f.name)}
+                        className="ml-4 text-muted-foreground hover:text-red-400 transition-colors"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+
+                  {totalJsonRecords > 0 && (
+                    <div className="rounded-lg border border-white/8 bg-card px-4 py-3 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="h-4 w-4 text-green-400" />
+                        <span className="text-sm">
+                          <span className="font-medium text-[#F5F4F0]">{totalJsonRecords}</span> albums across{" "}
+                          {boxFiles.filter((f) => !f.error).length} file{boxFiles.filter((f) => !f.error).length !== 1 ? "s" : ""}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">Pricing pre-loaded · No fetch needed</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Preview table */}
+              {totalJsonRecords > 0 && (
+                <div className="mt-4 rounded-xl border border-white/8 overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Title</TableHead>
+                        <TableHead>Artist</TableHead>
+                        <TableHead>Genre</TableHead>
+                        <TableHead>Condition</TableHead>
+                        <TableHead className="text-right">Est. Price</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {boxFiles
+                        .filter((f) => !f.error)
+                        .flatMap((f) => f.records as Array<Record<string, unknown>>)
+                        .slice(0, 8)
+                        .map((r, i) => (
+                          <TableRow key={i}>
+                            <TableCell className="max-w-[180px] truncate">{String(r.title ?? "—")}</TableCell>
+                            <TableCell className="max-w-[140px] truncate">{String(r.artist ?? "—")}</TableCell>
+                            <TableCell>{String(r.genre ?? "—")}</TableCell>
+                            <TableCell>{String(r.condition ?? "—")}</TableCell>
+                            <TableCell className="text-right text-accent tabular-nums">
+                              {r.price_low && r.price_high
+                                ? `$${Math.round(((Number(r.price_low) + Number(r.price_high)) / 2) * 100) / 100}`
+                                : "—"}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                    </TableBody>
+                  </Table>
+                  {totalJsonRecords > 8 && (
+                    <p className="px-4 py-2 text-xs text-muted-foreground border-t border-white/8">
+                      Showing 8 of {totalJsonRecords} records
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {jsonImporting && <Progress value={jsonProgress} className="mt-4" />}
+
+              <div className="mt-6 flex justify-end">
+                <Button
+                  onClick={handleJsonImport}
+                  disabled={jsonImporting || totalJsonRecords === 0}
+                >
+                  {jsonImporting ? (
+                    <><VinylSpinner size="xs" /> Importing...</>
+                  ) : (
+                    <><Upload className="h-4 w-4" /> Import {totalJsonRecords} Albums</>
+                  )}
+                </Button>
+              </div>
+            </>
+          ) : (
+            <div className="text-center animate-fade-in-up">
+              <p className="font-display text-2xl font-bold">
+                Successfully imported {jsonResult.count} albums
+              </p>
+              {jsonResult.skipped > 0 && (
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {jsonResult.skipped} blank/invalid records skipped
+                </p>
+              )}
+              <p className="mt-2 text-sm text-muted-foreground">
+                Pricing from the box analysis is pre-loaded — no fetch required.
+              </p>
+              <div className="mt-6 flex justify-center gap-3">
+                <Button asChild><Link href="/albums">View Catalogue</Link></Button>
+                <Button variant="outline" onClick={() => { setBoxFiles([]); setJsonResult(null); }}>
+                  Import More
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
