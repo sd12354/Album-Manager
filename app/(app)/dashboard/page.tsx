@@ -89,6 +89,23 @@ export default async function DashboardPage() {
     0
   );
 
+  // Collection value = sum of best available price for every non-sold album.
+  // Priority: list_price → suggested_price. Albums with neither are counted
+  // separately so the user knows how many still need pricing.
+  const unsoldAlbums = allAlbums.filter((a) => a.status !== "sold");
+  let collectionValue = 0;
+  let pricedCount = 0;
+  let unpricedCount = 0;
+  for (const a of unsoldAlbums) {
+    const price = a.list_price ?? a.suggested_price;
+    if (price != null && price > 0) {
+      collectionValue += price;
+      pricedCount++;
+    } else {
+      unpricedCount++;
+    }
+  }
+
   const recentActivity = allAlbums.slice(0, 10);
   const monthlySales = buildMonthlySales(allAlbums);
 
@@ -135,6 +152,52 @@ export default async function DashboardPage() {
             </CardContent>
           </Card>
         ))}
+      </div>
+
+      {/* Collection value */}
+      <div className="mt-4 animate-fade-in-up stagger-5">
+        <Card className="transition-colors hover:border-white/[0.12]">
+          <CardContent className="p-6">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Total Collection Value</p>
+                <p className="mt-1 font-display text-4xl font-bold text-accent tabular-nums">
+                  {formatCurrency(collectionValue)}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Based on {pricedCount} priced album{pricedCount !== 1 ? "s" : ""} in your unsold inventory
+                  {unpricedCount > 0 && (
+                    <> · <span className="text-amber-400">{unpricedCount} still need{unpricedCount === 1 ? "s" : ""} pricing</span></>
+                  )}
+                </p>
+              </div>
+              <div className="flex shrink-0 flex-col gap-1.5 text-right">
+                <div className="flex items-center justify-end gap-2 text-sm">
+                  <span className="h-2 w-2 rounded-full bg-accent" />
+                  <span className="text-muted-foreground">Unlisted</span>
+                  <span className="font-medium tabular-nums">
+                    {formatCurrency(
+                      unsoldAlbums
+                        .filter((a) => a.status !== "listed")
+                        .reduce((s, a) => s + (a.list_price ?? a.suggested_price ?? 0), 0)
+                    )}
+                  </span>
+                </div>
+                <div className="flex items-center justify-end gap-2 text-sm">
+                  <span className="h-2 w-2 rounded-full bg-green-400" />
+                  <span className="text-muted-foreground">Listed</span>
+                  <span className="font-medium tabular-nums">
+                    {formatCurrency(
+                      unsoldAlbums
+                        .filter((a) => a.status === "listed")
+                        .reduce((s, a) => s + (a.list_price ?? a.suggested_price ?? 0), 0)
+                    )}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="mt-8">
