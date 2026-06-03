@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff } from "lucide-react";
 import { VinylLogo } from "@/components/vinyl-logo";
 import { VinylSpinner } from "@/components/vinyl-spinner";
 import { Button } from "@/components/ui/button";
@@ -40,7 +40,15 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="w-full max-w-md rounded-xl border border-white/8 bg-card p-8 animate-fade-in-up">
+    <div className="w-full max-w-md animate-fade-in-up">
+      <Link
+        href="/"
+        className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" />
+        Back to home
+      </Link>
+      <div className="rounded-xl border border-white/8 bg-card p-8">
       <div className="mb-8 flex flex-col items-center text-center">
         <VinylLogo size="lg" className="mb-3" />
         <p className="text-sm text-muted-foreground">
@@ -120,6 +128,7 @@ export default function LoginPage() {
           Forgot password?
         </Link>
       </p>
+    </div>
     </div>
   );
 }

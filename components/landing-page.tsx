@@ -16,7 +16,7 @@ import {
 /* ─────────────────────────────────────────────────────────────────────────────
    Marketing nav
 ───────────────────────────────────────────────────────────────────────────── */
-function MarketingNav({ active }: { active: "home" | "about" | "policy" }) {
+function MarketingNav({ active, isLoggedIn }: { active: "home" | "about" | "policy"; isLoggedIn?: boolean }) {
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-4 md:px-12">
       {/* Glass bg */}
@@ -54,10 +54,10 @@ function MarketingNav({ active }: { active: "home" | "about" | "policy" }) {
           </Link>
         ))}
         <Link
-          href="/login"
+          href={isLoggedIn ? "/dashboard" : "/login"}
           className="ml-1 rounded-full bg-accent px-4 py-1.5 text-sm font-semibold text-black transition-opacity hover:opacity-90"
         >
-          Login
+          {isLoggedIn ? "Go to Dashboard" : "Login"}
         </Link>
       </div>
     </nav>
@@ -263,7 +263,7 @@ const features = [
 /* ─────────────────────────────────────────────────────────────────────────────
    Main LandingPage component
 ───────────────────────────────────────────────────────────────────────────── */
-export function LandingPage() {
+export function LandingPage({ isLoggedIn = false }: { isLoggedIn?: boolean }) {
   const [activeTab, setActiveTab] = useState<"dashboard" | "catalogue">("dashboard");
 
   return (
@@ -298,7 +298,7 @@ export function LandingPage() {
       `}</style>
 
       <AnimatedBackground />
-      <MarketingNav active="home" />
+      <MarketingNav active="home" isLoggedIn={isLoggedIn} />
 
       {/* ── Hero ──────────────────────────────────────────────────────────── */}
       <section className="relative flex flex-col items-center justify-center px-6 pb-24 pt-40 text-center md:pt-48">
