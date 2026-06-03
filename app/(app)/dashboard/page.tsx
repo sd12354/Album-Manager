@@ -1,10 +1,12 @@
 import Link from "next/link";
-import { Upload, Plus, DollarSign, TrendingUp } from "lucide-react";
+import { Upload, Plus, DollarSign } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { SalesChart, type SalesPoint } from "@/components/sales-chart";
-import { formatCurrency, formatRelativeTime, getActivityDescription } from "@/lib/utils";
+import { AnimatedStats } from "@/components/animated-stats";
+import { AnimatedCollectionValue } from "@/components/animated-collection-value";
+import { formatRelativeTime, getActivityDescription } from "@/lib/utils";
 import type { Album } from "@/types";
 
 function getStartOfMonth(): string {
@@ -109,95 +111,36 @@ export default async function DashboardPage() {
   const recentActivity = allAlbums.slice(0, 10);
   const monthlySales = buildMonthlySales(allAlbums);
 
-  const stats = [
-    { label: "Total Albums", value: totalAlbums.toString(), trend: null },
-    {
-      label: "Listed",
-      value: listedCount.toString(),
-      trend: listedCount > 0 ? "+12%" : null,
-    },
-    {
-      label: "Sold This Month",
-      value: soldThisMonth.length.toString(),
-      trend: soldThisMonth.length > 0 ? "+8%" : null,
-    },
-    {
-      label: "Revenue This Month",
-      value: formatCurrency(revenueThisMonth),
-      trend: revenueThisMonth > 0 ? "+15%" : null,
-    },
-  ];
+  const unlistedValue = unsoldAlbums
+    .filter((a) => a.status !== "listed")
+    .reduce((s, a) => s + (a.list_price ?? a.suggested_price ?? 0), 0);
+  const listedValue = unsoldAlbums
+    .filter((a) => a.status === "listed")
+    .reduce((s, a) => s + (a.list_price ?? a.suggested_price ?? 0), 0);
 
   return (
     <div className="animate-fade-in">
       <h1 className="font-display text-3xl font-bold">Dashboard</h1>
 
-      <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {stats.map((stat, i) => (
-          <Card
-            key={stat.label}
-            className={`animate-fade-in-up stagger-${i + 1} transition-colors hover:border-white/[0.12]`}
-          >
-            <CardContent className="p-6">
-              <p className="text-sm text-muted-foreground">{stat.label}</p>
-              <div className="mt-2 flex items-end justify-between">
-                <p className="font-display text-3xl font-bold tabular-nums">{stat.value}</p>
-                {stat.trend && (
-                  <span className="flex items-center gap-1 text-xs text-green-400">
-                    <TrendingUp className="h-3 w-3" />
-                    {stat.trend}
-                  </span>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+      {/* Animated stat cards */}
+      <div className="mt-8">
+        <AnimatedStats
+          totalAlbums={totalAlbums}
+          listedCount={listedCount}
+          soldThisMonth={soldThisMonth.length}
+          revenueThisMonth={revenueThisMonth}
+        />
       </div>
 
-      {/* Collection value */}
-      <div className="mt-4 animate-fade-in-up stagger-5">
-        <Card className="transition-colors hover:border-white/[0.12]">
-          <CardContent className="p-6">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Total Collection Value</p>
-                <p className="mt-1 font-display text-4xl font-bold text-accent tabular-nums">
-                  {formatCurrency(collectionValue)}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Based on {pricedCount} priced album{pricedCount !== 1 ? "s" : ""} in your unsold inventory
-                  {unpricedCount > 0 && (
-                    <> · <span className="text-amber-400">{unpricedCount} still need{unpricedCount === 1 ? "s" : ""} pricing</span></>
-                  )}
-                </p>
-              </div>
-              <div className="flex shrink-0 flex-col gap-1.5 text-right">
-                <div className="flex items-center justify-end gap-2 text-sm">
-                  <span className="h-2 w-2 rounded-full bg-accent" />
-                  <span className="text-muted-foreground">Unlisted</span>
-                  <span className="font-medium tabular-nums">
-                    {formatCurrency(
-                      unsoldAlbums
-                        .filter((a) => a.status !== "listed")
-                        .reduce((s, a) => s + (a.list_price ?? a.suggested_price ?? 0), 0)
-                    )}
-                  </span>
-                </div>
-                <div className="flex items-center justify-end gap-2 text-sm">
-                  <span className="h-2 w-2 rounded-full bg-green-400" />
-                  <span className="text-muted-foreground">Listed</span>
-                  <span className="font-medium tabular-nums">
-                    {formatCurrency(
-                      unsoldAlbums
-                        .filter((a) => a.status === "listed")
-                        .reduce((s, a) => s + (a.list_price ?? a.suggested_price ?? 0), 0)
-                    )}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Animated collection value */}
+      <div className="mt-4">
+        <AnimatedCollectionValue
+          collectionValue={collectionValue}
+          pricedCount={pricedCount}
+          unpricedCount={unpricedCount}
+          unlistedValue={unlistedValue}
+          listedValue={listedValue}
+        />
       </div>
 
       <div className="mt-8">
@@ -248,7 +191,7 @@ export default async function DashboardPage() {
                   <Link
                     key={album.id}
                     href={`/albums/${album.id}`}
-                    className={`group flex items-center justify-between gap-4 px-6 py-4 transition-colors hover:bg-white/[0.03] focus-visible:bg-white/[0.04] focus-visible:outline-none animate-fade-in-up stagger-${Math.min(i + 1, 5)}`}
+                    className={`group flex items-center justify-between gap-4 px-6 py-4 transition-colors hover:bg-muted/30 focus-visible:bg-muted/30 focus-visible:outline-none animate-fade-in-up stagger-${Math.min(i + 1, 5)}`}
                   >
                     <div className="min-w-0">
                       <p className="truncate font-medium transition-colors group-hover:text-accent">

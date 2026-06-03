@@ -23,7 +23,7 @@ export default function AlbumDetailLoading() {
               ))}
             </div>
           </div>
-          <div className="rounded-xl border border-white/8 p-6 space-y-4">
+          <div className="rounded-xl border border-border p-6 space-y-4">
             {[0, 1, 2, 3, 4].map((i) => (
               <div key={i} className="space-y-2">
                 <Skeleton className="h-3 w-20" />
@@ -38,7 +38,7 @@ export default function AlbumDetailLoading() {
             {[0, 1].map((i) => (
               <div
                 key={i}
-                className="rounded-xl border border-white/8 p-6 space-y-3"
+                className="rounded-xl border border-border p-6 space-y-3"
               >
                 <Skeleton className="h-5 w-20" />
                 <Skeleton className="h-4 w-full" />
@@ -47,7 +47,7 @@ export default function AlbumDetailLoading() {
               </div>
             ))}
           </div>
-          <div className="rounded-xl border border-white/8 p-6 space-y-4">
+          <div className="rounded-xl border border-border p-6 space-y-4">
             <Skeleton className="h-3 w-32" />
             <Skeleton className="h-10 w-40" />
             <Skeleton className="h-10 w-full" />

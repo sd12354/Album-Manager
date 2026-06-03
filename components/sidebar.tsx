@@ -67,7 +67,7 @@ export function Sidebar({
           onClick={onToggle}
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-white/[0.06] hover:text-[#F5F4F0]"
+          className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
         >
           {collapsed ? (
             <PanelLeft className="h-4 w-4" />
@@ -93,8 +93,8 @@ export function Sidebar({
                   ? "h-10 w-10 justify-center mx-auto"
                   : "gap-3 px-3 py-2.5",
                 isActive
-                  ? "bg-white/[0.06] text-[#F5F4F0]"
-                  : "text-muted-foreground hover:bg-white/[0.03] hover:text-[#F5F4F0]"
+                  ? "bg-muted/40 text-foreground"
+                  : "text-muted-foreground hover:bg-muted/30 hover:text-foreground"
               )}
             >
               {isActive && !collapsed && (
@@ -114,7 +114,7 @@ export function Sidebar({
           onClick={onHelpClick}
           title="Help & Guide"
           className={cn(
-            "flex w-full items-center rounded-lg text-sm font-medium text-muted-foreground transition-colors hover:bg-white/[0.03] hover:text-foreground",
+            "flex w-full items-center rounded-lg text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground",
             collapsed ? "h-10 w-10 justify-center mx-auto" : "gap-3 px-3 py-2.5"
           )}
         >
@@ -142,7 +142,7 @@ export function Sidebar({
               onClick={handleLogout}
               aria-label="Log out"
               title="Log out"
-              className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-white/[0.06] hover:text-[#F5F4F0]"
+              className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
             >
               <LogOut className="h-4 w-4" />
             </button>
@@ -167,7 +167,7 @@ export function Sidebar({
             )}
             <button
               onClick={handleLogout}
-              className="flex items-center gap-2 text-xs text-muted-foreground transition-colors hover:text-[#F5F4F0]"
+              className="flex items-center gap-2 text-xs text-muted-foreground transition-colors hover:text-foreground"
             >
               <LogOut className="h-3 w-3" />
               Log out

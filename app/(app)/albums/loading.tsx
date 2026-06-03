@@ -17,14 +17,14 @@ export default function AlbumsLoading() {
         <Skeleton className="h-10 w-32" />
       </div>
 
-      <div className="mt-6 rounded-xl border border-white/8 overflow-hidden">
-        <div className="border-b border-white/8 p-4">
+      <div className="mt-6 rounded-xl border border-border overflow-hidden">
+        <div className="border-b border-border p-4">
           <Skeleton className="h-4 w-full" />
         </div>
         {[0, 1, 2, 3, 4, 5].map((i) => (
           <div
             key={i}
-            className={`flex items-center gap-4 border-b border-white/8 p-4 last:border-0 animate-fade-in-up stagger-${Math.min(i + 1, 5)}`}
+            className={`flex items-center gap-4 border-b border-border p-4 last:border-0 animate-fade-in-up stagger-${Math.min(i + 1, 5)}`}
           >
             <Skeleton className="h-4 w-4" />
             <div className="flex-1 space-y-2">

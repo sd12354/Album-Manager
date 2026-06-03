@@ -426,7 +426,7 @@ export function AlbumDetailClient({
     <div className="animate-fade-in">
       <Link
         href="/albums"
-        className="mb-6 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-[#F5F4F0]"
+        className="mb-6 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" />
         Back to Catalogue
@@ -448,12 +448,12 @@ export function AlbumDetailClient({
               {(album.photo_urls ?? []).map((url, i) => (
                 <div
                   key={i}
-                  className="aspect-square rounded-lg border border-white/8 bg-[#1A1A1C] bg-cover bg-center"
+                  className="aspect-square rounded-lg border border-border bg-input bg-cover bg-center"
                   style={{ backgroundImage: `url(${url})` }}
                 />
               ))}
               {(album.photo_urls ?? []).length < EBAY_MAX_PHOTOS && (
-                <label className="flex aspect-square cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-white/10 transition-colors hover:border-accent/50">
+                <label className="flex aspect-square cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-border transition-colors hover:border-accent/50">
                   {uploading ? (
                     <VinylSpinner size="md" />
                   ) : (
@@ -480,7 +480,7 @@ export function AlbumDetailClient({
             </p>
           </div>
 
-          <div className="space-y-4 rounded-xl border border-white/8 p-6">
+          <div className="space-y-4 rounded-xl border border-border p-6">
             <div className="space-y-2">
               <Label>Title</Label>
               <Input
@@ -593,7 +593,7 @@ export function AlbumDetailClient({
           {pricing && <PricingCard pricing={pricing} />}
 
           {/* Action panel */}
-          <div className="rounded-xl border border-white/8 bg-card animate-fade-in-up stagger-2 overflow-hidden">
+          <div className="rounded-xl border border-border bg-card animate-fade-in-up stagger-2 overflow-hidden">
             {/* Suggested price */}
             <div className="flex items-start justify-between px-5 pt-5 pb-4">
               <div>
@@ -610,7 +610,7 @@ export function AlbumDetailClient({
               <ConditionBadge condition={album.condition} />
             </div>
 
-            <div className="border-t border-white/8" />
+            <div className="border-t border-border" />
 
             {/* Price input + refresh */}
             <div className="px-5 pt-4 pb-4 space-y-3">
@@ -643,7 +643,7 @@ export function AlbumDetailClient({
 
             {/* Platform listing buttons */}
             {album.status !== "sold" && (
-              <div className="border-t border-white/8 px-5 py-4 space-y-2">
+              <div className="border-t border-border px-5 py-4 space-y-2">
                 <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-3">
                   List on
                 </p>
@@ -716,7 +716,7 @@ export function AlbumDetailClient({
                 {(album.ebay_listing_id || album.discogs_listing_id) && (
                   <Button
                     variant="ghost"
-                    className="mt-1 w-full text-muted-foreground hover:text-[#F5F4F0]"
+                    className="mt-1 w-full text-muted-foreground hover:text-foreground"
                     onClick={handleSyncSales}
                     disabled={syncing}
                   >
@@ -761,7 +761,7 @@ export function AlbumDetailClient({
 
           {/* Sold card */}
           {album.status === "sold" && (
-            <div className="rounded-xl border border-white/8 bg-card overflow-hidden animate-fade-in-up">
+            <div className="rounded-xl border border-border bg-card overflow-hidden animate-fade-in-up">
               {/* Sale summary */}
               <div className="p-5">
                 <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -794,7 +794,7 @@ export function AlbumDetailClient({
               </div>
 
               {/* Shipping / label section */}
-              <div className="border-t border-white/8 p-5">
+              <div className="border-t border-border p-5">
                 <div className="flex items-center gap-2 mb-3">
                   <Package className="h-4 w-4 text-muted-foreground" />
                   <p className="text-sm font-medium">Shipping</p>
@@ -811,9 +811,9 @@ export function AlbumDetailClient({
                       <span className="font-mono text-xs">{album.tracking_number}</span>
                     </div>
                     {album.buyer_address_raw && (
-                      <div className="mt-2 rounded-lg border border-white/8 bg-white/[0.02] p-3">
+                      <div className="mt-2 rounded-lg border border-border bg-muted/10 p-3">
                         <p className="text-xs text-muted-foreground mb-1">Ship to</p>
-                        <pre className="text-xs font-sans whitespace-pre-wrap text-[#F5F4F0]">
+                        <pre className="text-xs font-sans whitespace-pre-wrap text-foreground">
                           {album.buyer_address_raw}
                         </pre>
                       </div>
@@ -835,9 +835,9 @@ export function AlbumDetailClient({
                 ) : (
                   <div className="space-y-3">
                     {album.buyer_address_raw && (
-                      <div className="rounded-lg border border-white/8 bg-white/[0.02] p-3">
+                      <div className="rounded-lg border border-border bg-muted/10 p-3">
                         <p className="text-xs text-muted-foreground mb-1">Buyer address</p>
-                        <pre className="text-xs font-sans whitespace-pre-wrap text-[#F5F4F0]">
+                        <pre className="text-xs font-sans whitespace-pre-wrap text-foreground">
                           {album.buyer_address_raw}
                         </pre>
                       </div>
@@ -869,7 +869,7 @@ export function AlbumDetailClient({
           {/* Delete album */}
           <div className="flex items-center justify-end gap-3 pt-2">
             {confirmDelete && (
-              <button onClick={() => setConfirmDelete(false)} className="text-xs text-muted-foreground hover:text-[#F5F4F0]">
+              <button onClick={() => setConfirmDelete(false)} className="text-xs text-muted-foreground hover:text-foreground">
                 Cancel
               </button>
             )}

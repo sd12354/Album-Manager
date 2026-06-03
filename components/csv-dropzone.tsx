@@ -36,7 +36,7 @@ export function CSVDropzone({
     <div
       {...getRootProps()}
       className={cn(
-        "flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-accent/50 bg-card px-8 py-16 transition-colors hover:border-accent hover:bg-white/[0.02]",
+        "flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-accent/50 bg-card px-8 py-16 transition-colors hover:border-accent hover:bg-muted/10",
         isDragActive && "border-accent bg-accent/5",
         className
       )}
@@ -45,7 +45,7 @@ export function CSVDropzone({
       <Upload className="mb-4 h-10 w-10 text-accent" />
       {selectedFile ? (
         <>
-          <p className="text-lg font-semibold text-[#F5F4F0]">
+          <p className="text-lg font-semibold text-foreground">
             {selectedFile.name}
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -57,7 +57,7 @@ export function CSVDropzone({
         </>
       ) : (
         <>
-          <p className="text-lg font-semibold text-[#F5F4F0]">
+          <p className="text-lg font-semibold text-foreground">
             Drop your CSV here
           </p>
           <p className="mt-1 text-sm text-muted-foreground">

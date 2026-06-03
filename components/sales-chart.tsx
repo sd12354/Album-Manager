@@ -40,7 +40,7 @@ function ChartTooltip({ active, payload }: ChartTooltipProps) {
   if (!active || !payload || payload.length === 0) return null;
   const point = payload[0].payload;
   return (
-    <div className="rounded-lg border border-white/10 bg-card/95 px-3 py-2 text-xs shadow-xl backdrop-blur">
+    <div className="rounded-lg border border-border bg-card/95 px-3 py-2 text-xs shadow-xl backdrop-blur">
       <p className="font-medium text-foreground">{point.label}</p>
       <p className="mt-1 tabular-nums text-accent">
         {formatCurrency(point.revenue)}
@@ -131,7 +131,7 @@ export function SalesChart({ data }: SalesChartProps) {
             </ResponsiveContainer>
           </div>
         ) : (
-          <div className="flex h-64 flex-col items-center justify-center rounded-lg border border-dashed border-white/8 text-center">
+          <div className="flex h-64 flex-col items-center justify-center rounded-lg border border-dashed border-border text-center">
             <p className="text-sm font-medium text-foreground">
               No sales yet
             </p>

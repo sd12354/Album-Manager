@@ -398,7 +398,7 @@ export function CatalogueClient({ albums }: CatalogueClientProps) {
           {confirmDelete && (
             <button
               onClick={() => setConfirmDelete(false)}
-              className="text-xs text-muted-foreground hover:text-[#F5F4F0]"
+              className="text-xs text-muted-foreground hover:text-foreground"
             >
               Cancel
             </button>
@@ -406,7 +406,7 @@ export function CatalogueClient({ albums }: CatalogueClientProps) {
         </div>
       )}
 
-      <div className="mt-6 rounded-xl border border-white/8">
+      <div className="mt-6 rounded-xl border border-border">
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (

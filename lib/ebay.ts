@@ -221,8 +221,13 @@ export async function createEbayListing(
     .map((u) => `<PictureURL>${escapeXml(getOriginalPublicUrl(u))}</PictureURL>`)
     .join("");
 
+  // eBay music categories require Artist as a mandatory item specific.
+  // Without it the API returns "The item specific Artist is missing."
   const itemSpecificsXml = [
+    `<NameValueList><Name>Artist</Name><Value>${escapeXml(album.artist)}</Value></NameValueList>`,
+    `<NameValueList><Name>Album Title</Name><Value>${escapeXml(album.title)}</Value></NameValueList>`,
     "<NameValueList><Name>Format</Name><Value>Vinyl</Value></NameValueList>",
+    "<NameValueList><Name>Type</Name><Value>LP</Value></NameValueList>",
     album.genre
       ? `<NameValueList><Name>Genre</Name><Value>${escapeXml(album.genre)}</Value></NameValueList>`
       : "",

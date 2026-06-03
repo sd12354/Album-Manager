@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils";
 import type { AlbumStatus } from "@/types";
 
 const statusStyles: Record<AlbumStatus, string> = {
-  unlisted: "bg-[#1A1A1C] text-muted-foreground border-white/10",
+  unlisted: "bg-input text-muted-foreground border-border",
   pricing: "bg-amber-500/10 text-amber-400 border-amber-500/20",
   listed: "bg-green-500/10 text-green-400 border-green-500/20",
   sold: "bg-slate-500/10 text-slate-300 border-slate-500/20",

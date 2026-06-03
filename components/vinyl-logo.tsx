@@ -26,7 +26,7 @@ export function VinylLogo({
       {showText && (
         <span
           className={cn(
-            "font-display font-bold tracking-tight text-[#F5F4F0]",
+            "font-display font-bold tracking-tight text-foreground",
             textSize
           )}
         >

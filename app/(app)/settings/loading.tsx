@@ -8,7 +8,7 @@ export default function SettingsLoading() {
         {[0, 1, 2, 3].map((i) => (
           <div
             key={i}
-            className={`rounded-xl border border-white/8 bg-card p-6 animate-fade-in-up stagger-${i + 1}`}
+            className={`rounded-xl border border-border bg-card p-6 animate-fade-in-up stagger-${i + 1}`}
           >
             <Skeleton className="h-6 w-40" />
           </div>

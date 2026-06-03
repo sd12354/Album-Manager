@@ -167,8 +167,8 @@ export function SettingsClient({
               onStatusChange={setEbayConnected}
             />
 
-            <div className="rounded-lg border border-white/8 bg-white/[0.02] p-3 text-xs text-muted-foreground">
-              <p className="font-medium text-[#F5F4F0]">
+            <div className="rounded-lg border border-border bg-muted/10 p-3 text-xs text-muted-foreground">
+              <p className="font-medium text-foreground">
                 About eBay integration
               </p>
               <p className="mt-1.5 leading-relaxed">
@@ -425,7 +425,7 @@ export function SettingsClient({
             </div>
 
             {/* Seller / ship-from address */}
-            <div className="space-y-3 rounded-xl border border-white/8 p-4">
+            <div className="space-y-3 rounded-xl border border-border p-4">
               <p className="text-sm font-medium">Ship-from address</p>
               <div className="space-y-2">
                 <Label>Your Name / Business</Label>

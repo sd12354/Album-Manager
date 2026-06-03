@@ -33,7 +33,7 @@ function Row({
     <div className="flex items-center justify-between gap-4">
       <span className="text-sm text-muted-foreground">{label}</span>
       <span
-        className={`tabular-nums ${highlight ? "font-semibold text-[#F5F4F0]" : "font-medium"}`}
+        className={`tabular-nums ${highlight ? "font-semibold text-foreground" : "font-medium"}`}
       >
         {value}
       </span>
@@ -63,7 +63,7 @@ export function PricingCard({ pricing }: PricingCardProps) {
   const usingEbayForSuggestion = pricing.suggestionSource === "ebay-active";
 
   return (
-    <div className="rounded-xl border border-white/8 bg-card overflow-hidden">
+    <div className="rounded-xl border border-border bg-card overflow-hidden">
       {/* ── Discogs section ──────────────────────────────────── */}
       <div className="p-5">
         <div className="mb-4 flex items-center justify-between">
@@ -94,7 +94,7 @@ export function PricingCard({ pricing }: PricingCardProps) {
 
         {!hasDiscogs ? (
           <p className="text-sm text-muted-foreground">
-            No Discogs match — click <strong className="text-[#F5F4F0]">Fetch Latest Prices</strong> to search.
+            No Discogs match — click <strong className="text-foreground">Fetch Latest Prices</strong> to search.
           </p>
         ) : (
           <div className="space-y-2.5">
@@ -127,10 +127,10 @@ export function PricingCard({ pricing }: PricingCardProps) {
 
             {orderedGrades.length > 0 && (
               <details className="group pt-1">
-                <summary className="cursor-pointer text-xs text-muted-foreground hover:text-[#F5F4F0] transition-colors select-none">
+                <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground transition-colors select-none">
                   All grade prices ({orderedGrades.length})
                 </summary>
-                <div className="mt-2 space-y-1.5 rounded-lg border border-white/8 bg-white/[0.02] p-3">
+                <div className="mt-2 space-y-1.5 rounded-lg border border-border bg-muted/10 p-3">
                   {orderedGrades.map((grade) => (
                     <div key={grade} className="flex justify-between text-xs">
                       <span className="text-muted-foreground">{grade}</span>
@@ -149,7 +149,7 @@ export function PricingCard({ pricing }: PricingCardProps) {
       {/* ── eBay section ─────────────────────────────────────── */}
       {(hasEbay || !hasDiscogs) && (
         <>
-          <div className="border-t border-white/8" />
+          <div className="border-t border-border" />
           <div className="p-5">
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -193,10 +193,10 @@ export function PricingCard({ pricing }: PricingCardProps) {
 
                 {pricing.ebaySampleListings && pricing.ebaySampleListings.length > 0 && (
                   <details className="group pt-1">
-                    <summary className="cursor-pointer text-xs text-muted-foreground hover:text-[#F5F4F0] transition-colors select-none">
+                    <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground transition-colors select-none">
                       Sample comparables ({pricing.ebaySampleListings.length})
                     </summary>
-                    <div className="mt-2 space-y-1.5 rounded-lg border border-white/8 bg-white/[0.02] p-3">
+                    <div className="mt-2 space-y-1.5 rounded-lg border border-border bg-muted/10 p-3">
                       {pricing.ebaySampleListings.map((item, i) => (
                         <a
                           key={i}

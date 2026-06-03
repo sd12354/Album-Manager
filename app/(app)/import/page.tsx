@@ -210,13 +210,13 @@ export default function ImportPage() {
       <h1 className="font-display text-3xl font-bold">Import</h1>
 
       {/* Mode tabs */}
-      <div className="mt-6 flex gap-1 rounded-xl border border-white/8 bg-card p-1 w-fit">
+      <div className="mt-6 flex gap-1 rounded-xl border border-border bg-card p-1 w-fit">
         <button
           onClick={() => setMode("csv")}
           className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
             mode === "csv"
               ? "bg-accent text-black"
-              : "text-muted-foreground hover:text-[#F5F4F0]"
+              : "text-muted-foreground hover:text-foreground"
           }`}
         >
           CSV File
@@ -226,7 +226,7 @@ export default function ImportPage() {
           className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
             mode === "json"
               ? "bg-accent text-black"
-              : "text-muted-foreground hover:text-[#F5F4F0]"
+              : "text-muted-foreground hover:text-foreground"
           }`}
         >
           <FileJson className="h-4 w-4" />
@@ -243,7 +243,7 @@ export default function ImportPage() {
                 <div className="flex flex-col items-center">
                   <div
                     className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium transition-all duration-300 ${
-                      i <= step ? "bg-accent text-black scale-110" : "bg-[#1A1A1C] text-muted-foreground"
+                      i <= step ? "bg-accent text-black scale-110" : "bg-input text-muted-foreground"
                     }`}
                   >
                     {i + 1}
@@ -251,7 +251,7 @@ export default function ImportPage() {
                   <span className="mt-1 text-xs text-muted-foreground">{label}</span>
                 </div>
                 {i < STEPS.length - 1 && (
-                  <div className={`mx-4 h-0.5 w-16 transition-colors duration-500 ${i < step ? "bg-accent" : "bg-[#1A1A1C]"}`} />
+                  <div className={`mx-4 h-0.5 w-16 transition-colors duration-500 ${i < step ? "bg-accent" : "bg-input"}`} />
                 )}
               </div>
             ))}
@@ -277,7 +277,7 @@ export default function ImportPage() {
 
             {step === 1 && (
               <>
-                <div className="mb-6 rounded-xl border border-white/8 bg-card p-5">
+                <div className="mb-6 rounded-xl border border-border bg-card p-5">
                   <div className="mb-3 flex items-center justify-between">
                     <p className="font-display text-base font-semibold">Column mapping</p>
                     <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
@@ -319,7 +319,7 @@ export default function ImportPage() {
                           </div>
                           <span className="text-xs text-muted-foreground">→</span>
                           <Select value={value} onValueChange={(v) => setColumnMapping((prev) => ({ ...prev, [h]: v }))}>
-                            <SelectTrigger className={isDuplicate ? "border-amber-500/40" : value === "skip" ? "border-white/10 text-muted-foreground" : "border-accent/40"}>
+                            <SelectTrigger className={isDuplicate ? "border-amber-500/40" : value === "skip" ? "border-border text-muted-foreground" : "border-accent/40"}>
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -336,10 +336,10 @@ export default function ImportPage() {
                   </div>
                 </div>
 
-                <div className="mb-4 flex items-center gap-3 rounded-lg border border-white/8 bg-card px-4 py-3">
+                <div className="mb-4 flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-3">
                   <CheckCircle2 className="h-4 w-4 text-green-400" />
                   <span className="text-sm">
-                    <span className="font-medium text-[#F5F4F0]">{rows.length}</span> of {rawRows.length} rows ready
+                    <span className="font-medium text-foreground">{rows.length}</span> of {rawRows.length} rows ready
                   </span>
                   {invalidCount > 0 && <span className="ml-auto text-xs text-amber-400">{invalidCount} skipped</span>}
                 </div>
@@ -363,7 +363,7 @@ export default function ImportPage() {
                   </div>
                 )}
 
-                <div className="rounded-xl border border-white/8">
+                <div className="rounded-xl border border-border">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -433,14 +433,14 @@ export default function ImportPage() {
           {!jsonResult ? (
             <>
               <p className="text-sm text-muted-foreground mb-6">
-                Drop your <strong className="text-[#F5F4F0]">BOX_*_priced.json</strong> files here. Each file is
+                Drop your <strong className="text-foreground">BOX_*_priced.json</strong> files here. Each file is
                 imported as-is — pricing, condition, and notes are mapped automatically. Multiple files can be
                 imported in one shot.
               </p>
 
               {/* Drop zone */}
               <label
-                className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-white/10 bg-card px-6 py-10 text-center transition-colors hover:border-accent/40"
+                className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-border bg-card px-6 py-10 text-center transition-colors hover:border-accent/40"
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={(e) => { e.preventDefault(); handleJsonFiles(e.dataTransfer.files); }}
               >
@@ -464,7 +464,7 @@ export default function ImportPage() {
                     <div
                       key={f.name}
                       className={`flex items-center justify-between rounded-lg border px-4 py-3 ${
-                        f.error ? "border-red-500/20 bg-red-500/5" : "border-white/8 bg-card"
+                        f.error ? "border-red-500/20 bg-red-500/5" : "border-border bg-card"
                       }`}
                     >
                       <div className="flex items-center gap-3 min-w-0">
@@ -490,11 +490,11 @@ export default function ImportPage() {
                   ))}
 
                   {totalJsonRecords > 0 && (
-                    <div className="rounded-lg border border-white/8 bg-card px-4 py-3 flex items-center justify-between">
+                    <div className="rounded-lg border border-border bg-card px-4 py-3 flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <CheckCircle2 className="h-4 w-4 text-green-400" />
                         <span className="text-sm">
-                          <span className="font-medium text-[#F5F4F0]">{totalJsonRecords}</span> albums across{" "}
+                          <span className="font-medium text-foreground">{totalJsonRecords}</span> albums across{" "}
                           {boxFiles.filter((f) => !f.error).length} file{boxFiles.filter((f) => !f.error).length !== 1 ? "s" : ""}
                         </span>
                       </div>
@@ -506,7 +506,7 @@ export default function ImportPage() {
 
               {/* Preview table */}
               {totalJsonRecords > 0 && (
-                <div className="mt-4 rounded-xl border border-white/8 overflow-hidden">
+                <div className="mt-4 rounded-xl border border-border overflow-hidden">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -538,7 +538,7 @@ export default function ImportPage() {
                     </TableBody>
                   </Table>
                   {totalJsonRecords > 8 && (
-                    <p className="px-4 py-2 text-xs text-muted-foreground border-t border-white/8">
+                    <p className="px-4 py-2 text-xs text-muted-foreground border-t border-border">
                       Showing 8 of {totalJsonRecords} records
                     </p>
                   )}
