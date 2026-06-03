@@ -161,25 +161,8 @@ export function CursorEffect() {
           zIndex: 9999,
           transition: "width 0.35s cubic-bezier(0.34,1.56,0.64,1), height 0.35s cubic-bezier(0.34,1.56,0.64,1), border 0.3s, background 0.3s",
           willChange: "transform",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
         }}
-      >
-        {isHero && (
-          <span style={{
-            fontSize: 10,
-            fontWeight: 700,
-            letterSpacing: "0.15em",
-            color: "rgba(212,168,67,0.85)",
-            textTransform: "uppercase",
-            userSelect: "none",
-            fontFamily: "sans-serif",
-          }}>
-            explore
-          </span>
-        )}
-      </div>
+      />
 
       {/* Layer 3 — slow glow blob (magnifier spotlight) */}
       <div
