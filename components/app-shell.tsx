@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Bell, CircleHelp, Moon, Sun } from "lucide-react";
 import { Sidebar } from "@/components/sidebar";
+import { OnboardingModal } from "@/components/onboarding-modal";
 
-const STORAGE_KEY = "vinylvault.sidebar.collapsed";
+const SIDEBAR_KEY = "vinylvault.sidebar.collapsed";
+const THEME_KEY = "vinylvault.theme";
 
 interface AppShellProps {
   userEmail?: string;
@@ -12,46 +15,117 @@ interface AppShellProps {
 }
 
 export function AppShell({ userEmail, ebayConnected, children }: AppShellProps) {
-  // Default to expanded; hydrate the persisted choice on mount.
-  // We accept a brief FOUC on first paint instead of blocking SSR on
-  // window access — keeps the root layout server-renderable.
   const [collapsed, setCollapsed] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [helpOpen, setHelpOpen] = useState(false);
 
   useEffect(() => {
     try {
-      const stored = window.localStorage.getItem(STORAGE_KEY);
-      if (stored === "1") setCollapsed(true);
+      const storedSidebar = window.localStorage.getItem(SIDEBAR_KEY);
+      if (storedSidebar === "1") setCollapsed(true);
+
+      const storedTheme = window.localStorage.getItem(THEME_KEY) as "dark" | "light" | null;
+      const initial = storedTheme ?? "dark";
+      setTheme(initial);
+      applyTheme(initial);
     } catch {
-      // localStorage can throw in private mode / restricted contexts.
+      applyTheme("dark");
     }
     setHydrated(true);
   }, []);
 
+  function applyTheme(t: "dark" | "light") {
+    try {
+      const root = document.documentElement;
+      if (t === "dark") {
+        root.classList.add("dark");
+      } else {
+        root.classList.remove("dark");
+      }
+    } catch {
+      // SSR guard
+    }
+  }
+
+  function toggleTheme() {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    applyTheme(next);
+    try {
+      window.localStorage.setItem(THEME_KEY, next);
+    } catch {
+      // ignore
+    }
+  }
+
   useEffect(() => {
     if (!hydrated) return;
     try {
-      window.localStorage.setItem(STORAGE_KEY, collapsed ? "1" : "0");
+      window.localStorage.setItem(SIDEBAR_KEY, collapsed ? "1" : "0");
     } catch {
-      // Ignore quota / availability errors.
+      // ignore
     }
   }, [collapsed, hydrated]);
 
   return (
-    <div className="min-h-screen bg-base">
+    <div className="min-h-screen bg-background">
       <Sidebar
         userEmail={userEmail}
         ebayConnected={ebayConnected}
         collapsed={collapsed}
         onToggle={() => setCollapsed((v) => !v)}
+        onHelpClick={() => setHelpOpen(true)}
       />
-      <main
-        className={`min-h-screen p-8 transition-[margin] duration-200 ease-out ${
+
+      <div
+        className={`min-h-screen flex flex-col transition-[margin] duration-200 ease-out ${
           collapsed ? "ml-16" : "ml-60"
         }`}
       >
-        {children}
-      </main>
+        {/* Top bar */}
+        <header className="sticky top-0 z-20 flex h-12 items-center justify-end gap-1 border-b border-border bg-background/80 px-6 backdrop-blur-sm">
+          {/* Help */}
+          <button
+            onClick={() => setHelpOpen(true)}
+            title="Help & Guide"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+          >
+            <CircleHelp className="h-4 w-4" />
+          </button>
+
+          {/* Notifications (placeholder) */}
+          <button
+            title="Notifications"
+            className="relative flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+          >
+            <Bell className="h-4 w-4" />
+            {/* Unread dot — remove when no notifications */}
+            <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-accent" />
+          </button>
+
+          {/* Theme toggle */}
+          <button
+            onClick={toggleTheme}
+            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+          >
+            {theme === "dark" ? (
+              <Sun className="h-4 w-4" />
+            ) : (
+              <Moon className="h-4 w-4" />
+            )}
+          </button>
+        </header>
+
+        <main className="flex-1 p-8">{children}</main>
+      </div>
+
+      {/* Onboarding / Help modal */}
+      <OnboardingModal
+        forceOpen={helpOpen}
+        onClose={() => setHelpOpen(false)}
+      />
     </div>
   );
 }

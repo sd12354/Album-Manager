@@ -3,7 +3,33 @@
 @tailwind utilities;
 
 @layer base {
+  /* ── Light mode (default) ──────────────────────────────────── */
   :root {
+    --background: 40 20% 97%;
+    --foreground: 240 10% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 10%;
+    --primary: 240 10% 10%;
+    --primary-foreground: 40 20% 97%;
+    --secondary: 40 15% 92%;
+    --secondary-foreground: 240 10% 10%;
+    --muted: 40 10% 87%;
+    --muted-foreground: 240 5% 42%;
+    --accent: 42 62% 55%;
+    --accent-foreground: 240 10% 5%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 40 15% 86%;
+    --input: 40 15% 91%;
+    --ring: 42 62% 55%;
+    --radius: 0.75rem;
+    --sidebar: 40 20% 93%;
+  }
+
+  /* ── Dark mode ─────────────────────────────────────────────── */
+  .dark {
     --background: 240 6% 4%;
     --foreground: 60 9% 96%;
     --card: 240 4% 7%;
@@ -20,10 +46,10 @@
     --accent-foreground: 240 6% 4%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 60 9% 96%;
-    --border: 0 0% 100% / 0.08;
+    --border: 240 5% 15%;
     --input: 240 4% 11%;
     --ring: 42 62% 55%;
-    --radius: 0.75rem;
+    --sidebar: 240 5% 6%;
   }
 
   * {
@@ -31,7 +57,7 @@
   }
 
   body {
-    @apply bg-base text-[#F5F4F0] font-sans antialiased;
+    @apply bg-background text-foreground font-sans antialiased;
     font-feature-settings: "ss01", "cv11";
     letter-spacing: -0.01em;
   }
@@ -43,14 +69,16 @@
 }
 
 @layer utilities {
-  .border-white\/6 {
-    border-color: rgba(255, 255, 255, 0.06);
-  }
-  .border-white\/8 {
-    border-color: rgba(255, 255, 255, 0.08);
-  }
-  .border-white\/10 {
-    border-color: rgba(255, 255, 255, 0.1);
+  .border-white\/6  { border-color: rgba(255,255,255,0.06); }
+  .border-white\/8  { border-color: rgba(255,255,255,0.08); }
+  .border-white\/10 { border-color: rgba(255,255,255,0.10); }
+  .divide-white\/8 > * + * { border-color: rgba(255,255,255,0.08); }
+
+  /* In light mode override the white-opacity borders to use real borders */
+  :root .border-white\/8,
+  :root .border-white\/10,
+  :root .border-white\/6 {
+    border-color: hsl(var(--border));
   }
 }
 
@@ -58,79 +86,50 @@
   from { height: 0; }
   to { height: var(--radix-accordion-content-height); }
 }
-
 @keyframes accordion-up {
   from { height: var(--radix-accordion-content-height); }
   to { height: 0; }
 }
-
-.animate-accordion-down {
-  animation: accordion-down 0.2s ease-out;
-}
-
-.animate-accordion-up {
-  animation: accordion-up 0.2s ease-out;
-}
+.animate-accordion-down { animation: accordion-down 0.2s ease-out; }
+.animate-accordion-up   { animation: accordion-up   0.2s ease-out; }
 
 @keyframes fade-in-up {
-  0% {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  0%   { opacity: 0; transform: translateY(8px); }
+  100% { opacity: 1; transform: translateY(0); }
 }
-
 @keyframes fade-in {
-  0% { opacity: 0; }
+  0%   { opacity: 0; }
   100% { opacity: 1; }
 }
-
 @keyframes shimmer {
-  0% { background-position: -1000px 0; }
-  100% { background-position: 1000px 0; }
+  0%   { background-position: -1000px 0; }
+  100% { background-position:  1000px 0; }
 }
-
 @keyframes spin-vinyl {
   from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  to   { transform: rotate(360deg); }
 }
-
 @keyframes pulse-soft {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
+  50%       { opacity: 0.6; }
 }
 
-.animate-fade-in-up {
-  animation: fade-in-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-.animate-fade-in {
-  animation: fade-in 0.3s ease-out both;
-}
-
-.animate-shimmer {
+.animate-fade-in-up  { animation: fade-in-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-fade-in     { animation: fade-in 0.3s ease-out both; }
+.animate-shimmer     {
   background: linear-gradient(
     90deg,
-    rgba(255, 255, 255, 0.02) 0%,
-    rgba(255, 255, 255, 0.06) 50%,
-    rgba(255, 255, 255, 0.02) 100%
+    rgba(255,255,255,0.02) 0%,
+    rgba(255,255,255,0.06) 50%,
+    rgba(255,255,255,0.02) 100%
   );
   background-size: 1000px 100%;
   animation: shimmer 2s infinite linear;
 }
+.animate-spin-vinyl  { animation: spin-vinyl 2.4s linear infinite; }
+.animate-pulse-soft  { animation: pulse-soft 1.6s ease-in-out infinite; }
 
-.animate-spin-vinyl {
-  animation: spin-vinyl 2.4s linear infinite;
-}
-
-.animate-pulse-soft {
-  animation: pulse-soft 1.6s ease-in-out infinite;
-}
-
-.stagger-1 { animation-delay: 60ms; }
+.stagger-1 { animation-delay:  60ms; }
 .stagger-2 { animation-delay: 120ms; }
 .stagger-3 { animation-delay: 180ms; }
 .stagger-4 { animation-delay: 240ms; }

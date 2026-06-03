@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  CircleHelp,
   LayoutDashboard,
   Library,
-  Upload,
-  Settings,
   LogOut,
-  PanelLeftClose,
   PanelLeft,
+  PanelLeftClose,
+  Settings,
+  Upload,
 } from "lucide-react";
 import { VinylLogo } from "@/components/vinyl-logo";
 import { createClient } from "@/lib/supabase/client";
@@ -18,7 +19,7 @@ import { cn } from "@/lib/utils";
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/albums", label: "Catalogue", icon: Library },
-  { href: "/import", label: "Import CSV", icon: Upload },
+  { href: "/import", label: "Import", icon: Upload },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -27,6 +28,7 @@ interface SidebarProps {
   ebayConnected?: boolean;
   collapsed?: boolean;
   onToggle?: () => void;
+  onHelpClick?: () => void;
 }
 
 export function Sidebar({
@@ -34,6 +36,7 @@ export function Sidebar({
   ebayConnected = false,
   collapsed = false,
   onToggle,
+  onHelpClick,
 }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
@@ -48,7 +51,7 @@ export function Sidebar({
   return (
     <aside
       className={cn(
-        "fixed left-0 top-0 z-30 flex h-screen flex-col border-r border-white/6 bg-sidebar transition-[width] duration-200 ease-out",
+        "fixed left-0 top-0 z-30 flex h-screen flex-col border-r border-border bg-sidebar transition-[width] duration-200 ease-out",
         collapsed ? "w-16" : "w-60"
       )}
     >
@@ -103,6 +106,22 @@ export function Sidebar({
           );
         })}
       </nav>
+
+      {/* Help button */}
+      <div className={cn("pb-2", collapsed ? "px-2" : "px-3")}>
+        <button
+          type="button"
+          onClick={onHelpClick}
+          title="Help & Guide"
+          className={cn(
+            "flex w-full items-center rounded-lg text-sm font-medium text-muted-foreground transition-colors hover:bg-white/[0.03] hover:text-foreground",
+            collapsed ? "h-10 w-10 justify-center mx-auto" : "gap-3 px-3 py-2.5"
+          )}
+        >
+          <CircleHelp className="h-4 w-4 shrink-0" />
+          {!collapsed && <span>Help & Guide</span>}
+        </button>
+      </div>
 
       <div
         className={cn(
