@@ -119,10 +119,12 @@ export function AlbumDetailClient({
 
   async function handleFetchPrices() {
     setFetching(true);
+    // Manual refresh always bypasses the 24h cache so the user gets live
+    // Discogs/eBay data on demand.
     const res = await fetch("/api/pricing/fetch", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ albumId: album.id }),
+      body: JSON.stringify({ albumId: album.id, force: true }),
     });
     if (res.ok) {
       const data: PricingResult = await res.json();
