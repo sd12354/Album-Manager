@@ -79,6 +79,18 @@ function buildFromCache(
   return result;
 }
 
+async function persistDiscogsReleaseId(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  albumId: string,
+  releaseId?: number
+) {
+  if (!releaseId) return;
+  await supabase
+    .from("albums")
+    .update({ discogs_release_id: releaseId })
+    .eq("id", albumId);
+}
+
 export async function POST(request: Request) {
   const supabase = await createClient();
   const {
@@ -124,6 +136,10 @@ export async function POST(request: Request) {
     const discogsRow = rows.find((r) => r.source === "discogs");
     const ebayRow = rows.find((r) => r.source === "ebay");
     if (isFresh(discogsRow) || isFresh(ebayRow)) {
+      const cachedReleaseId = (discogsRow?.raw_data ?? {}).releaseId as
+        | number
+        | undefined;
+      await persistDiscogsReleaseId(supabase, albumId, cachedReleaseId);
       return NextResponse.json(
         buildFromCache(
           typedAlbum,
@@ -239,10 +255,13 @@ export async function POST(request: Request) {
       .from("albums")
       .update({
         suggested_price: pricing.suggestedPrice,
+        discogs_release_id: discogsResult?.releaseId ?? typedAlbum.discogs_release_id,
         status:
           typedAlbum.status === "unlisted" ? "pricing" : typedAlbum.status,
       })
       .eq("id", albumId);
+  } else {
+    await persistDiscogsReleaseId(supabase, albumId, discogsResult?.releaseId);
   }
 
   return NextResponse.json(pricing);

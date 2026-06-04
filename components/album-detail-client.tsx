@@ -472,6 +472,8 @@ export function AlbumDetailClient({
     album.sold_price && album.purchase_price
       ? album.sold_price - album.purchase_price
       : null;
+  const effectiveDiscogsReleaseId =
+    album.discogs_release_id ?? discogsReleaseId ?? pricing?.discogsReleaseId ?? null;
 
   return (
     <div className="animate-fade-in">
@@ -849,7 +851,11 @@ export function AlbumDetailClient({
                     <Button
                       variant="outline"
                       onClick={handleListOnDiscogs}
-                      disabled={listingDiscogs || !discogsConnected || !discogsReleaseId}
+                      disabled={
+                        listingDiscogs ||
+                        !discogsConnected ||
+                        !effectiveDiscogsReleaseId
+                      }
                       className="w-full justify-center gap-2"
                     >
                       {listingDiscogs ? (
@@ -916,7 +922,7 @@ export function AlbumDetailClient({
                     to list on Discogs.
                   </p>
                 )}
-                {discogsConnected && !discogsReleaseId && !album.discogs_listing_id && (
+                {discogsConnected && !effectiveDiscogsReleaseId && !album.discogs_listing_id && (
                   <p className="text-xs text-muted-foreground">
                     Refresh prices first so VinylVault can identify the Discogs release.
                   </p>
