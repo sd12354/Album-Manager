@@ -222,7 +222,8 @@ export async function createEbayListing(
   album: Album,
   price: number,
   accessToken: string,
-  sellerLocation?: SellerLocation
+  sellerLocation?: SellerLocation,
+  descriptionOverride?: string
 ): Promise<{ itemId: string; listingUrl: string }> {
   const pictureUrlsXml = (album.photo_urls ?? [])
     .slice(0, EBAY_MAX_PHOTOS)
@@ -261,7 +262,7 @@ export async function createEbayListing(
 <AddFixedPriceItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
   <Item>
     <Title>${escapeXml(buildListingTitle(album.artist, album.title, album.condition))}</Title>
-    <Description><![CDATA[${buildListingDescription(album.artist, album.title, album.condition, album.genre, album.catalog_number)}]]></Description>
+    <Description><![CDATA[${descriptionOverride ?? buildListingDescription(album.artist, album.title, album.condition, album.genre, album.catalog_number)}]]></Description>
     <PrimaryCategory><CategoryID>${categoryId}</CategoryID></PrimaryCategory>
     <StartPrice>${price.toFixed(2)}</StartPrice>
     <ConditionID>${conditionId}</ConditionID>

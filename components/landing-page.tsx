@@ -9,6 +9,7 @@ import {
   DollarSign,
   Package,
   ShoppingBag,
+  Sparkles,
   TrendingUp,
   Upload,
   Zap,
@@ -224,15 +225,21 @@ function SettingsIcon({ active }: { active?: boolean }) {
 ───────────────────────────────────────────────────────────────────────────── */
 const features = [
   {
-    icon: DollarSign,
-    title: "Market-accurate pricing",
-    desc: "Pulls live Discogs marketplace data and eBay active listings to suggest the right price for every grade.",
+    icon: Sparkles,
+    title: "AI pricing & descriptions",
+    desc: "Claude analyses Discogs and eBay data alongside artist collectability and genre demand to suggest the optimal price and write a conversion-optimised listing description.",
     color: "text-accent bg-accent/10",
+  },
+  {
+    icon: DollarSign,
+    title: "Live market pricing",
+    desc: "Pulls live Discogs grade-specific prices and eBay active listings as hard data the AI builds on. Every recommendation is market-anchored.",
+    color: "text-yellow-400 bg-yellow-400/10",
   },
   {
     icon: ShoppingBag,
     title: "Dual-platform listing",
-    desc: "List on eBay and Discogs simultaneously. When one sells, the other is automatically delisted.",
+    desc: "List on eBay and Discogs simultaneously with one click. When one sells, the other is automatically delisted.",
     color: "text-blue-400 bg-blue-400/10",
   },
   {
@@ -252,12 +259,6 @@ const features = [
     title: "Portfolio analytics",
     desc: "Track total collection value, revenue by month, and profit vs. purchase price across your catalogue.",
     color: "text-orange-400 bg-orange-400/10",
-  },
-  {
-    icon: Zap,
-    title: "Built for speed",
-    desc: "Bulk price hundreds of records at once. Batch eBay listings. Everything designed for high-volume sellers.",
-    color: "text-yellow-400 bg-yellow-400/10",
   },
 ];
 
@@ -305,8 +306,8 @@ export function LandingPage({ isLoggedIn = false }: { isLoggedIn?: boolean }) {
       {/* ── Hero ──────────────────────────────────────────────────────────── */}
       <section data-cursor-hero className="relative flex flex-col items-center justify-center px-6 pb-24 pt-40 text-center md:pt-48">
         <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/5 px-4 py-1.5 text-sm text-accent">
-          <Disc2 className="h-3.5 w-3.5" />
-          Now with Discogs + eBay dual-listing
+          <Sparkles className="h-3.5 w-3.5" />
+          Now with AI pricing &amp; listing descriptions
         </div>
 
         <h1 className="max-w-3xl font-display text-5xl font-bold leading-[1.1] tracking-tight md:text-7xl">
@@ -315,8 +316,8 @@ export function LandingPage({ isLoggedIn = false }: { isLoggedIn?: boolean }) {
         </h1>
 
         <p className="mt-6 max-w-xl text-lg text-white/60 leading-relaxed">
-          VinylVault manages your entire record-selling operation — from bulk import
-          and market pricing to dual-platform listing and auto-generated shipping labels.
+          VinylVault combines live market data from Discogs &amp; eBay with AI-powered pricing
+          analysis and description writing — so every listing is optimised to sell.
         </p>
 
         <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
@@ -340,7 +341,7 @@ export function LandingPage({ isLoggedIn = false }: { isLoggedIn?: boolean }) {
           {[
             { value: "1,388+", label: "Records imported" },
             { value: "2 platforms", label: "eBay & Discogs" },
-            { value: "Auto labels", label: "Via Shippo" },
+            { value: "AI-powered", label: "Pricing & descriptions" },
           ].map(({ value, label }) => (
             <div key={label} className="flex items-center gap-2">
               <span className="font-display font-bold text-accent">{value}</span>
@@ -430,13 +431,13 @@ export function LandingPage({ isLoggedIn = false }: { isLoggedIn?: boolean }) {
               },
               {
                 step: "02",
-                title: "Fetch market prices",
-                desc: "VinylVault queries Discogs and eBay to find the right price for each grade. One click for the whole catalogue.",
+                title: "AI prices & describes every record",
+                desc: "Claude analyses live Discogs & eBay data alongside artist collectability to suggest the optimal price and writes a sales-optimised listing description.",
               },
               {
                 step: "03",
                 title: "List on eBay & Discogs",
-                desc: "Push listings to one or both platforms. Cross-cancellation is automatic when something sells.",
+                desc: "Push listings to one or both platforms with the AI description pre-filled. Cross-cancellation is automatic when something sells.",
               },
               {
                 step: "04",

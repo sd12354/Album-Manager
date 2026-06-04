@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createDiscogsListing } from "@/lib/discogs";
+import { generateListingDescription } from "@/lib/ai-pricing";
 import type { Album, AlbumCondition } from "@/types";
 
 export const runtime = "nodejs";
@@ -75,13 +76,37 @@ export async function POST(request: Request) {
     );
   }
 
+  // Use stored AI description as the Discogs listing comment. Generate on the
+  // fly if ANTHROPIC_API_KEY is set and one hasn't been written yet.
+  let comments: string | undefined = typedAlbum.listing_description ?? typedAlbum.notes ?? undefined;
+  if (!typedAlbum.listing_description && process.env.ANTHROPIC_API_KEY) {
+    try {
+      comments = await generateListingDescription({
+        artist: typedAlbum.artist,
+        title: typedAlbum.title,
+        genre: typedAlbum.genre,
+        condition: typedAlbum.condition as AlbumCondition,
+        catalogNumber: typedAlbum.catalog_number,
+        notes: typedAlbum.notes,
+        suggestedPrice: price,
+        platform: "discogs",
+      });
+      await supabase
+        .from("albums")
+        .update({ listing_description: comments })
+        .eq("id", albumId);
+    } catch {
+      // Fall back to notes
+    }
+  }
+
   try {
     const { listingId, listingUrl } = await createDiscogsListing({
       releaseId,
       condition: typedAlbum.condition as AlbumCondition,
       price,
       token: discogsToken,
-      comments: typedAlbum.notes ?? undefined,
+      comments,
     });
 
     // Verify the listing landed as "For Sale" — if it comes back as anything

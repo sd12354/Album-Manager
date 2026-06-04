@@ -6,7 +6,8 @@ import {
   type EbayTokenCredentials,
   type SellerLocation,
 } from "@/lib/ebay";
-import type { Album, UserSettings } from "@/types";
+import { generateListingDescription } from "@/lib/ai-pricing";
+import type { Album, AlbumCondition, UserSettings } from "@/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -102,12 +103,40 @@ export async function POST(request: Request) {
     country: userMeta.seller_country || "US",
   };
 
+  // Use stored AI description if available, otherwise try to generate one,
+  // fall back to the rule-based description if AI isn't configured.
+  let aiDescription: string | undefined;
+  if (typedAlbum.listing_description) {
+    aiDescription = typedAlbum.listing_description;
+  } else if (process.env.ANTHROPIC_API_KEY) {
+    try {
+      aiDescription = await generateListingDescription({
+        artist: typedAlbum.artist,
+        title: typedAlbum.title,
+        genre: typedAlbum.genre,
+        condition: typedAlbum.condition as AlbumCondition,
+        catalogNumber: typedAlbum.catalog_number,
+        notes: typedAlbum.notes,
+        suggestedPrice: price,
+        platform: "ebay",
+      });
+      // Persist for future use
+      await supabase
+        .from("albums")
+        .update({ listing_description: aiDescription })
+        .eq("id", albumId);
+    } catch {
+      // Non-fatal — fall back to rule-based description
+    }
+  }
+
   try {
     const { itemId, listingUrl } = await createEbayListing(
       typedAlbum,
       price,
       tokenResult.token,
-      sellerLocation
+      sellerLocation,
+      aiDescription
     );
 
     await supabase
@@ -122,7 +151,28 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ listingId: itemId, listingUrl });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "eBay listing failed";
+    const raw = err instanceof Error ? err.message : "eBay listing failed";
+
+    // Map well-known eBay API errors to actionable guidance.
+    let message = raw;
+    if (/seller.{0,30}account/i.test(raw) || /additional information/i.test(raw)) {
+      message =
+        "Your eBay seller account isn't fully set up yet. " +
+        "Visit ebay.com/sell/setup to complete seller registration " +
+        "(identity verification + payout method), then try again.";
+    } else if (/business polic/i.test(raw)) {
+      message =
+        "eBay requires at least one Shipping, Returns, and Payment business policy. " +
+        "Set them up at ebay.com/sel/adm/biz-policy/manage, then try again.";
+    } else if (/location/i.test(raw)) {
+      message =
+        "Item location is missing. Fill in your seller address in Settings → Shipping, then try again.";
+    } else if (/managed payment/i.test(raw)) {
+      message =
+        "eBay Managed Payments isn't enabled on your account. " +
+        "Enrol at ebay.com/sell/setup to continue.";
+    }
+
     return NextResponse.json({ error: message }, { status: 502 });
   }
 }

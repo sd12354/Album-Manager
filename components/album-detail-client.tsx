@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Disc2, ExternalLink, Package, RefreshCw, ShoppingBag, Trash2, Upload } from "lucide-react";
+import { ArrowLeft, Disc2, ExternalLink, Package, RefreshCw, ShoppingBag, Sparkles, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { AlbumStatusBadge } from "@/components/album-status-badge";
 import { ConditionBadge } from "@/components/condition-badge";
@@ -102,6 +102,11 @@ export function AlbumDetailClient({
     album.list_price?.toString() ?? album.suggested_price?.toString() ?? ""
   );
   const [fetching, setFetching] = useState(false);
+  const [fetchingAI, setFetchingAI] = useState(false);
+  const [generatingDesc, setGeneratingDesc] = useState(false);
+  const [listingDescription, setListingDescription] = useState(
+    initialAlbum.listing_description ?? ""
+  );
   const [listing, setListing] = useState(false);
   const [listingDiscogs, setListingDiscogs] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -148,6 +153,32 @@ export function AlbumDetailClient({
       toast.error(err.error ?? "Failed to fetch prices");
     }
     setFetching(false);
+  }
+
+  async function handleAIPricing() {
+    setFetchingAI(true);
+    const res = await fetch("/api/pricing/ai", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ albumId: album.id }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      setPricing((prev) => ({
+        ...(prev ?? { suggestedPrice: 0, confidence: "low" as const }),
+        aiSuggestedPrice: data.suggestedPrice,
+        aiPriceRange: data.priceRange,
+        aiReasoning: data.reasoning,
+        aiStrategy: data.strategy,
+        aiConfidence: data.confidence,
+      }));
+      setListPrice(data.suggestedPrice.toString());
+      toast.success(`AI suggests $${data.suggestedPrice.toFixed(2)} · ${data.strategy}`);
+    } else {
+      const err = await res.json().catch(() => ({}));
+      toast.error(err.error ?? "AI pricing failed");
+    }
+    setFetchingAI(false);
   }
 
   async function handleListOnEbay() {
@@ -254,6 +285,25 @@ export function AlbumDetailClient({
     setSyncing(false);
   }
 
+  async function handleGenerateDescription() {
+    setGeneratingDesc(true);
+    const res = await fetch("/api/albums/generate-description", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ albumId: album.id, platform: "both" }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      setListingDescription(data.description);
+      setAlbum((prev) => ({ ...prev, listing_description: data.description }));
+      toast.success("AI description generated");
+    } else {
+      const err = await res.json().catch(() => ({}));
+      toast.error(err.error ?? "Description generation failed");
+    }
+    setGeneratingDesc(false);
+  }
+
   async function handleDelistEbay() {
     setDelistingEbay(true);
     const res = await fetch("/api/ebay/delist", {
@@ -321,6 +371,7 @@ export function AlbumDetailClient({
         catalog_number: album.catalog_number,
         notes: album.notes,
         list_price: listPrice ? parseFloat(listPrice) : null,
+        listing_description: listingDescription || null,
       })
       .eq("id", album.id);
 
@@ -557,6 +608,40 @@ export function AlbumDetailClient({
                 rows={3}
               />
             </div>
+            {/* AI Listing Description */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="flex items-center gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5 text-accent" />
+                  Listing Description
+                </Label>
+                <button
+                  type="button"
+                  onClick={handleGenerateDescription}
+                  disabled={generatingDesc}
+                  className="inline-flex items-center gap-1 rounded-full bg-accent/10 border border-accent/25 px-2.5 py-1 text-[11px] font-medium text-accent hover:bg-accent/20 transition-colors disabled:opacity-50"
+                >
+                  {generatingDesc ? (
+                    <><VinylSpinner size="xs" />Generating…</>
+                  ) : (
+                    <><Sparkles className="h-3 w-3" />{listingDescription ? "Regenerate" : "Generate with AI"}</>
+                  )}
+                </button>
+              </div>
+              <Textarea
+                value={listingDescription}
+                onChange={(e) => setListingDescription(e.target.value)}
+                rows={5}
+                placeholder="Click Generate with AI to write a sales-optimised description, or type your own…"
+                className="resize-none text-sm"
+              />
+              {listingDescription && (
+                <p className="text-[10px] text-muted-foreground">
+                  This description will be used for eBay and Discogs listings automatically.
+                </p>
+              )}
+            </div>
+
             <Button onClick={handleSave} disabled={saving}>
               {saving ? (
                 <>
@@ -592,6 +677,74 @@ export function AlbumDetailClient({
           {/* Pricing data */}
           {pricing && <PricingCard pricing={pricing} />}
 
+          {/* AI pricing card — shown once AI has been queried */}
+          {pricing?.aiSuggestedPrice != null && (
+            <div className="rounded-xl border border-accent/20 bg-accent/5 overflow-hidden animate-fade-in-up">
+              <div className="flex items-center gap-2 px-5 pt-4 pb-3 border-b border-accent/15">
+                <Sparkles className="h-4 w-4 text-accent" />
+                <span className="font-display text-sm font-semibold text-accent">AI Price Analysis</span>
+                {pricing.aiStrategy && (
+                  <span className={`ml-auto rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
+                    pricing.aiStrategy === "premium"
+                      ? "bg-green-500/15 text-green-400"
+                      : pricing.aiStrategy === "clearance"
+                        ? "bg-red-500/15 text-red-400"
+                        : "bg-blue-500/15 text-blue-400"
+                  }`}>
+                    {pricing.aiStrategy}
+                  </span>
+                )}
+              </div>
+              <div className="px-5 py-4 space-y-3">
+                <div className="flex items-end justify-between">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Suggested Price</p>
+                    <p className="font-display text-3xl font-bold text-accent tabular-nums">
+                      {formatCurrency(pricing.aiSuggestedPrice)}
+                    </p>
+                  </div>
+                  {pricing.aiPriceRange && (
+                    <div className="text-right">
+                      <p className="text-xs text-muted-foreground">Range</p>
+                      <p className="text-sm font-medium tabular-nums">
+                        {formatCurrency(pricing.aiPriceRange.low)} – {formatCurrency(pricing.aiPriceRange.high)}
+                      </p>
+                    </div>
+                  )}
+                </div>
+                {pricing.aiReasoning && (
+                  <p className="text-xs text-muted-foreground leading-relaxed border-t border-accent/15 pt-3">
+                    {pricing.aiReasoning}
+                  </p>
+                )}
+                {pricing.aiConfidence && (
+                  <div className="flex items-center gap-1.5">
+                    <div className="flex items-end gap-0.5">
+                      {[1, 2, 3].map((i) => (
+                        <div
+                          key={i}
+                          className={`w-1 rounded-sm ${
+                            pricing.aiConfidence === "high"
+                              ? "bg-accent"
+                              : pricing.aiConfidence === "medium" && i <= 2
+                                ? "bg-accent"
+                                : i === 1
+                                  ? "bg-accent"
+                                  : "bg-accent/25"
+                          }`}
+                          style={{ height: i === 1 ? 6 : i === 2 ? 9 : 12 }}
+                        />
+                      ))}
+                    </div>
+                    <span className="text-[10px] text-muted-foreground capitalize">
+                      {pricing.aiConfidence} confidence
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Action panel */}
           <div className="rounded-xl border border-border bg-card animate-fade-in-up stagger-2 overflow-hidden">
             {/* Suggested price */}
@@ -624,21 +777,34 @@ export function AlbumDetailClient({
                     onChange={(e) => setListPrice(e.target.value)}
                   />
                 </div>
+                {/* Refresh market prices */}
                 <Button
                   variant="outline"
                   size="icon"
                   onClick={handleFetchPrices}
                   disabled={fetching}
-                  title="Refresh prices"
+                  title="Refresh Discogs + eBay prices"
                   className="shrink-0 h-10 w-10"
                 >
-                  {fetching ? (
-                    <VinylSpinner size="xs" />
-                  ) : (
-                    <RefreshCw className="h-4 w-4" />
-                  )}
+                  {fetching ? <VinylSpinner size="xs" /> : <RefreshCw className="h-4 w-4" />}
+                </Button>
+                {/* AI price analysis */}
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={handleAIPricing}
+                  disabled={fetchingAI}
+                  title="Get AI price analysis"
+                  className="shrink-0 h-10 w-10 border-accent/30 text-accent hover:bg-accent/10 hover:border-accent/60"
+                >
+                  {fetchingAI ? <VinylSpinner size="xs" /> : <Sparkles className="h-4 w-4" />}
                 </Button>
               </div>
+              {fetchingAI && (
+                <p className="text-xs text-muted-foreground animate-pulse">
+                  AI is analysing market data…
+                </p>
+              )}
             </div>
 
             {/* Platform listing buttons */}

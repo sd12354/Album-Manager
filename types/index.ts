@@ -28,6 +28,7 @@ export interface Album {
   shipping_rate?: number | null;
   buyer_name?: string | null;
   buyer_address_raw?: string | null;
+  listing_description?: string | null;
   photo_urls?: string[] | null;
   created_at: string;
   updated_at: string;
@@ -56,6 +57,12 @@ export interface PricingResult {
   suggestionSource?: "discogs-condition" | "discogs-median" | "ebay-active";
   /** Optional non-fatal warning (e.g. "no Discogs release found"). */
   notice?: string;
+  /** AI-powered pricing analysis (populated on demand). */
+  aiSuggestedPrice?: number;
+  aiPriceRange?: { low: number; high: number };
+  aiReasoning?: string;
+  aiStrategy?: "premium" | "competitive" | "clearance";
+  aiConfidence?: "low" | "medium" | "high";
 }
 
 export interface PricingCache {
