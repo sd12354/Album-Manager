@@ -28,6 +28,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
       ebayEnvironment={userSettings.ebay_environment}
       ebayError={params?.ebay_error}
       discogsEnvTokenConfigured={!!process.env.DISCOGS_PERSONAL_ACCESS_TOKEN}
+      userEmail={user?.email ?? ""}
       userSettings={userSettings}
     />
   );

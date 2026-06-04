@@ -31,6 +31,7 @@ interface SettingsClientProps {
   ebayEnvironment?: "production" | "sandbox" | "stub";
   ebayError?: string;
   discogsEnvTokenConfigured: boolean;
+  userEmail: string;
   userSettings: {
     discogs_token?: string;
     minimum_floor_price?: number;
@@ -55,9 +56,12 @@ export function SettingsClient({
   ebayEnvironment,
   ebayError,
   discogsEnvTokenConfigured,
+  userEmail,
   userSettings,
 }: SettingsClientProps) {
   const [ebayConnected, setEbayConnected] = useState(initialConnected);
+  const [newEmail, setNewEmail] = useState(userEmail);
+  const [changingEmail, setChangingEmail] = useState(false);
   const [discogsToken, setDiscogsToken] = useState(
     userSettings.discogs_token ?? ""
   );
@@ -99,6 +103,33 @@ export function SettingsClient({
       toast.success("Settings saved");
     }
     setSaving(false);
+  }
+
+  async function changeEmail() {
+    const trimmed = newEmail.trim();
+    if (!trimmed || trimmed === userEmail) {
+      toast.error("Enter a new email address different from your current one.");
+      return;
+    }
+    setChangingEmail(true);
+    const { error } = await supabase.auth.updateUser(
+      { email: trimmed },
+      {
+        emailRedirectTo:
+          typeof window !== "undefined"
+            ? `${window.location.origin}/settings`
+            : undefined,
+      }
+    );
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success(
+        "Confirmation sent. Check both your old and new inboxes to finish the change.",
+        { duration: 10000 }
+      );
+    }
+    setChangingEmail(false);
   }
 
   async function testShippo() {
@@ -154,9 +185,45 @@ export function SettingsClient({
 
       <Accordion
         type="multiple"
-        defaultValue={["ebay"]}
+        defaultValue={["account"]}
         className="mt-8 space-y-3"
       >
+        <AccordionItem value="account" className="animate-fade-in-up stagger-1">
+          <AccordionTrigger className="font-display text-lg">
+            Account
+          </AccordionTrigger>
+          <AccordionContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="account_email">Email Address</Label>
+              <Input
+                id="account_email"
+                type="email"
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+                placeholder="you@example.com"
+              />
+              <p className="text-xs text-muted-foreground">
+                Changing your email sends a confirmation link to both your
+                current and new addresses. The change takes effect once
+                confirmed.
+              </p>
+            </div>
+            <Button
+              onClick={changeEmail}
+              disabled={changingEmail || newEmail.trim() === userEmail}
+            >
+              {changingEmail ? (
+                <>
+                  <VinylSpinner size="xs" />
+                  Sending confirmation...
+                </>
+              ) : (
+                "Update Email"
+              )}
+            </Button>
+          </AccordionContent>
+        </AccordionItem>
+
         <AccordionItem value="ebay" className="animate-fade-in-up stagger-1">
           <AccordionTrigger className="font-display text-lg">
             eBay Account
