@@ -198,6 +198,7 @@ export function AlbumDetailClient({
             "Preview only — eBay listing isn't wired up yet, so nothing was posted.",
           { duration: 10000 }
         );
+        router.refresh();
       } else {
         setAlbum((prev) => ({
           ...prev,

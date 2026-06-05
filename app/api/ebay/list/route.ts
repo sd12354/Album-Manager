@@ -52,15 +52,13 @@ export async function POST(request: Request) {
   const price =
     listPrice ?? typedAlbum.list_price ?? typedAlbum.suggested_price ?? 9.99;
 
-  const ebayEnvironment =
-    (user.user_metadata as { ebay_environment?: string } | null)
-      ?.ebay_environment ?? "stub";
+  // Stub only when OAuth was never configured or the stored token is the dev
+  // placeholder — NOT from user_metadata.ebay_environment, which can be stale
+  // or missing even after a real production connect.
+  const isStub =
+    !process.env.EBAY_CLIENT_ID || creds.access_token === "stub-access-token";
 
-  // Stub mode: generate a fake listing so the UI can show the listed state.
-  if (
-    ebayEnvironment === "stub" ||
-    creds.access_token === "stub-access-token"
-  ) {
+  if (isStub) {
     const fakeItemId = `STUB-${Date.now()}`;
     await supabase
       .from("albums")
@@ -155,22 +153,41 @@ export async function POST(request: Request) {
 
     // Map well-known eBay API errors to actionable guidance.
     let message = raw;
-    if (/seller.{0,30}account/i.test(raw) || /additional information/i.test(raw)) {
+    if (
+      /seller.{0,30}account/i.test(raw) ||
+      /additional information/i.test(raw) ||
+      /seller registration/i.test(raw) ||
+      /complete your seller/i.test(raw)
+    ) {
       message =
         "Your eBay seller account isn't fully set up yet. " +
         "Visit ebay.com/sell/setup to complete seller registration " +
         "(identity verification + payout method), then try again.";
-    } else if (/business polic/i.test(raw)) {
+    } else if (
+      /business polic/i.test(raw) ||
+      /SellerProfile/i.test(raw) ||
+      /shipping profile/i.test(raw) ||
+      /return policy profile/i.test(raw) ||
+      /payment profile/i.test(raw)
+    ) {
       message =
         "eBay requires at least one Shipping, Returns, and Payment business policy. " +
         "Set them up at ebay.com/sel/adm/biz-policy/manage, then try again.";
-    } else if (/location/i.test(raw)) {
+    } else if (/location/i.test(raw) || /postal code/i.test(raw)) {
       message =
         "Item location is missing. Fill in your seller address in Settings → Shipping, then try again.";
-    } else if (/managed payment/i.test(raw)) {
+    } else if (/managed payment/i.test(raw) || /payments program/i.test(raw)) {
       message =
         "eBay Managed Payments isn't enabled on your account. " +
         "Enrol at ebay.com/sell/setup to continue.";
+    } else if (/condition id/i.test(raw) || /condition is invalid/i.test(raw)) {
+      message =
+        "eBay rejected the item condition for this category. " +
+        "Try updating the album condition and listing again.";
+    } else if (/item specific/i.test(raw) && /missing/i.test(raw)) {
+      message =
+        "eBay requires additional item details for this listing. " +
+        "Ensure artist, title, and genre are filled in on the album, then try again.";
     }
 
     return NextResponse.json({ error: message }, { status: 502 });

@@ -125,7 +125,7 @@ export async function POST(request: Request) {
         discogs_listing_id: String(listingId),
         discogs_listing_url: listingUrl,
         discogs_release_id: releaseId,
-        list_price: typedAlbum.list_price ?? price,
+        list_price: price,
       })
       .eq("id", albumId);
 

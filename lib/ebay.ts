@@ -47,12 +47,22 @@ export const GENRE_TO_CATEGORY: Record<string, number> = {
   "World Music": 176984,
 };
 
+/** eBay Records category only accepts New (1000) or Used (3000). */
 export const CONDITION_TO_EBAY: Record<string, number> = {
   Mint: 1000,
   Great: 3000,
-  Good: 4000,
-  Fair: 5000,
-  Poor: 6000,
+  Good: 3000,
+  Fair: 3000,
+  Poor: 3000,
+};
+
+/** Goldmine grades for Record Grading / Sleeve Grading item specifics. */
+export const CONDITION_TO_GOLDMINE: Record<string, string> = {
+  Mint: "Mint (M)",
+  Great: "Near Mint (NM or M-)",
+  Good: "Very Good Plus (VG+)",
+  Fair: "Good (G)",
+  Poor: "Poor (P)",
 };
 
 export function getCategoryForGenre(genre?: string | null): number {
@@ -230,13 +240,19 @@ export async function createEbayListing(
     .map((u) => `<PictureURL>${escapeXml(getOriginalPublicUrl(u))}</PictureURL>`)
     .join("");
 
+  const goldmineGrade =
+    CONDITION_TO_GOLDMINE[album.condition] ?? "Very Good Plus (VG+)";
+
   // eBay music categories require Artist as a mandatory item specific.
   // Without it the API returns "The item specific Artist is missing."
+  // ConditionID is New/Used only; true grade goes in Record/Sleeve Grading.
   const itemSpecificsXml = [
     `<NameValueList><Name>Artist</Name><Value>${escapeXml(album.artist)}</Value></NameValueList>`,
     `<NameValueList><Name>Album Title</Name><Value>${escapeXml(album.title)}</Value></NameValueList>`,
     "<NameValueList><Name>Format</Name><Value>Vinyl</Value></NameValueList>",
     "<NameValueList><Name>Type</Name><Value>LP</Value></NameValueList>",
+    `<NameValueList><Name>Record Grading</Name><Value>${escapeXml(goldmineGrade)}</Value></NameValueList>`,
+    `<NameValueList><Name>Sleeve Grading</Name><Value>${escapeXml(goldmineGrade)}</Value></NameValueList>`,
     album.genre
       ? `<NameValueList><Name>Genre</Name><Value>${escapeXml(album.genre)}</Value></NameValueList>`
       : "",
