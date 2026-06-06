@@ -3,7 +3,15 @@
 import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, CheckCircle2, FileJson, Upload, X } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  FileJson,
+  ImageIcon,
+  Upload,
+  X,
+} from "lucide-react";
+import { PhotoMatchPanel } from "@/components/photo-match-panel";
 import { toast } from "sonner";
 import { CSVDropzone } from "@/components/csv-dropzone";
 import { VinylSpinner } from "@/components/vinyl-spinner";
@@ -34,7 +42,7 @@ import {
 const STEPS = ["Upload", "Preview", "Import"];
 const REQUIRED_TARGETS: TargetField[] = ["title", "artist", "condition"];
 
-type Mode = "csv" | "json";
+type Mode = "csv" | "json" | "photos";
 
 interface BoxFile {
   name: string;
@@ -232,6 +240,17 @@ export default function ImportPage() {
           <FileJson className="h-4 w-4" />
           Box JSON Files
         </button>
+        <button
+          onClick={() => setMode("photos")}
+          className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+            mode === "photos"
+              ? "bg-accent text-black"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <ImageIcon className="h-4 w-4" />
+          Cover Photos
+        </button>
       </div>
 
       {/* ── CSV mode ────────────────────────────────────────────────────────── */}
@@ -426,6 +445,9 @@ export default function ImportPage() {
           </div>
         </>
       )}
+
+      {/* ── Cover photo matching ──────────────────────────────────────────── */}
+      {mode === "photos" && <PhotoMatchPanel />}
 
       {/* ── JSON / Box Files mode ─────────────────────────────────────────── */}
       {mode === "json" && (

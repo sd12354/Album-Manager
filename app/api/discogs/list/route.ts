@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createDiscogsListing } from "@/lib/discogs";
+import {
+  createDiscogsListing,
+  getDiscogsListingStatus,
+  DiscogsError,
+} from "@/lib/discogs";
 import { generateListingDescription } from "@/lib/ai-pricing";
 import type { Album, AlbumCondition } from "@/types";
 
@@ -67,6 +71,11 @@ export async function POST(request: Request) {
   }
 
   if (!releaseId) {
+    console.warn("[discogs]", {
+      scope: "discogs",
+      event: "list_missing_release_id",
+      albumId,
+    });
     return NextResponse.json(
       {
         error:
@@ -75,6 +84,16 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
+
+  console.log("[discogs]", {
+    scope: "discogs",
+    event: "list_start",
+    albumId,
+    releaseId,
+    condition: typedAlbum.condition,
+    price,
+    tokenSource: userToken ? "user_metadata" : "env",
+  });
 
   // Use stored AI description as the Discogs listing comment. Generate on the
   // fly if ANTHROPIC_API_KEY is set and one hasn't been written yet.
@@ -111,8 +130,9 @@ export async function POST(request: Request) {
 
     // Verify the listing landed as "For Sale" — if it comes back as anything
     // else the seller account setup is incomplete on Discogs.
-    const { getDiscogsListingStatus } = await import("@/lib/discogs");
-    const status = await getDiscogsListingStatus(listingId, discogsToken).catch(() => null);
+    const status = await getDiscogsListingStatus(listingId, discogsToken).catch(
+      () => null
+    );
     const sellerWarning =
       status && status.status !== "For Sale"
         ? `Listing created but status is "${status.status}" — visit discogs.com/sell/manage to complete your seller setup and make it public.`
@@ -129,9 +149,35 @@ export async function POST(request: Request) {
       })
       .eq("id", albumId);
 
+    console.log("[discogs]", {
+      scope: "discogs",
+      event: "list_success",
+      albumId,
+      listingId,
+      listingStatus: status?.status,
+    });
+
     return NextResponse.json({ listingId, listingUrl, warning: sellerWarning });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Discogs listing failed";
-    return NextResponse.json({ error: message }, { status: 502 });
+    // DiscogsError carries the upstream HTTP status; map it through so the
+    // client sees 400/401/403/422 instead of a blanket 502.
+    const httpStatus =
+      err instanceof DiscogsError
+        ? err.status >= 400 && err.status < 600
+          ? err.status
+          : 502
+        : 502;
+
+    console.error("[discogs]", {
+      scope: "discogs",
+      event: "list_failed",
+      albumId,
+      releaseId,
+      httpStatus,
+      message,
+    });
+
+    return NextResponse.json({ error: message }, { status: httpStatus });
   }
 }

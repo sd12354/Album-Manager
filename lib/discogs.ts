@@ -20,11 +20,93 @@ function rateLimit(): Promise<void> {
   return queue;
 }
 
-class DiscogsError extends Error {
+export class DiscogsError extends Error {
   constructor(public status: number, message: string) {
     super(message);
     this.name = "DiscogsError";
   }
+}
+
+/**
+ * Lightweight structured logger so Discogs failures are diagnosable in
+ * production logs (e.g. Vercel). Mirrors the visibility we have for eBay.
+ */
+function logDiscogs(
+  level: "info" | "warn" | "error",
+  event: string,
+  detail?: Record<string, unknown>
+): void {
+  const payload = { scope: "discogs", event, ...detail };
+  if (level === "error") console.error("[discogs]", payload);
+  else if (level === "warn") console.warn("[discogs]", payload);
+  else console.log("[discogs]", payload);
+}
+
+/**
+ * Discogs returns errors as JSON `{ "message": "..." }`. Pull that out so we
+ * surface the real reason instead of a raw body blob.
+ */
+function extractDiscogsMessage(body: string): string | null {
+  if (!body) return null;
+  try {
+    const parsed = JSON.parse(body) as { message?: string };
+    if (parsed?.message) return parsed.message;
+  } catch {
+    // Not JSON — fall through to raw text.
+  }
+  return body.slice(0, 200);
+}
+
+/**
+ * Turn a non-OK response into a DiscogsError with a clean, actionable message.
+ * Reads the body exactly once and logs the failure with full context.
+ */
+async function discogsErrorFromResponse(
+  res: Response,
+  method: string,
+  path: string
+): Promise<DiscogsError> {
+  const body = await res.text().catch(() => "");
+  const apiMessage = extractDiscogsMessage(body);
+
+  let message: string;
+  switch (res.status) {
+    case 401:
+      message =
+        "Discogs token is invalid. Generate a new personal access token in Settings.";
+      break;
+    case 403:
+      message =
+        apiMessage && !/permission to access/i.test(apiMessage)
+          ? apiMessage
+          : "Discogs rejected this action. Your account isn't set up to sell yet — " +
+            "add a payment method and shipping policy at discogs.com/settings/seller, then retry.";
+      break;
+    case 404:
+      message = "Discogs resource not found.";
+      break;
+    case 422:
+      message = apiMessage
+        ? `Discogs rejected the listing data: ${apiMessage}`
+        : "Discogs rejected the listing data (validation error).";
+      break;
+    case 429:
+      message = "Discogs rate limit hit. Wait a minute and retry.";
+      break;
+    default:
+      message = apiMessage
+        ? `Discogs ${res.status}: ${apiMessage}`
+        : `Discogs ${res.status} error.`;
+  }
+
+  logDiscogs("error", "request_failed", {
+    method,
+    path,
+    status: res.status,
+    apiMessage,
+  });
+
+  return new DiscogsError(res.status, message);
 }
 
 async function discogsFetch<T>(path: string, token: string): Promise<T> {
@@ -38,28 +120,7 @@ async function discogsFetch<T>(path: string, token: string): Promise<T> {
     cache: "no-store",
   });
 
-  if (res.status === 429) {
-    throw new DiscogsError(
-      429,
-      "Discogs rate limit hit. Wait a minute and retry."
-    );
-  }
-  if (res.status === 401) {
-    throw new DiscogsError(
-      401,
-      "Discogs token is invalid. Generate a new personal access token."
-    );
-  }
-  if (res.status === 404) {
-    throw new DiscogsError(404, "Discogs resource not found.");
-  }
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new DiscogsError(
-      res.status,
-      `Discogs ${res.status}: ${body.slice(0, 200)}`
-    );
-  }
+  if (!res.ok) throw await discogsErrorFromResponse(res, "GET", path);
   return res.json() as Promise<T>;
 }
 
@@ -487,12 +548,7 @@ async function discogsPost<T>(
     cache: "no-store",
   });
 
-  if (res.status === 429) throw new DiscogsError(429, "Discogs rate limit hit.");
-  if (res.status === 401) throw new DiscogsError(401, "Discogs token is invalid.");
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new DiscogsError(res.status, `Discogs ${res.status}: ${text.slice(0, 200)}`);
-  }
+  if (!res.ok) throw await discogsErrorFromResponse(res, "POST", path);
   return res.json() as Promise<T>;
 }
 
@@ -507,13 +563,8 @@ async function discogsDelete(path: string, token: string): Promise<void> {
     cache: "no-store",
   });
 
-  if (res.status === 429) throw new DiscogsError(429, "Discogs rate limit hit.");
-  if (res.status === 401) throw new DiscogsError(401, "Discogs token is invalid.");
   if (res.status === 404) return; // already gone
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new DiscogsError(res.status, `Discogs ${res.status}: ${text.slice(0, 200)}`);
-  }
+  if (!res.ok) throw await discogsErrorFromResponse(res, "DELETE", path);
 }
 
 export async function createDiscogsListing(params: {
@@ -524,18 +575,65 @@ export async function createDiscogsListing(params: {
   comments?: string;
 }): Promise<{ listingId: number; listingUrl: string }> {
   const grade = CONDITION_TO_DISCOGS_GRADE[params.condition];
+
+  // Validate before hitting the API so we fail with a clear reason rather than
+  // a generic Discogs 422.
+  if (!grade) {
+    throw new DiscogsError(
+      400,
+      `Unknown album condition "${params.condition}" — cannot map to a Discogs grade.`
+    );
+  }
+  if (!Number.isFinite(params.releaseId) || params.releaseId <= 0) {
+    throw new DiscogsError(
+      400,
+      "Missing a valid Discogs release ID. Fetch prices first to match the release."
+    );
+  }
+  const price = Math.round(params.price * 100) / 100;
+  if (!Number.isFinite(price) || price <= 0) {
+    throw new DiscogsError(400, "List price must be a positive number.");
+  }
+
+  // `weight`/`format_quantity: "auto"` let Discogs compute shipping so the
+  // listing can go live as "For Sale"; "Mint (M)" sleeve falls back per grade.
+  const requestBody = {
+    release_id: params.releaseId,
+    condition: grade,
+    sleeve_condition: grade,
+    price,
+    status: "For Sale",
+    allow_offers: false,
+    weight: "auto",
+    format_quantity: "auto",
+    comments: params.comments ?? "Ships from USA. Securely packed.",
+  };
+
+  logDiscogs("info", "create_listing_request", {
+    releaseId: params.releaseId,
+    condition: grade,
+    price,
+  });
+
   const data = await discogsPost<{ listing_id: number; resource_url: string }>(
     "/marketplace/listings",
-    {
-      release_id: params.releaseId,
-      condition: grade,
-      sleeve_condition: grade,
-      price: params.price,
-      status: "For Sale",
-      comments: params.comments ?? "Ships from USA. Securely packed.",
-    },
+    requestBody,
     params.token
   );
+
+  if (!data?.listing_id) {
+    logDiscogs("error", "create_listing_no_id", { response: data });
+    throw new DiscogsError(
+      502,
+      "Discogs accepted the request but returned no listing ID."
+    );
+  }
+
+  logDiscogs("info", "create_listing_success", {
+    listingId: data.listing_id,
+    releaseId: params.releaseId,
+  });
+
   return {
     listingId: data.listing_id,
     listingUrl: `https://www.discogs.com/sell/item/${data.listing_id}`,
