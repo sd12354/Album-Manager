@@ -103,6 +103,7 @@ export function PhotoMatchPanel() {
   const [converting, setConverting] = useState(false);
   const [convertDone, setConvertDone] = useState(0);
   const [convertTotal, setConvertTotal] = useState(0);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [done, setDone] = useState<{ attached: number; failed: number } | null>(
     null
   );
@@ -118,6 +119,15 @@ export function PhotoMatchPanel() {
       setAlbums((data ?? []) as Pick<Album, "id" | "artist" | "title">[]);
     })();
   }, [supabase]);
+
+  useEffect(() => {
+    if (!lightboxUrl) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setLightboxUrl(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [lightboxUrl]);
 
   const addFiles = useCallback(async (fileList: FileList | null) => {
     if (!fileList) return;
@@ -491,10 +501,15 @@ export function PhotoMatchPanel() {
                     </span>
                   </div>
                 ) : (
-                  <div
-                    className="h-24 w-24 shrink-0 rounded-lg border border-border bg-cover bg-center"
+                  <button
+                    type="button"
+                    onClick={() => setLightboxUrl(row.previewUrl)}
+                    title="Click to expand"
+                    className="group relative h-24 w-24 shrink-0 cursor-zoom-in overflow-hidden rounded-lg border border-border bg-cover bg-center transition-transform hover:scale-[1.03]"
                     style={{ backgroundImage: `url(${row.previewUrl})` }}
-                  />
+                  >
+                    <span className="absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/20" />
+                  </button>
                 )}
 
                 <div className="min-w-0 flex-1 space-y-2">
@@ -547,7 +562,7 @@ export function PhotoMatchPanel() {
                             onChange={(e) =>
                               updateRow(row.id, { include: e.target.checked })
                             }
-                            className="h-3.5 w-3.5 accent-[#D4A843]"
+                            className="h-3.5 w-3.5 accent-[#8b7fe8]"
                           />
                           Attach to
                         </label>
@@ -644,6 +659,31 @@ export function PhotoMatchPanel() {
         <p className="mt-4 text-xs text-muted-foreground">
           Import your catalogue first (CSV or JSON tab) so covers can be matched to albums.
         </p>
+      )}
+
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm animate-fade-in"
+          onClick={() => setLightboxUrl(null)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <button
+            type="button"
+            onClick={() => setLightboxUrl(null)}
+            aria-label="Close"
+            className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+          >
+            <X className="h-5 w-5" />
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={lightboxUrl}
+            alt="Cover photo"
+            onClick={(e) => e.stopPropagation()}
+            className="max-h-[90vh] max-w-[90vw] rounded-lg object-contain shadow-2xl"
+          />
+        </div>
       )}
     </div>
   );

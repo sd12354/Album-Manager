@@ -223,7 +223,7 @@ export default function ImportPage() {
           onClick={() => setMode("csv")}
           className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
             mode === "csv"
-              ? "bg-accent text-black"
+              ? "bg-accent text-accent-foreground"
               : "text-muted-foreground hover:text-foreground"
           }`}
         >
@@ -233,7 +233,7 @@ export default function ImportPage() {
           onClick={() => setMode("json")}
           className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
             mode === "json"
-              ? "bg-accent text-black"
+              ? "bg-accent text-accent-foreground"
               : "text-muted-foreground hover:text-foreground"
           }`}
         >
@@ -244,7 +244,7 @@ export default function ImportPage() {
           onClick={() => setMode("photos")}
           className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
             mode === "photos"
-              ? "bg-accent text-black"
+              ? "bg-accent text-accent-foreground"
               : "text-muted-foreground hover:text-foreground"
           }`}
         >
@@ -262,7 +262,7 @@ export default function ImportPage() {
                 <div className="flex flex-col items-center">
                   <div
                     className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium transition-all duration-300 ${
-                      i <= step ? "bg-accent text-black scale-110" : "bg-input text-muted-foreground"
+                      i <= step ? "bg-accent text-accent-foreground scale-110" : "bg-input text-muted-foreground"
                     }`}
                   >
                     {i + 1}
@@ -304,7 +304,7 @@ export default function ImportPage() {
                         type="checkbox"
                         checked={headerless}
                         onChange={(e) => reparseAs(!e.target.checked)}
-                        className="h-3.5 w-3.5 cursor-pointer accent-[#D4A843]"
+                        className="h-3.5 w-3.5 cursor-pointer accent-[#8b7fe8]"
                       />
                       First row is data, not headers
                     </label>

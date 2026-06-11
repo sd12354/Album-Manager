@@ -78,7 +78,7 @@ export function HomeIntro() {
               />
             ))}
             {/* Label */}
-            <circle cx="100" cy="100" r="30" fill="#D4A843" />
+            <circle cx="100" cy="100" r="30" fill="#8b7fe8" />
             <circle cx="100" cy="100" r="30" fill="url(#vvSheen)" />
             <circle cx="100" cy="100" r="4" fill="#0b0b0d" />
             {/* Sheen sweep across the whole disc */}
@@ -119,7 +119,7 @@ export function HomeIntro() {
           width: 132px;
           height: 132px;
           animation: vvDiscIn 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
-          filter: drop-shadow(0 0 30px rgba(212,168,67,0.25));
+          filter: drop-shadow(0 0 30px rgba(139,127,232,0.25));
         }
         .vv-intro__svg {
           width: 100%;
@@ -150,7 +150,7 @@ export function HomeIntro() {
           height: 100%;
           width: 0%;
           border-radius: 999px;
-          background: linear-gradient(90deg, #C49833, #D4A843, #f0cf86);
+          background: linear-gradient(90deg, #6d5fc4, #8b7fe8, #c3b6f5);
           animation: vvBar 1.7s cubic-bezier(0.65, 0, 0.35, 1) 0.3s forwards;
         }
         @keyframes vvSpin {

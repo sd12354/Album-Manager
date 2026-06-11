@@ -28,7 +28,7 @@ function MarketingNav({ active, isLoggedIn }: { active: "home" | "about" | "poli
       {/* Logo */}
       <div className="relative flex items-center gap-2.5">
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent">
-          <Disc2 className="h-4 w-4 text-black" />
+          <Disc2 className="h-4 w-4 text-accent-foreground" />
         </div>
         <span className="font-display text-base font-bold text-white tracking-tight">
           VinylVault
@@ -58,7 +58,7 @@ function MarketingNav({ active, isLoggedIn }: { active: "home" | "about" | "poli
         ))}
         <Link
           href={isLoggedIn ? "/dashboard" : "/login"}
-          className="ml-1 rounded-full bg-accent px-4 py-1.5 text-sm font-semibold text-black transition-opacity hover:opacity-90"
+          className="ml-1 rounded-full bg-accent px-4 py-1.5 text-sm font-semibold text-accent-foreground transition-opacity hover:opacity-90"
         >
           {isLoggedIn ? "Go to Dashboard" : "Login"}
         </Link>
@@ -288,7 +288,7 @@ export function LandingPage({ isLoggedIn = false }: { isLoggedIn?: boolean }) {
           50%       { background-position: 100% 50%; }
         }
         .shimmer-text {
-          background: linear-gradient(135deg, #D4A843 0%, #F0C965 40%, #D4A843 60%, #B8892D 100%);
+          background: linear-gradient(135deg, #8b7fe8 0%, #b9a9f5 40%, #8b7fe8 60%, #5b4ba8 100%);
           background-size: 200% 200%;
           animation: shimmer-text 4s ease infinite;
           -webkit-background-clip: text;
@@ -325,7 +325,7 @@ export function LandingPage({ isLoggedIn = false }: { isLoggedIn?: boolean }) {
         <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
           <Link
             href="/signup"
-            className="inline-flex items-center gap-2 rounded-full bg-accent px-7 py-3.5 text-sm font-semibold text-black shadow-[0_0_30px_rgba(212,168,67,0.4)] transition-all hover:shadow-[0_0_40px_rgba(212,168,67,0.5)] hover:scale-[1.02]"
+            className="inline-flex items-center gap-2 rounded-full bg-accent px-7 py-3.5 text-sm font-semibold text-accent-foreground shadow-[0_0_30px_rgba(139,127,232,0.4)] transition-all hover:shadow-[0_0_40px_rgba(139,127,232,0.5)] hover:scale-[1.02]"
           >
             Get started free
             <ArrowRight className="h-4 w-4" />
@@ -481,7 +481,7 @@ export function LandingPage({ isLoggedIn = false }: { isLoggedIn?: boolean }) {
           </p>
           <Link
             href="/signup"
-            className="inline-flex items-center gap-2 rounded-full bg-accent px-8 py-4 text-sm font-semibold text-black shadow-[0_0_40px_rgba(212,168,67,0.3)] transition-all hover:shadow-[0_0_50px_rgba(212,168,67,0.45)] hover:scale-[1.02]"
+            className="inline-flex items-center gap-2 rounded-full bg-accent px-8 py-4 text-sm font-semibold text-accent-foreground shadow-[0_0_40px_rgba(139,127,232,0.3)] transition-all hover:shadow-[0_0_50px_rgba(139,127,232,0.45)] hover:scale-[1.02]"
           >
             Create your free account
             <ArrowRight className="h-4 w-4" />

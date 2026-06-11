@@ -26,8 +26,8 @@ function WelcomeImage() {
       {/* mini sidebar + content */}
       <div className="flex">
         <div className="w-10 border-r border-white/8 bg-[#090909] flex flex-col items-center gap-3 py-3">
-          <div className="h-6 w-6 rounded-md bg-[#D4A843]/20 flex items-center justify-center">
-            <Disc2 className="h-3 w-3 text-[#D4A843]" />
+          <div className="h-6 w-6 rounded-md bg-[#8b7fe8]/20 flex items-center justify-center">
+            <Disc2 className="h-3 w-3 text-[#8b7fe8]" />
           </div>
           {["Dashboard","Catalogue","Import","Settings"].map((_, i) => (
             <div key={i} className={`h-5 w-5 rounded-md ${i === 0 ? "bg-white/15" : "bg-white/5"}`} />
@@ -47,7 +47,7 @@ function WelcomeImage() {
             <p className="text-[8px] text-white/40 mb-1.5">Monthly Revenue</p>
             <div className="flex items-end gap-0.5 h-8">
               {[20,45,30,60,40,75,55,90,65,100,80,95].map((h, i) => (
-                <div key={i} className="flex-1 rounded-sm bg-[#D4A843]/50" style={{ height: `${h}%` }} />
+                <div key={i} className="flex-1 rounded-sm bg-[#8b7fe8]/50" style={{ height: `${h}%` }} />
               ))}
             </div>
           </div>
@@ -62,7 +62,7 @@ function ImportImage() {
     <div className="rounded-xl border border-white/10 bg-[#0a0a0b] p-3 space-y-2">
       {/* Tab bar */}
       <div className="flex gap-1 p-0.5 rounded-lg bg-white/5 w-fit">
-        <div className="rounded-md bg-[#D4A843] px-3 py-1 text-[9px] font-semibold text-black">CSV File</div>
+        <div className="rounded-md bg-[#8b7fe8] px-3 py-1 text-[9px] font-semibold text-black">CSV File</div>
         <div className="rounded-md px-3 py-1 text-[9px] font-medium text-white/40 flex items-center gap-1">
           <div className="h-2.5 w-2.5 rounded-sm bg-white/20" />
           Box JSON
@@ -79,8 +79,8 @@ function ImportImage() {
       {[["BOX_2_priced.json","142 records"],["BOX_3_priced.json","138 records"]].map(([name, count]) => (
         <div key={name} className="flex items-center justify-between rounded-md border border-white/8 bg-white/[0.03] px-2.5 py-1.5">
           <div className="flex items-center gap-1.5">
-            <div className="h-3.5 w-3.5 rounded bg-[#D4A843]/20 flex items-center justify-center">
-              <div className="h-1.5 w-1.5 rounded-sm bg-[#D4A843]" />
+            <div className="h-3.5 w-3.5 rounded bg-[#8b7fe8]/20 flex items-center justify-center">
+              <div className="h-1.5 w-1.5 rounded-sm bg-[#8b7fe8]" />
             </div>
             <span className="text-[9px] text-white/70 font-mono">{name}</span>
           </div>
@@ -106,7 +106,7 @@ function EbayImage() {
       <div className="space-y-1.5">
         {["Seller account active","Managed Payments enabled","Business policies set","OAuth token connected"].map((item, i) => (
           <div key={i} className="flex items-center gap-2">
-            <CheckCircle2 className="h-3.5 w-3.5 text-[#D4A843] shrink-0" />
+            <CheckCircle2 className="h-3.5 w-3.5 text-[#8b7fe8] shrink-0" />
             <span className="text-[9px] text-white/60">{item}</span>
           </div>
         ))}
@@ -116,7 +116,7 @@ function EbayImage() {
         <p className="text-[8px] text-white/40 mb-1">Example listing</p>
         <p className="text-[10px] text-white/80 font-medium truncate">Average White Band - AWB Vinyl Record LP Great</p>
         <div className="flex items-center gap-2 mt-1">
-          <span className="text-[9px] text-[#D4A843] font-semibold">$301.96</span>
+          <span className="text-[9px] text-[#8b7fe8] font-semibold">$301.96</span>
           <span className="text-[8px] text-white/30">· Category: R&amp;B Soul</span>
         </div>
       </div>
@@ -130,10 +130,10 @@ function DiscogsImage() {
       {/* Token field */}
       <div className="space-y-1">
         <p className="text-[9px] text-white/50">Personal Access Token</p>
-        <div className="rounded-md border border-[#D4A843]/30 bg-white/5 px-2.5 py-1.5 flex items-center gap-1.5">
+        <div className="rounded-md border border-[#8b7fe8]/30 bg-white/5 px-2.5 py-1.5 flex items-center gap-1.5">
           <div className="flex gap-0.5">
             {Array.from({length: 12}).map((_,i) => (
-              <div key={i} className="h-1.5 w-1.5 rounded-full bg-[#D4A843]/60" />
+              <div key={i} className="h-1.5 w-1.5 rounded-full bg-[#8b7fe8]/60" />
             ))}
           </div>
           <span className="text-[8px] text-white/30 ml-1">••• configured</span>
@@ -170,7 +170,7 @@ function PricingImage() {
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-1.5">
             <span className="text-[10px] font-bold text-white">Discogs</span>
-            <span className="rounded-full bg-[#D4A843]/15 px-1.5 py-0.5 text-[7px] font-bold uppercase tracking-wider text-[#D4A843]">Source</span>
+            <span className="rounded-full bg-[#8b7fe8]/15 px-1.5 py-0.5 text-[7px] font-bold uppercase tracking-wider text-[#8b7fe8]">Source</span>
             <div className="flex items-end gap-0.5 ml-1">
               {[1,2,3].map(i => (
                 <div key={i} className={`w-1 rounded-sm ${i <= 3 ? "bg-green-400" : "bg-white/20"}`}
@@ -181,10 +181,10 @@ function PricingImage() {
           <span className="text-[8px] text-white/40">#8805558 ↗</span>
         </div>
         <div className="space-y-1.5">
-          {[["Suggested for your grade","$301.96","#D4A843"],["Lowest active","$1.72","white"],["For sale now","98 copies","white"]].map(([label, val, color]) => (
+          {[["Suggested for your grade","$301.96","#8b7fe8"],["Lowest active","$1.72","white"],["For sale now","98 copies","white"]].map(([label, val, color]) => (
             <div key={label} className="flex justify-between">
               <span className="text-[9px] text-white/40">{label}</span>
-              <span className="text-[9px] font-semibold tabular-nums" style={{ color: color === "#D4A843" ? "#D4A843" : "rgba(255,255,255,0.8)" }}>{val}</span>
+              <span className="text-[9px] font-semibold tabular-nums" style={{ color: color === "#8b7fe8" ? "#8b7fe8" : "rgba(255,255,255,0.8)" }}>{val}</span>
             </div>
           ))}
         </div>
@@ -194,7 +194,7 @@ function PricingImage() {
       <div className="px-3 py-2 flex items-center justify-between">
         <div>
           <p className="text-[8px] text-white/40 uppercase tracking-wider">Suggested Price</p>
-          <p className="text-lg font-bold text-[#D4A843] tabular-nums">$301.96</p>
+          <p className="text-lg font-bold text-[#8b7fe8] tabular-nums">$301.96</p>
         </div>
         <span className="rounded-full bg-green-500/15 px-2 py-0.5 text-[8px] font-bold text-green-400">Great</span>
       </div>
@@ -232,16 +232,16 @@ function ListingShippingImage() {
         <p className="text-[8px] text-green-400 mt-0.5">+$251.96 vs purchase price</p>
       </div>
       {/* Shipping label */}
-      <div className="rounded-lg bg-[#D4A843]/10 border border-[#D4A843]/20 px-2.5 py-2">
+      <div className="rounded-lg bg-[#8b7fe8]/10 border border-[#8b7fe8]/20 px-2.5 py-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5">
-            <Package className="h-3.5 w-3.5 text-[#D4A843]" />
+            <Package className="h-3.5 w-3.5 text-[#8b7fe8]" />
             <div>
-              <p className="text-[9px] font-medium text-[#D4A843]">USPS Media Mail</p>
+              <p className="text-[9px] font-medium text-[#8b7fe8]">USPS Media Mail</p>
               <p className="text-[8px] text-white/40 font-mono">9400 1118 9956 1234 5678 90</p>
             </div>
           </div>
-          <span className="text-[8px] bg-[#D4A843] text-black font-semibold px-1.5 py-0.5 rounded">PDF ↓</span>
+          <span className="text-[8px] bg-[#8b7fe8] text-black font-semibold px-1.5 py-0.5 rounded">PDF ↓</span>
         </div>
       </div>
     </div>

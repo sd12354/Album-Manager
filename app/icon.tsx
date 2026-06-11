@@ -24,11 +24,11 @@ export default function Icon() {
             width: 22,
             height: 22,
             borderRadius: "50%",
-            background: "#D4A843",
+            background: "#8b7fe8",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            boxShadow: "0 0 0 3px #1a1a1c, 0 0 0 5px #D4A843",
+            boxShadow: "0 0 0 3px #1a1a1c, 0 0 0 5px #8b7fe8",
           }}
         >
           <div

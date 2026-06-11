@@ -6,7 +6,7 @@ function MarketingNav() {
     <nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-4 md:px-12">
       <div className="absolute inset-0 backdrop-blur-md bg-black/30 border-b border-white/[0.06]" />
       <div className="relative flex items-center gap-2.5">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#D4A843]">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#8b7fe8]">
           <Disc2 className="h-4 w-4 text-black" />
         </div>
         <span className="font-display text-base font-bold text-white tracking-tight">VinylVault</span>
@@ -15,7 +15,7 @@ function MarketingNav() {
         {[{ href: "/", label: "Home" }, { href: "/about", label: "About" }, { href: "/policy", label: "Policy" }].map(({ href, label }) => (
           <Link key={href} href={href} className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${href === "/policy" ? "bg-white/15 text-white" : "text-white/60 hover:text-white"}`}>{label}</Link>
         ))}
-        <Link href="/login" className="ml-1 rounded-full bg-[#D4A843] px-4 py-1.5 text-sm font-semibold text-black">Login</Link>
+        <Link href="/login" className="ml-1 rounded-full bg-[#8b7fe8] px-4 py-1.5 text-sm font-semibold text-black">Login</Link>
       </div>
     </nav>
   );
@@ -34,7 +34,7 @@ export default function PolicyPage() {
   return (
     <div className="min-h-screen bg-[#050507] text-white">
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div className="absolute -top-40 right-0 h-[500px] w-[500px] rounded-full bg-[#D4A843]/6 blur-[120px]" />
+        <div className="absolute -top-40 right-0 h-[500px] w-[500px] rounded-full bg-[#8b7fe8]/6 blur-[120px]" />
       </div>
 
       <MarketingNav />
@@ -93,7 +93,7 @@ export default function PolicyPage() {
           </Section>
 
           <Section title="Your rights">
-            <p>You can delete your account and all associated data at any time by contacting us at <a href="mailto:hello@vinylvault.app" className="text-[#D4A843] hover:underline">hello@vinylvault.app</a>. Album deletion within the app also permanently removes that record and its associated photos.</p>
+            <p>You can delete your account and all associated data at any time by contacting us at <a href="mailto:hello@vinylvault.app" className="text-[#8b7fe8] hover:underline">hello@vinylvault.app</a>. Album deletion within the app also permanently removes that record and its associated photos.</p>
           </Section>
 
           <Section title="Cookies">
@@ -105,7 +105,7 @@ export default function PolicyPage() {
           </Section>
 
           <Section title="Contact">
-            <p>Questions about this policy? Email <a href="mailto:hello@vinylvault.app" className="text-[#D4A843] hover:underline">hello@vinylvault.app</a>.</p>
+            <p>Questions about this policy? Email <a href="mailto:hello@vinylvault.app" className="text-[#8b7fe8] hover:underline">hello@vinylvault.app</a>.</p>
           </Section>
         </div>
       </div>

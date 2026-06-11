@@ -43,7 +43,7 @@ const config: Config = {
         },
         accent: {
           DEFAULT: "hsl(var(--accent))",
-          hover: "#C49833",
+          hover: "hsl(var(--accent) / 0.85)",
           foreground: "hsl(var(--accent-foreground))",
         },
         muted: {

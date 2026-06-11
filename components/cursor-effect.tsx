@@ -78,12 +78,12 @@ export function CursorEffect() {
   // Ring size & style based on context
   const ringSize   = isHero ? 90 : isLink ? 58 : 38;
   const ringBorder = isHero
-    ? "2px solid rgba(212,168,67,0.9)"
+    ? "2px solid rgba(139,127,232,0.9)"
     : isLink
-      ? "1.5px solid rgba(212,168,67,0.7)"
-      : "1.5px solid rgba(212,168,67,0.45)";
+      ? "1.5px solid rgba(139,127,232,0.7)"
+      : "1.5px solid rgba(139,127,232,0.45)";
   const ringBg = isHero
-    ? "rgba(212,168,67,0.06)"
+    ? "rgba(139,127,232,0.06)"
     : "transparent";
   const ringFilter = isHero
     ? "url(#cursor-liquid) brightness(1.15)"
@@ -134,7 +134,7 @@ export function CursorEffect() {
           width: isLink ? 10 : 7,
           height: isLink ? 10 : 7,
           borderRadius: "50%",
-          background: "#D4A843",
+          background: "#8b7fe8",
           mixBlendMode: "difference",
           pointerEvents: "none",
           zIndex: 10000,
@@ -173,7 +173,7 @@ export function CursorEffect() {
           width: blobSize,
           height: blobSize,
           borderRadius: "50%",
-          background: `radial-gradient(circle, rgba(212,168,67,${blobOpacity}) 0%, transparent 70%)`,
+          background: `radial-gradient(circle, rgba(139,127,232,${blobOpacity}) 0%, transparent 70%)`,
           pointerEvents: "none",
           zIndex: 9998,
           transition: "width 0.6s ease, height 0.6s ease, opacity 0.4s ease",

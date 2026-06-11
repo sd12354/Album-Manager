@@ -86,8 +86,8 @@ export function SalesChart({ data }: SalesChartProps) {
               >
                 <defs>
                   <linearGradient id="salesGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#D4A843" stopOpacity={0.5} />
-                    <stop offset="100%" stopColor="#D4A843" stopOpacity={0} />
+                    <stop offset="0%" stopColor="#8b7fe8" stopOpacity={0.5} />
+                    <stop offset="100%" stopColor="#8b7fe8" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid
@@ -115,17 +115,17 @@ export function SalesChart({ data }: SalesChartProps) {
                 <Tooltip
                   content={<ChartTooltip />}
                   cursor={{
-                    stroke: "rgba(212,168,67,0.25)",
+                    stroke: "rgba(139,127,232,0.25)",
                     strokeWidth: 1,
                   }}
                 />
                 <Area
                   type="monotone"
                   dataKey="revenue"
-                  stroke="#D4A843"
+                  stroke="#8b7fe8"
                   strokeWidth={2}
                   fill="url(#salesGradient)"
-                  activeDot={{ r: 4, fill: "#D4A843", stroke: "#0A0A0B" }}
+                  activeDot={{ r: 4, fill: "#8b7fe8", stroke: "#0A0A0B" }}
                 />
               </AreaChart>
             </ResponsiveContainer>

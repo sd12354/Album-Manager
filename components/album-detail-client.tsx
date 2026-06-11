@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Disc2, ExternalLink, Package, RefreshCw, ShoppingBag, Sparkles, Trash2, Upload } from "lucide-react";
+import { ArrowLeft, Disc2, ExternalLink, Package, RefreshCw, ShoppingBag, Sparkles, Trash2, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { AlbumStatusBadge } from "@/components/album-status-badge";
 import { ConditionBadge } from "@/components/condition-badge";
@@ -117,6 +117,16 @@ export function AlbumDetailClient({
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!lightboxUrl) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setLightboxUrl(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [lightboxUrl]);
 
   async function handleFetchPrices() {
     setFetching(true);
@@ -511,11 +521,16 @@ export function AlbumDetailClient({
             <Label className="mb-3 block">Photos</Label>
             <div className="grid grid-cols-4 gap-2">
               {(album.photo_urls ?? []).map((url, i) => (
-                <div
+                <button
                   key={i}
-                  className="aspect-square rounded-lg border border-border bg-input bg-cover bg-center"
+                  type="button"
+                  onClick={() => setLightboxUrl(url)}
+                  title="Click to expand"
+                  className="group relative aspect-square cursor-zoom-in overflow-hidden rounded-lg border border-border bg-input bg-cover bg-center transition-transform hover:scale-[1.02]"
                   style={{ backgroundImage: `url(${url})` }}
-                />
+                >
+                  <span className="absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/20" />
+                </button>
               ))}
               {(album.photo_urls ?? []).length < EBAY_MAX_PHOTOS && (
                 <label className="flex aspect-square cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-border transition-colors hover:border-accent/50">
@@ -1072,6 +1087,31 @@ export function AlbumDetailClient({
           </div>
         </div>
       </div>
+
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm animate-fade-in"
+          onClick={() => setLightboxUrl(null)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <button
+            type="button"
+            onClick={() => setLightboxUrl(null)}
+            aria-label="Close"
+            className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+          >
+            <X className="h-5 w-5" />
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={lightboxUrl}
+            alt={`${album.artist} — ${album.title}`}
+            onClick={(e) => e.stopPropagation()}
+            className="max-h-[90vh] max-w-[90vw] rounded-lg object-contain shadow-2xl"
+          />
+        </div>
+      )}
     </div>
   );
 }

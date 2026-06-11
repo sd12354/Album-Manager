@@ -17,13 +17,14 @@
     --secondary-foreground: 240 10% 10%;
     --muted: 40 10% 87%;
     --muted-foreground: 240 5% 42%;
-    --accent: 42 62% 55%;
-    --accent-foreground: 240 10% 5%;
+    /* Deeper violet in light mode so accent text stays readable on white. */
+    --accent: 255 55% 52%;
+    --accent-foreground: 0 0% 100%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 98%;
     --border: 40 15% 86%;
     --input: 40 15% 91%;
-    --ring: 42 62% 55%;
+    --ring: 255 55% 52%;
     --radius: 0.75rem;
     --sidebar: 40 20% 93%;
   }
@@ -42,13 +43,14 @@
     --secondary-foreground: 60 9% 96%;
     --muted: 215 16% 47%;
     --muted-foreground: 215 20% 65%;
-    --accent: 42 62% 55%;
-    --accent-foreground: 240 6% 4%;
+    /* Soft lavender in dark mode — gentle, high-contrast on near-black. */
+    --accent: 252 78% 76%;
+    --accent-foreground: 240 10% 8%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 60 9% 96%;
     --border: 240 5% 15%;
     --input: 240 4% 11%;
-    --ring: 42 62% 55%;
+    --ring: 252 78% 76%;
     --sidebar: 240 5% 6%;
   }
 

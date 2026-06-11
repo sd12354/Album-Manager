@@ -6,7 +6,7 @@ function MarketingNav() {
     <nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-4 md:px-12">
       <div className="absolute inset-0 backdrop-blur-md bg-black/30 border-b border-white/[0.06]" />
       <div className="relative flex items-center gap-2.5">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#D4A843]">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#8b7fe8]">
           <Disc2 className="h-4 w-4 text-black" />
         </div>
         <span className="font-display text-base font-bold text-white tracking-tight">VinylVault</span>
@@ -15,7 +15,7 @@ function MarketingNav() {
         {([{ href: "/", label: "Home" }, { href: "/about", label: "About" }, { href: "/policy", label: "Policy" }] as const).map(({ href, label }) => (
           <Link key={href} href={href} className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${href === "/about" ? "bg-white/15 text-white" : "text-white/60 hover:text-white"}`}>{label}</Link>
         ))}
-        <Link href="/login" className="ml-1 rounded-full bg-[#D4A843] px-4 py-1.5 text-sm font-semibold text-black">Login</Link>
+        <Link href="/login" className="ml-1 rounded-full bg-[#8b7fe8] px-4 py-1.5 text-sm font-semibold text-black">Login</Link>
       </div>
     </nav>
   );
@@ -25,7 +25,7 @@ export default function AboutPage() {
   return (
     <div className="min-h-screen bg-[#050507] text-white">
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div className="absolute -top-40 -left-40 h-[600px] w-[600px] rounded-full bg-[#D4A843]/8 blur-[120px]" />
+        <div className="absolute -top-40 -left-40 h-[600px] w-[600px] rounded-full bg-[#8b7fe8]/8 blur-[120px]" />
         <div className="absolute bottom-0 right-0 h-[400px] w-[400px] rounded-full bg-purple-600/8 blur-[100px]" />
       </div>
 
@@ -69,7 +69,7 @@ export default function AboutPage() {
                 "Portfolio analytics: collection value, revenue, profit margin",
               ].map((item) => (
                 <li key={item} className="flex items-start gap-2.5">
-                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#D4A843]" />
+                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#8b7fe8]" />
                   {item}
                 </li>
               ))}
@@ -90,7 +90,7 @@ export default function AboutPage() {
             <p>
               VinylVault is actively developed. If you have feedback, feature requests, or need help
               getting set up, reach out at{" "}
-              <a href="mailto:hello@vinylvault.app" className="text-[#D4A843] hover:underline">
+              <a href="mailto:hello@vinylvault.app" className="text-[#8b7fe8] hover:underline">
                 hello@vinylvault.app
               </a>.
             </p>
@@ -98,7 +98,7 @@ export default function AboutPage() {
         </div>
 
         <div className="mt-14 flex gap-3">
-          <Link href="/signup" className="rounded-full bg-[#D4A843] px-6 py-3 text-sm font-semibold text-black hover:opacity-90 transition-opacity">
+          <Link href="/signup" className="rounded-full bg-[#8b7fe8] px-6 py-3 text-sm font-semibold text-black hover:opacity-90 transition-opacity">
             Get started
           </Link>
           <Link href="/" className="rounded-full border border-white/15 px-6 py-3 text-sm font-medium text-white/70 hover:text-white transition-colors">
