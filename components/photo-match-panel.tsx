@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ACCEPT_ATTRIBUTE } from "@/lib/photos";
+import { ACCEPT_ATTRIBUTE, convertHeicToJpeg, isHeic } from "@/lib/photos";
 import { createClient } from "@/lib/supabase/client";
 import type { AlbumMatchCandidate } from "@/lib/album-matching";
 import type { Album } from "@/types";
@@ -85,16 +85,38 @@ export function PhotoMatchPanel() {
     })();
   }, [supabase]);
 
-  const addFiles = useCallback((fileList: FileList | null) => {
+  const addFiles = useCallback(async (fileList: FileList | null) => {
     if (!fileList) return;
-    const newRows: PhotoMatchRow[] = Array.from(fileList).map((file) => ({
-      id: `${file.name}-${file.size}-${file.lastModified}-${Math.random()}`,
-      file,
-      previewUrl: URL.createObjectURL(file),
-      status: "pending",
-      selectedAlbumId: null,
-      include: false,
-    }));
+    const files = Array.from(fileList);
+
+    // iPhone photos arrive as HEIC, which browsers can't preview and the AI
+    // vision model can't read — convert to JPEG up front.
+    if (files.some(isHeic)) {
+      toast.message("Converting HEIC photos to JPEG…");
+    }
+
+    const converted = await Promise.all(
+      files.map(async (file) => {
+        try {
+          return await convertHeicToJpeg(file);
+        } catch {
+          toast.error(`${file.name}: couldn't convert HEIC to JPEG.`);
+          return null;
+        }
+      })
+    );
+
+    const newRows: PhotoMatchRow[] = converted
+      .filter((file): file is File => file !== null)
+      .map((file) => ({
+        id: `${file.name}-${file.size}-${file.lastModified}-${Math.random()}`,
+        file,
+        previewUrl: URL.createObjectURL(file),
+        status: "pending",
+        selectedAlbumId: null,
+        include: false,
+      }));
+
     setRows((prev) => [...prev, ...newRows]);
     setDone(null);
   }, []);
@@ -256,13 +278,13 @@ export function PhotoMatchPanel() {
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => {
           e.preventDefault();
-          addFiles(e.dataTransfer.files);
+          void addFiles(e.dataTransfer.files);
         }}
       >
         <ImageIcon className="mb-3 h-10 w-10 text-muted-foreground" />
         <p className="text-sm font-medium">Drop cover photos here</p>
         <p className="mt-1 text-xs text-muted-foreground">
-          JPEG, PNG, WebP — one album cover per photo
+          JPEG, PNG, WebP, HEIC — one album cover per photo
         </p>
         <input
           ref={fileInputRef}
@@ -270,7 +292,7 @@ export function PhotoMatchPanel() {
           accept={ACCEPT_ATTRIBUTE}
           multiple
           className="hidden"
-          onChange={(e) => addFiles(e.target.files)}
+          onChange={(e) => void addFiles(e.target.files)}
         />
       </label>
 

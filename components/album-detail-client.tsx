@@ -23,6 +23,7 @@ import {
 import { CONDITION_MULTIPLIERS } from "@/lib/pricing";
 import {
   ACCEPT_ATTRIBUTE,
+  convertHeicToJpeg,
   EBAY_MAX_PHOTOS,
   getOriginalPublicUrl,
   sanitizeFilename,
@@ -413,7 +414,15 @@ export function AlbumDetailClient({
     setUploading(true);
     const uploadedUrls: string[] = [];
 
-    for (const file of toUpload) {
+    for (const rawFile of toUpload) {
+      let file = rawFile;
+      try {
+        file = await convertHeicToJpeg(rawFile);
+      } catch {
+        toast.error(`${rawFile.name}: couldn't convert HEIC to JPEG.`);
+        continue;
+      }
+
       const validation = await validatePhoto(file);
       if (!validation.ok) {
         toast.error(validation.errors.join(" "), { duration: 7000 });

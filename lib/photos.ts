@@ -24,7 +24,49 @@ export const ACCEPTED_MIME_TYPES = [
 
 export type AcceptedMimeType = (typeof ACCEPTED_MIME_TYPES)[number];
 
-export const ACCEPT_ATTRIBUTE = ACCEPTED_MIME_TYPES.join(",");
+// HEIC/HEIF (Apple's default iPhone format) is accepted for *upload* but is
+// converted to JPEG in the browser before it ever hits storage, eBay, Discogs,
+// or the AI vision model — none of which can read HEIC. We list the mime types
+// AND the file extensions because Safari/Chrome sometimes report an empty
+// file.type for .heic files.
+export const ACCEPT_ATTRIBUTE = [
+  ...ACCEPTED_MIME_TYPES,
+  "image/heic",
+  "image/heif",
+  ".heic",
+  ".heif",
+].join(",");
+
+/** True when the file is an Apple HEIC/HEIF image (by mime type or extension). */
+export function isHeic(file: File): boolean {
+  const type = file.type.toLowerCase();
+  if (type === "image/heic" || type === "image/heif") return true;
+  const name = file.name.toLowerCase();
+  return name.endsWith(".heic") || name.endsWith(".heif");
+}
+
+/**
+ * Convert a HEIC/HEIF file to a JPEG File in the browser. Non-HEIC files are
+ * returned unchanged. `heic2any` is browser-only (it uses canvas/WASM), so it
+ * is imported dynamically to keep it out of any server bundle.
+ */
+export async function convertHeicToJpeg(file: File): Promise<File> {
+  if (!isHeic(file)) return file;
+
+  const { default: heic2any } = await import("heic2any");
+  const converted = await heic2any({
+    blob: file,
+    toType: "image/jpeg",
+    quality: 0.92,
+  });
+  const blob = Array.isArray(converted) ? converted[0] : converted;
+
+  const newName = `${file.name.replace(/\.(heic|heif)$/i, "")}.jpg`;
+  return new File([blob], newName, {
+    type: "image/jpeg",
+    lastModified: file.lastModified,
+  });
+}
 
 // eBay Picture Service requirements & recommendations (sandbox + production).
 export const EBAY_MIN_DIMENSION = 500; // hard minimum on longest side
@@ -83,7 +125,7 @@ export async function validatePhoto(file: File): Promise<PhotoValidationResult> 
   if (!(ACCEPTED_MIME_TYPES as readonly string[]).includes(file.type)) {
     const friendly =
       file.type === "image/heic" || file.type === "image/heif"
-        ? "HEIC/HEIF isn't supported by eBay. Convert to JPEG first (Preview > Export, or use your phone's share-as-JPEG option)."
+        ? "This HEIC photo couldn't be converted to JPEG automatically. Try re-saving it as JPEG (Preview > Export, or your phone's share-as-JPEG option)."
         : `Unsupported file type${file.type ? ` (${file.type})` : ""}. Use JPEG, PNG, WebP, GIF, BMP, or TIFF.`;
     errors.push(friendly);
     return { ok: false, errors, warnings };
