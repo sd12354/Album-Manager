@@ -12,10 +12,16 @@ const THEME_KEY = "vinylvault.theme";
 interface AppShellProps {
   userEmail?: string;
   ebayConnected?: boolean;
+  discogsConnected?: boolean;
   children: React.ReactNode;
 }
 
-export function AppShell({ userEmail, ebayConnected, children }: AppShellProps) {
+export function AppShell({
+  userEmail,
+  ebayConnected,
+  discogsConnected,
+  children,
+}: AppShellProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
@@ -74,6 +80,7 @@ export function AppShell({ userEmail, ebayConnected, children }: AppShellProps) 
       <Sidebar
         userEmail={userEmail}
         ebayConnected={ebayConnected}
+        discogsConnected={discogsConnected}
         collapsed={collapsed}
         onToggle={() => setCollapsed((v) => !v)}
         onHelpClick={() => setHelpPanelOpen(true)}

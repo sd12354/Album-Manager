@@ -93,17 +93,49 @@ export function findBestAlbumMatch(
   identified: IdentifiedCover,
   albums: Pick<Album, "id" | "artist" | "title" | "catalog_number">[]
 ): AlbumMatchResult {
-  const ranked = albums
-    .map((album) => {
-      const score = scoreAlbumMatch(identified, album);
-      return {
-        albumId: album.id,
-        artist: album.artist,
-        title: album.title,
-        score,
-        confidence: scoreConfidence(score),
-      };
-    })
+  return findBestAlbumMatchMulti([{ identified }], albums);
+}
+
+export interface ScoredIdentification {
+  identified: IdentifiedCover;
+  /**
+   * Score bonus added to every album scored against this identification (e.g.
+   * a visual confirmation from comparing the cover to a Discogs release).
+   */
+  bonus?: number;
+}
+
+/**
+ * Match a catalogue against several identifications of the same cover (e.g. the
+ * raw OCR reading plus a Discogs-confirmed reading), taking the best score per
+ * album. This lets a visual/Discogs match rescue covers whose text the OCR
+ * pass misread because of stylized fonts.
+ */
+export function findBestAlbumMatchMulti(
+  identifications: ScoredIdentification[],
+  albums: Pick<Album, "id" | "artist" | "title" | "catalog_number">[]
+): AlbumMatchResult {
+  const bestByAlbum = new Map<string, AlbumMatchCandidate>();
+
+  for (const { identified, bonus = 0 } of identifications) {
+    for (const album of albums) {
+      const raw = scoreAlbumMatch(identified, album);
+      if (raw <= 0) continue;
+      const score = Math.min(1, Math.round((raw + bonus) * 1000) / 1000);
+      const existing = bestByAlbum.get(album.id);
+      if (!existing || score > existing.score) {
+        bestByAlbum.set(album.id, {
+          albumId: album.id,
+          artist: album.artist,
+          title: album.title,
+          score,
+          confidence: scoreConfidence(score),
+        });
+      }
+    }
+  }
+
+  const ranked = Array.from(bestByAlbum.values())
     .filter((c) => c.score >= 0.35)
     .sort((a, b) => b.score - a.score);
 

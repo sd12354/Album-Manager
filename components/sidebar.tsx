@@ -26,6 +26,7 @@ const navItems = [
 interface SidebarProps {
   userEmail?: string;
   ebayConnected?: boolean;
+  discogsConnected?: boolean;
   collapsed?: boolean;
   onToggle?: () => void;
   onHelpClick?: () => void;
@@ -34,6 +35,7 @@ interface SidebarProps {
 export function Sidebar({
   userEmail,
   ebayConnected = false,
+  discogsConnected = false,
   collapsed = false,
   onToggle,
   onHelpClick,
@@ -138,6 +140,15 @@ export function Sidebar({
                 ebayConnected ? "bg-green-500" : "bg-muted"
               )}
             />
+            <span
+              title={
+                discogsConnected ? "Discogs Connected" : "Discogs Not Connected"
+              }
+              className={cn(
+                "h-2 w-2 rounded-full",
+                discogsConnected ? "bg-green-500" : "bg-muted"
+              )}
+            />
             <button
               onClick={handleLogout}
               aria-label="Log out"
@@ -149,7 +160,7 @@ export function Sidebar({
           </div>
         ) : (
           <>
-            <div className="mb-3 flex items-center gap-2 text-xs">
+            <div className="mb-2 flex items-center gap-2 text-xs">
               <span
                 className={cn(
                   "h-2 w-2 rounded-full",
@@ -158,6 +169,17 @@ export function Sidebar({
               />
               <span className="text-muted-foreground">
                 {ebayConnected ? "eBay Connected" : "eBay Not Connected"}
+              </span>
+            </div>
+            <div className="mb-3 flex items-center gap-2 text-xs">
+              <span
+                className={cn(
+                  "h-2 w-2 rounded-full",
+                  discogsConnected ? "bg-green-500" : "bg-muted"
+                )}
+              />
+              <span className="text-muted-foreground">
+                {discogsConnected ? "Discogs Connected" : "Discogs Not Connected"}
               </span>
             </div>
             {userEmail && (

@@ -197,6 +197,8 @@ interface DiscogsSearchResult {
     format?: string[];
     catno?: string;
     country?: string;
+    cover_image?: string;
+    thumb?: string;
     community?: { want?: number; have?: number };
   }>;
 }
@@ -447,6 +449,91 @@ export async function searchDiscogsRelease(
   }
 
   return { match: null, attempts: tried };
+}
+
+export interface DiscogsReleaseCandidate {
+  id: number;
+  artist: string;
+  title: string;
+  catalogNumber?: string;
+  coverImage?: string;
+  year?: string;
+}
+
+/**
+ * Discogs search "title" fields come back as "Artist - Title" (with optional
+ * "(2)" disambiguation suffixes on the artist). Split into clean parts.
+ */
+function splitArtistTitle(combined: string): { artist: string; title: string } {
+  const idx = combined.indexOf(" - ");
+  if (idx === -1) return { artist: "", title: combined.trim() };
+  const artist = combined
+    .slice(0, idx)
+    .replace(/\s*\(\d+\)\s*$/, "")
+    .trim();
+  const title = combined.slice(idx + 3).trim();
+  return { artist, title };
+}
+
+/**
+ * Search Discogs for the top release candidates matching the (possibly noisy,
+ * OCR-derived) artist/title, returning each with a cover image and clean,
+ * authoritative metadata. Used to visually confirm a cover photo when text
+ * extraction alone is uncertain. Issues a single API request to stay within
+ * Discogs rate limits even when matching large photo batches.
+ */
+export async function searchDiscogsCandidates(
+  artist: string,
+  title: string,
+  catalogNumber: string | undefined,
+  token: DiscogsAuthInput,
+  limit = 4
+): Promise<DiscogsReleaseCandidate[]> {
+  const params = new URLSearchParams({ type: "release", per_page: "10" });
+  if (artist) params.set("artist", artist);
+  if (title) params.set("release_title", title);
+  if (catalogNumber) params.set("catno", catalogNumber);
+
+  let results: SearchResult[];
+  try {
+    const data = await discogsFetch<DiscogsSearchResult>(
+      `/database/search?${params.toString()}`,
+      token
+    );
+    results = data.results ?? [];
+  } catch (err) {
+    logDiscogs("warn", "candidate_search_failed", {
+      message: err instanceof Error ? err.message : String(err),
+    });
+    return [];
+  }
+
+  // Prefer vinyl pressings, then the most-collected releases.
+  const ranked = results.slice().sort((a, b) => {
+    const aVinyl = a.format?.some((f) => /vinyl|lp/i.test(f)) ? 1 : 0;
+    const bVinyl = b.format?.some((f) => /vinyl|lp/i.test(f)) ? 1 : 0;
+    if (aVinyl !== bVinyl) return bVinyl - aVinyl;
+    return (b.community?.have ?? 0) - (a.community?.have ?? 0);
+  });
+
+  const out: DiscogsReleaseCandidate[] = [];
+  const seen = new Set<number>();
+  for (const r of ranked) {
+    if (out.length >= limit) break;
+    if (!r.id || seen.has(r.id)) continue;
+    seen.add(r.id);
+    const { artist: a, title: t } = splitArtistTitle(r.title ?? "");
+    if (!t) continue;
+    out.push({
+      id: r.id,
+      artist: a,
+      title: t,
+      catalogNumber: r.catno,
+      coverImage: r.cover_image ?? r.thumb,
+      year: r.year != null ? String(r.year) : undefined,
+    });
+  }
+  return out;
 }
 
 export async function fetchMarketplaceStats(

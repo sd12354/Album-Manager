@@ -419,7 +419,7 @@ export function AlbumDetailClient({
       try {
         file = await convertHeicToJpeg(rawFile);
       } catch {
-        toast.error(`${rawFile.name}: couldn't convert HEIC to JPEG.`);
+        toast.error(`${rawFile.name}: couldn't convert HEIC/HEIF to JPEG.`);
         continue;
       }
 

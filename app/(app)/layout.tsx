@@ -17,8 +17,23 @@ export default async function AppLayout({
     .eq("user_id", user?.id ?? "")
     .maybeSingle();
 
+  const userMeta = (user?.user_metadata ?? {}) as {
+    discogs_token?: string;
+    discogs_oauth_token?: string;
+    discogs_oauth_token_secret?: string;
+  };
+  const discogsConnected = !!(
+    (userMeta.discogs_oauth_token && userMeta.discogs_oauth_token_secret) ||
+    userMeta.discogs_token ||
+    process.env.DISCOGS_PERSONAL_ACCESS_TOKEN
+  );
+
   return (
-    <AppShell userEmail={user?.email} ebayConnected={!!ebayCreds}>
+    <AppShell
+      userEmail={user?.email}
+      ebayConnected={!!ebayCreds}
+      discogsConnected={discogsConnected}
+    >
       {children}
     </AppShell>
   );

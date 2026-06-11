@@ -1,21 +1,23 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import {
-  appendPhotosToAlbumRecord,
-  uploadPhotosToAlbum,
-} from "@/lib/upload-album-photos";
-import { ACCEPTED_MIME_TYPES } from "@/lib/photos";
+import { EBAY_MAX_PHOTOS } from "@/lib/photos";
 import type { Album } from "@/types";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+export const maxDuration = 60;
 export const dynamic = "force-dynamic";
 
 interface AttachItem {
   albumId: string;
-  fileIndex: number;
+  url: string;
 }
 
+/**
+ * Attaches already-uploaded storage photos to albums. Binaries are uploaded
+ * directly from the browser to Supabase Storage, so this endpoint only receives
+ * a small JSON list of { albumId, url } pairs — keeping it well clear of the
+ * serverless request-body limit even for 100+ photo batches.
+ */
 export async function POST(request: Request) {
   const supabase = await createClient();
   const {
@@ -26,25 +28,48 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const formData = await request.formData();
-  const itemsRaw = formData.get("items");
-
-  if (typeof itemsRaw !== "string") {
-    return NextResponse.json({ error: "items JSON is required" }, { status: 400 });
-  }
-
-  let items: AttachItem[];
+  let body: { items?: AttachItem[] };
   try {
-    items = JSON.parse(itemsRaw) as AttachItem[];
+    body = (await request.json()) as { items?: AttachItem[] };
   } catch {
-    return NextResponse.json({ error: "Invalid items JSON" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  if (!Array.isArray(items) || items.length === 0) {
+  const items = Array.isArray(body.items) ? body.items : [];
+  if (items.length === 0) {
     return NextResponse.json({ error: "No photos to attach" }, { status: 400 });
   }
 
-  const albumIds = Array.from(new Set(items.map((i) => i.albumId)));
+  // Only accept URLs that point at our own storage bucket, so a tampered
+  // request can't inject arbitrary external image URLs into a listing.
+  const expectedPrefix = `${
+    process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""
+  }/storage/v1/object/public/album-photos/`;
+
+  const valid = items.filter(
+    (i) =>
+      i &&
+      typeof i.albumId === "string" &&
+      typeof i.url === "string" &&
+      i.url.startsWith(expectedPrefix)
+  );
+
+  if (valid.length === 0) {
+    return NextResponse.json(
+      { error: "No valid photo URLs to attach" },
+      { status: 400 }
+    );
+  }
+
+  // Group new URLs by album so each album is updated exactly once.
+  const byAlbum = new Map<string, string[]>();
+  for (const item of valid) {
+    const list = byAlbum.get(item.albumId) ?? [];
+    list.push(item.url);
+    byAlbum.set(item.albumId, list);
+  }
+
+  const albumIds = Array.from(byAlbum.keys());
   const { data: albums, error: albumsError } = await supabase
     .from("albums")
     .select("id, photo_urls")
@@ -55,98 +80,55 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: albumsError.message }, { status: 500 });
   }
 
-  const albumMap = new Map(
-    (albums ?? []).map((a) => [a.id, a as Pick<Album, "id" | "photo_urls">])
+  const existingByAlbum = new Map(
+    (albums ?? []).map((a) => [
+      a.id,
+      (a as Pick<Album, "id" | "photo_urls">).photo_urls ?? [],
+    ])
   );
 
-  const results: Array<{
-    albumId: string;
-    fileIndex: number;
-    ok: boolean;
-    error?: string;
-    photoCount?: number;
-  }> = [];
+  let attached = 0;
+  let skipped = 0;
+  const errors: string[] = [];
 
-  for (const item of items) {
-    const album = albumMap.get(item.albumId);
-    if (!album) {
-      results.push({
-        albumId: item.albumId,
-        fileIndex: item.fileIndex,
-        ok: false,
-        error: "Album not found",
-      });
+  for (const [albumId, urls] of Array.from(byAlbum.entries())) {
+    const existing = existingByAlbum.get(albumId);
+    if (!existing) {
+      skipped += urls.length;
       continue;
     }
 
-    const file = formData.get(`file_${item.fileIndex}`);
-    if (!(file instanceof File)) {
-      results.push({
-        albumId: item.albumId,
-        fileIndex: item.fileIndex,
-        ok: false,
-        error: "Photo file missing",
-      });
+    const room = EBAY_MAX_PHOTOS - existing.length;
+    if (room <= 0) {
+      skipped += urls.length;
       continue;
     }
 
-    if (!(ACCEPTED_MIME_TYPES as readonly string[]).includes(file.type)) {
-      results.push({
-        albumId: item.albumId,
-        fileIndex: item.fileIndex,
-        ok: false,
-        error: "Unsupported image type",
-      });
+    const toAdd = urls.slice(0, room);
+    skipped += urls.length - toAdd.length;
+    const merged = [...existing, ...toAdd];
+
+    const { error } = await supabase
+      .from("albums")
+      .update({ photo_urls: merged })
+      .eq("id", albumId)
+      .eq("user_id", user.id);
+
+    if (error) {
+      errors.push(`${albumId}: ${error.message}`);
+      skipped += toAdd.length;
       continue;
     }
 
-    try {
-      const buffer = Buffer.from(await file.arrayBuffer());
-      const existing = album.photo_urls ?? [];
-      const { urls, errors } = await uploadPhotosToAlbum(supabase, {
-        userId: user.id,
-        albumId: album.id,
-        existingUrls: existing,
-        photos: [{ buffer, mimeType: file.type, filename: file.name }],
-      });
-
-      if (urls.length === 0) {
-        results.push({
-          albumId: item.albumId,
-          fileIndex: item.fileIndex,
-          ok: false,
-          error: errors[0] ?? "Upload failed",
-        });
-        continue;
-      }
-
-      await appendPhotosToAlbumRecord(supabase, album.id, existing, urls);
-      album.photo_urls = [...existing, ...urls].slice(0, 24);
-
-      results.push({
-        albumId: item.albumId,
-        fileIndex: item.fileIndex,
-        ok: true,
-        photoCount: urls.length,
-      });
-    } catch (err) {
-      results.push({
-        albumId: item.albumId,
-        fileIndex: item.fileIndex,
-        ok: false,
-        error: err instanceof Error ? err.message : "Attach failed",
-      });
-    }
+    attached += toAdd.length;
   }
-
-  const attached = results.filter((r) => r.ok).length;
-  const failed = results.filter((r) => !r.ok).length;
 
   console.log("[attach-photos]", {
     event: "batch_complete",
     attached,
-    failed,
+    skipped,
+    errorCount: errors.length,
   });
 
-  return NextResponse.json({ attached, failed, results });
+  return NextResponse.json({ attached, skipped, errors });
 }

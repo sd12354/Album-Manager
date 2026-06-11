@@ -21,11 +21,39 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ACCEPT_ATTRIBUTE, convertHeicToJpeg, isHeic } from "@/lib/photos";
+import {
+  ACCEPT_ATTRIBUTE,
+  convertHeicToJpeg,
+  getOriginalPublicUrl,
+  isHeic,
+  sanitizeFilename,
+} from "@/lib/photos";
 import { createClient } from "@/lib/supabase/client";
 import type { AlbumMatchCandidate } from "@/lib/album-matching";
 import type { Album } from "@/types";
 import { cn } from "@/lib/utils";
+
+/**
+ * Run an async worker over `items` with a fixed concurrency `limit`. Used to
+ * keep HEIC conversion, AI analysis, and storage uploads bounded so a 100+
+ * photo batch can't exhaust memory or open hundreds of parallel requests.
+ */
+async function runWithConcurrency<T>(
+  items: T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<void>
+): Promise<void> {
+  let cursor = 0;
+  const poolSize = Math.max(1, Math.min(limit, items.length));
+  const runners = Array.from({ length: poolSize }, async () => {
+    while (true) {
+      const index = cursor++;
+      if (index >= items.length) break;
+      await worker(items[index], index);
+    }
+  });
+  await Promise.all(runners);
+}
 
 interface IdentifiedCover {
   artist: string;
@@ -39,8 +67,10 @@ interface PhotoMatchRow {
   file: File;
   previewUrl: string;
   status: "pending" | "analyzing" | "done" | "error";
+  converting?: boolean;
   error?: string;
   identified?: IdentifiedCover;
+  confirmedVia?: "discogs-cover" | null;
   match?: AlbumMatchCandidate | null;
   alternatives?: AlbumMatchCandidate[];
   selectedAlbumId: string | null;
@@ -69,6 +99,10 @@ export function PhotoMatchPanel() {
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzeProgress, setAnalyzeProgress] = useState(0);
   const [attaching, setAttaching] = useState(false);
+  const [attachProgress, setAttachProgress] = useState(0);
+  const [converting, setConverting] = useState(false);
+  const [convertDone, setConvertDone] = useState(0);
+  const [convertTotal, setConvertTotal] = useState(0);
   const [done, setDone] = useState<{ attached: number; failed: number } | null>(
     null
   );
@@ -88,37 +122,60 @@ export function PhotoMatchPanel() {
   const addFiles = useCallback(async (fileList: FileList | null) => {
     if (!fileList) return;
     const files = Array.from(fileList);
+    if (files.length === 0) return;
 
-    // iPhone photos arrive as HEIC, which browsers can't preview and the AI
-    // vision model can't read — convert to JPEG up front.
-    if (files.some(isHeic)) {
-      toast.message("Converting HEIC photos to JPEG…");
-    }
-
-    const converted = await Promise.all(
-      files.map(async (file) => {
-        try {
-          return await convertHeicToJpeg(file);
-        } catch {
-          toast.error(`${file.name}: couldn't convert HEIC to JPEG.`);
-          return null;
-        }
-      })
-    );
-
-    const newRows: PhotoMatchRow[] = converted
-      .filter((file): file is File => file !== null)
-      .map((file) => ({
+    // Create rows immediately so the UI stays responsive even with 100+ files.
+    // iPhone HEIC/HEIF photos can't be previewed by the browser or read by the
+    // AI model, so those start in a "converting" state and get their JPEG
+    // preview filled in once conversion finishes.
+    const initialRows: PhotoMatchRow[] = files.map((file) => {
+      const heic = isHeic(file);
+      return {
         id: `${file.name}-${file.size}-${file.lastModified}-${Math.random()}`,
         file,
-        previewUrl: URL.createObjectURL(file),
-        status: "pending",
+        previewUrl: heic ? "" : URL.createObjectURL(file),
+        status: "pending" as const,
+        converting: heic,
         selectedAlbumId: null,
         include: false,
-      }));
+      };
+    });
 
-    setRows((prev) => [...prev, ...newRows]);
+    setRows((prev) => [...prev, ...initialRows]);
     setDone(null);
+
+    const heicRows = initialRows.filter((r) => r.converting);
+    if (heicRows.length === 0) return;
+
+    // Decoding HEIC/HEIF is CPU- and memory-heavy (canvas + WASM). Converting
+    // hundreds at once would crash the tab, so we use a small worker pool that
+    // keeps peak memory flat while still being fast.
+    setConverting(true);
+    setConvertTotal(heicRows.length);
+    setConvertDone(0);
+    let completed = 0;
+
+    await runWithConcurrency(heicRows, 4, async (row) => {
+      try {
+        const jpeg = await convertHeicToJpeg(row.file);
+        updateRow(row.id, {
+          file: jpeg,
+          previewUrl: URL.createObjectURL(jpeg),
+          converting: false,
+        });
+      } catch {
+        updateRow(row.id, {
+          status: "error",
+          error: "Couldn't convert this HEIC/HEIF photo to JPEG.",
+          converting: false,
+        });
+      } finally {
+        completed += 1;
+        setConvertDone(completed);
+      }
+    });
+
+    setConverting(false);
   }, []);
 
   function removeRow(id: string) {
@@ -134,7 +191,13 @@ export function PhotoMatchPanel() {
   }
 
   async function analyzePhotos() {
-    const pending = rows.filter((r) => r.status === "pending" || r.status === "error");
+    if (converting) {
+      toast.message("Still converting HEIC/HEIF photos — hang on a moment.");
+      return;
+    }
+    const pending = rows.filter(
+      (r) => (r.status === "pending" || r.status === "error") && !r.converting
+    );
     if (pending.length === 0) {
       toast.message("Add cover photos first, or re-run failed rows.");
       return;
@@ -142,9 +205,12 @@ export function PhotoMatchPanel() {
 
     setAnalyzing(true);
     setAnalyzeProgress(0);
+    let completed = 0;
 
-    for (let i = 0; i < pending.length; i++) {
-      const row = pending[i];
+    // Bounded concurrency keeps a 100-photo batch from firing 100 simultaneous
+    // AI requests (which would hit rate limits) while still being much faster
+    // than going one-at-a-time.
+    await runWithConcurrency(pending, 4, async (row) => {
       updateRow(row.id, { status: "analyzing", error: undefined });
 
       const formData = new FormData();
@@ -167,6 +233,7 @@ export function PhotoMatchPanel() {
           updateRow(row.id, {
             status: "done",
             identified: data.identified,
+            confirmedVia: data.confirmedVia ?? null,
             match,
             alternatives: data.alternatives ?? [],
             selectedAlbumId: match?.albumId ?? null,
@@ -178,51 +245,106 @@ export function PhotoMatchPanel() {
           status: "error",
           error: "Network error during analysis",
         });
+      } finally {
+        completed += 1;
+        setAnalyzeProgress(Math.round((completed / pending.length) * 100));
       }
-
-      setAnalyzeProgress(Math.round(((i + 1) / pending.length) * 100));
-    }
+    });
 
     setAnalyzing(false);
     toast.success("Cover analysis complete — review matches below");
   }
 
   async function attachPhotos() {
-    const toAttach = rows.filter((r) => r.include && r.selectedAlbumId);
+    const toAttach = rows.filter(
+      (r) => r.include && r.selectedAlbumId && !r.converting
+    );
     if (toAttach.length === 0) {
       toast.error("Select at least one photo with a target album.");
       return;
     }
 
     setAttaching(true);
-    const formData = new FormData();
-    const items = toAttach.map((row, index) => ({
-      albumId: row.selectedAlbumId!,
-      fileIndex: index,
-    }));
-    formData.append("items", JSON.stringify(items));
-    toAttach.forEach((row, index) => {
-      formData.append(`file_${index}`, row.file);
+    setAttachProgress(0);
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      toast.error("Your session expired — please sign in again.");
+      setAttaching(false);
+      return;
+    }
+
+    // Upload binaries straight to Supabase Storage from the browser, with
+    // bounded concurrency. This bypasses the serverless request-body limit
+    // entirely, so 100+ full-resolution photos upload reliably instead of
+    // being crammed into one giant multipart request.
+    const uploaded: Array<{ albumId: string; url: string }> = [];
+    let failed = 0;
+    let completed = 0;
+
+    await runWithConcurrency(toAttach, 4, async (row) => {
+      try {
+        const safeName = sanitizeFilename(row.file.name || "cover.jpg");
+        const rand = Math.random().toString(36).slice(2, 8);
+        const path = `${user.id}/${row.selectedAlbumId}/${Date.now()}-${rand}-${safeName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from("album-photos")
+          .upload(path, row.file, {
+            contentType: row.file.type || "image/jpeg",
+            upsert: false,
+            cacheControl: "31536000",
+          });
+
+        if (uploadError) {
+          failed += 1;
+          return;
+        }
+
+        const { data: urlData } = supabase.storage
+          .from("album-photos")
+          .getPublicUrl(path);
+
+        uploaded.push({
+          albumId: row.selectedAlbumId!,
+          url: getOriginalPublicUrl(urlData.publicUrl),
+        });
+      } catch {
+        failed += 1;
+      } finally {
+        completed += 1;
+        setAttachProgress(Math.round((completed / toAttach.length) * 100));
+      }
     });
 
-    try {
-      const res = await fetch("/api/albums/attach-photos", {
-        method: "POST",
-        body: formData,
-      });
-      const data = await res.json();
-
-      if (!res.ok) {
-        toast.error(data.error ?? "Failed to attach photos");
+    // Persist all new URLs to their albums in one tiny JSON request.
+    let attached = 0;
+    if (uploaded.length > 0) {
+      try {
+        const res = await fetch("/api/albums/attach-photos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ items: uploaded }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          toast.error(data.error ?? "Photos uploaded but couldn't be saved.");
+          setAttaching(false);
+          return;
+        }
+        attached = data.attached ?? uploaded.length;
+        failed += data.skipped ?? 0;
+      } catch {
+        toast.error("Photos uploaded but couldn't be saved to albums.");
         setAttaching(false);
         return;
       }
-
-      setDone({ attached: data.attached, failed: data.failed });
-      toast.success(`Attached ${data.attached} photo${data.attached === 1 ? "" : "s"}`);
-    } catch {
-      toast.error("Failed to attach photos");
     }
+
+    setDone({ attached, failed });
+    toast.success(`Attached ${attached} photo${attached === 1 ? "" : "s"}`);
     setAttaching(false);
   }
 
@@ -284,7 +406,8 @@ export function PhotoMatchPanel() {
         <ImageIcon className="mb-3 h-10 w-10 text-muted-foreground" />
         <p className="text-sm font-medium">Drop cover photos here</p>
         <p className="mt-1 text-xs text-muted-foreground">
-          JPEG, PNG, WebP, HEIC — one album cover per photo
+          JPEG, PNG, WebP, HEIC, HEIF — one album cover per photo. iPhone
+          HEIC/HEIF photos convert automatically. Hundreds at a time is fine.
         </p>
         <input
           ref={fileInputRef}
@@ -301,22 +424,35 @@ export function PhotoMatchPanel() {
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <Button
               onClick={analyzePhotos}
-              disabled={analyzing || rows.every((r) => r.status === "done")}
+              disabled={
+                analyzing ||
+                converting ||
+                rows.every((r) => r.status === "done")
+              }
               className="gap-2"
             >
-              {analyzing ? (
+              {analyzing || converting ? (
                 <VinylSpinner size="xs" />
               ) : (
                 <Sparkles className="h-4 w-4" />
               )}
-              {analyzing ? "Reading covers…" : "Analyze with AI"}
+              {converting
+                ? "Converting…"
+                : analyzing
+                  ? "Reading covers…"
+                  : "Analyze with AI"}
             </Button>
-            {readyCount > 0 && (
+            {converting && (
+              <span className="text-xs text-muted-foreground">
+                Converting HEIC/HEIF {convertDone}/{convertTotal}
+              </span>
+            )}
+            {!converting && readyCount > 0 && (
               <span className="text-xs text-muted-foreground">
                 {readyCount} analyzed · {selectedCount} selected to attach
               </span>
             )}
-            {unmatchedCount > 0 && (
+            {!converting && unmatchedCount > 0 && (
               <span className="flex items-center gap-1 text-xs text-amber-400">
                 <AlertTriangle className="h-3 w-3" />
                 {unmatchedCount} need manual album pick
@@ -324,6 +460,16 @@ export function PhotoMatchPanel() {
             )}
           </div>
 
+          {converting && (
+            <Progress
+              value={
+                convertTotal > 0
+                  ? Math.round((convertDone / convertTotal) * 100)
+                  : 0
+              }
+              className="mt-3"
+            />
+          )}
           {analyzing && <Progress value={analyzeProgress} className="mt-3" />}
 
           <div className="mt-6 space-y-3">
@@ -337,10 +483,19 @@ export function PhotoMatchPanel() {
                     : "border-border bg-card"
                 )}
               >
-                <div
-                  className="h-24 w-24 shrink-0 rounded-lg border border-border bg-cover bg-center"
-                  style={{ backgroundImage: `url(${row.previewUrl})` }}
-                />
+                {row.converting || !row.previewUrl ? (
+                  <div className="flex h-24 w-24 shrink-0 flex-col items-center justify-center gap-1 rounded-lg border border-border bg-secondary/30">
+                    <VinylSpinner size="xs" />
+                    <span className="text-[9px] text-muted-foreground">
+                      {row.converting ? "Converting" : ""}
+                    </span>
+                  </div>
+                ) : (
+                  <div
+                    className="h-24 w-24 shrink-0 rounded-lg border border-border bg-cover bg-center"
+                    style={{ backgroundImage: `url(${row.previewUrl})` }}
+                  />
+                )}
 
                 <div className="min-w-0 flex-1 space-y-2">
                   <div className="flex items-start justify-between gap-2">
@@ -376,6 +531,13 @@ export function PhotoMatchPanel() {
                           <> · Cat# {row.identified.catalogNumber}</>
                         )}
                       </p>
+
+                      {row.confirmedVia === "discogs-cover" && (
+                        <p className="flex items-center gap-1 text-[11px] text-accent">
+                          <CheckCircle2 className="h-3 w-3" />
+                          Confirmed by matching the cover art to Discogs
+                        </p>
+                      )}
 
                       <div className="flex flex-wrap items-center gap-2">
                         <label className="flex items-center gap-2 text-xs">
@@ -450,19 +612,29 @@ export function PhotoMatchPanel() {
           </div>
 
           {readyCount > 0 && (
-            <div className="mt-6 flex justify-end">
-              <Button
-                onClick={attachPhotos}
-                disabled={attaching || selectedCount === 0}
-                className="gap-2"
-              >
-                {attaching ? (
-                  <VinylSpinner size="xs" />
-                ) : (
-                  <Upload className="h-4 w-4" />
-                )}
-                Attach {selectedCount} Photo{selectedCount === 1 ? "" : "s"}
-              </Button>
+            <div className="mt-6 space-y-2">
+              {attaching && (
+                <div className="flex items-center gap-3">
+                  <Progress value={attachProgress} className="flex-1" />
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    Uploading {attachProgress}%
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-end">
+                <Button
+                  onClick={attachPhotos}
+                  disabled={attaching || converting || selectedCount === 0}
+                  className="gap-2"
+                >
+                  {attaching ? (
+                    <VinylSpinner size="xs" />
+                  ) : (
+                    <Upload className="h-4 w-4" />
+                  )}
+                  Attach {selectedCount} Photo{selectedCount === 1 ? "" : "s"}
+                </Button>
+              </div>
             </div>
           )}
         </>
