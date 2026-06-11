@@ -10,7 +10,7 @@ function getClient() {
   return new Anthropic();
 }
 
-const VISION_MODEL = "claude-sonnet-4-20250514";
+const VISION_MODEL = process.env.ANTHROPIC_VISION_MODEL ?? "claude-opus-4-5";
 
 const ACCEPTED_MEDIA_TYPES = new Set([
   "image/jpeg",

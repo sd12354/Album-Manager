@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { resolveImageMediaType } from "@/lib/ai-cover-identify";
 
-const VISION_MODEL = "claude-sonnet-4-20250514";
+const VISION_MODEL = process.env.ANTHROPIC_VISION_MODEL ?? "claude-opus-4-5";
 const MAX_REMOTE_IMAGE_BYTES = 4_000_000;
 
 export type CompareConfidence = "high" | "medium" | "low" | "none";
