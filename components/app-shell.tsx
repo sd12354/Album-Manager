@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Bell, CircleHelp, Moon, Sun } from "lucide-react";
 import { Sidebar } from "@/components/sidebar";
 import { OnboardingModal } from "@/components/onboarding-modal";
+import { HelpPanel } from "@/components/help-panel";
 
 const SIDEBAR_KEY = "vinylvault.sidebar.collapsed";
 const THEME_KEY = "vinylvault.theme";
@@ -18,7 +19,7 @@ export function AppShell({ userEmail, ebayConnected, children }: AppShellProps) 
   const [collapsed, setCollapsed] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
-  const [helpOpen, setHelpOpen] = useState(false);
+  const [helpPanelOpen, setHelpPanelOpen] = useState(false);
 
   useEffect(() => {
     try {
@@ -75,7 +76,7 @@ export function AppShell({ userEmail, ebayConnected, children }: AppShellProps) 
         ebayConnected={ebayConnected}
         collapsed={collapsed}
         onToggle={() => setCollapsed((v) => !v)}
-        onHelpClick={() => setHelpOpen(true)}
+        onHelpClick={() => setHelpPanelOpen(true)}
       />
 
       <div
@@ -87,7 +88,7 @@ export function AppShell({ userEmail, ebayConnected, children }: AppShellProps) 
         <header className="sticky top-0 z-20 flex h-12 items-center justify-end gap-1 border-b border-border bg-background/80 px-6 backdrop-blur-sm">
           {/* Help */}
           <button
-            onClick={() => setHelpOpen(true)}
+            onClick={() => setHelpPanelOpen(true)}
             title="Help & Guide"
             className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
           >
@@ -121,11 +122,11 @@ export function AppShell({ userEmail, ebayConnected, children }: AppShellProps) 
         <main className="flex-1 p-8">{children}</main>
       </div>
 
-      {/* Onboarding / Help modal */}
-      <OnboardingModal
-        forceOpen={helpOpen}
-        onClose={() => setHelpOpen(false)}
-      />
+      {/* First-time-only welcome tour (auto-opens once per browser) */}
+      <OnboardingModal />
+
+      {/* In-depth help, opened from the Help & Guide buttons */}
+      <HelpPanel open={helpPanelOpen} onOpenChange={setHelpPanelOpen} />
     </div>
   );
 }

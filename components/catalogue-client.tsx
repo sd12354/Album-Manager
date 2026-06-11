@@ -49,6 +49,7 @@ export function CatalogueClient({ albums }: CatalogueClientProps) {
   const [globalFilter, setGlobalFilter] = useState("");
   const [conditionFilter, setConditionFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<string>("default");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [bulkLoading, setBulkLoading] = useState<null | "price" | "list" | "delete">(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -61,7 +62,7 @@ export function CatalogueClient({ albums }: CatalogueClientProps) {
   }, [searchParams]);
 
   const filteredData = useMemo(() => {
-    return albums.filter((album) => {
+    const filtered = albums.filter((album) => {
       const matchesSearch =
         !globalFilter ||
         album.title.toLowerCase().includes(globalFilter.toLowerCase()) ||
@@ -72,7 +73,16 @@ export function CatalogueClient({ albums }: CatalogueClientProps) {
         statusFilter === "all" || album.status === statusFilter;
       return matchesSearch && matchesCondition && matchesStatus;
     });
-  }, [albums, globalFilter, conditionFilter, statusFilter]);
+
+    if (sortBy === "price-desc" || sortBy === "price-asc") {
+      const priceOf = (album: Album) =>
+        album.list_price ?? album.suggested_price ?? 0;
+      const dir = sortBy === "price-desc" ? -1 : 1;
+      filtered.sort((a, b) => (priceOf(a) - priceOf(b)) * dir);
+    }
+
+    return filtered;
+  }, [albums, globalFilter, conditionFilter, statusFilter, sortBy]);
 
   const columns = useMemo<ColumnDef<Album>[]>(
     () => [
@@ -376,6 +386,16 @@ export function CatalogueClient({ albums }: CatalogueClientProps) {
                 </SelectItem>
               )
             )}
+          </SelectContent>
+        </Select>
+        <Select value={sortBy} onValueChange={setSortBy}>
+          <SelectTrigger className="w-[170px]">
+            <SelectValue placeholder="Sort by" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="default">Sort: Default</SelectItem>
+            <SelectItem value="price-desc">Price: High to Low</SelectItem>
+            <SelectItem value="price-asc">Price: Low to High</SelectItem>
           </SelectContent>
         </Select>
       </div>

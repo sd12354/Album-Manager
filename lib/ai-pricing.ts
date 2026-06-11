@@ -91,10 +91,11 @@ Guidelines:
 - State the condition clearly and what the buyer can expect
 - Mention why this record is worth owning (cultural impact, collectability, sound quality, era)
 - Reference any notable details from the seller notes if relevant
-- Close with a short, confident statement about shipping care / buying with confidence
+- Close with a short, confident statement about careful, secure packaging / buying with confidence
 - Length: 150–220 words
 - Tone: knowledgeable, enthusiastic but honest — like a trusted record shop owner
 - Plain text only, no markdown headers or bullet points
+- IMPORTANT: Do NOT promise or state any specific shipping, handling, or delivery timeframe (e.g. "ships within 2 days", "arrives in a week", "same-day shipping"). Shipping speed is set by the platform's policies, not the description. Only speak generally about careful packaging and prompt, reliable handling.
 
 ALBUM:
 ${albumDetails}
