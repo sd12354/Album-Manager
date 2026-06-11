@@ -13,6 +13,7 @@ import {
   getDiscogsListingStatus,
   getDiscogsOrderForListing,
   parseDiscogsShippingAddress,
+  resolveDiscogsAuth,
 } from "@/lib/discogs";
 import { createShippingLabel, type ShippoAddress } from "@/lib/shippo";
 import type { Album, UserSettings } from "@/types";
@@ -53,8 +54,7 @@ export async function POST(request: Request) {
   }
 
   const userMeta = (user.user_metadata ?? {}) as UserSettings;
-  const discogsToken =
-    userMeta.discogs_token || process.env.DISCOGS_PERSONAL_ACCESS_TOKEN;
+  const discogsAuth = resolveDiscogsAuth(user.user_metadata);
 
   const { data: ebayCreds } = await supabase
     .from("ebay_credentials")
@@ -112,11 +112,11 @@ export async function POST(request: Request) {
   }
 
   // ── Check Discogs ────────────────────────────────────────────────────────────
-  if (!soldOn && typedAlbum.discogs_listing_id && discogsToken) {
+  if (!soldOn && typedAlbum.discogs_listing_id && discogsAuth) {
     try {
       const result = await getDiscogsListingStatus(
         parseInt(typedAlbum.discogs_listing_id, 10),
-        discogsToken
+        discogsAuth
       );
 
       if (result?.status === "Sold") {
@@ -126,7 +126,7 @@ export async function POST(request: Request) {
         // Fetch buyer address from Discogs order
         const order = await getDiscogsOrderForListing(
           parseInt(typedAlbum.discogs_listing_id, 10),
-          discogsToken
+          discogsAuth
         ).catch(() => null);
 
         if (order?.shippingAddress) {
@@ -164,10 +164,10 @@ export async function POST(request: Request) {
     .eq("id", albumId);
 
   // ── Cross-cancel other platform ───────────────────────────────────────────────
-  if (soldOn === "ebay" && typedAlbum.discogs_listing_id && discogsToken) {
+  if (soldOn === "ebay" && typedAlbum.discogs_listing_id && discogsAuth) {
     await deleteDiscogsListing(
       parseInt(typedAlbum.discogs_listing_id, 10),
-      discogsToken
+      discogsAuth
     ).catch(() => null);
   }
 

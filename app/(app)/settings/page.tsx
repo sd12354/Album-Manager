@@ -3,7 +3,11 @@ import { SettingsClient } from "@/components/settings-client";
 import type { UserSettings } from "@/types";
 
 interface SettingsPageProps {
-  searchParams?: Promise<{ ebay_error?: string }>;
+  searchParams?: Promise<{
+    ebay_error?: string;
+    discogs?: string;
+    discogs_error?: string;
+  }>;
 }
 
 export default async function SettingsPage({ searchParams }: SettingsPageProps) {
@@ -21,6 +25,13 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
 
   const userSettings = (user?.user_metadata ?? {}) as UserSettings;
 
+  const discogsConnectedViaOAuth = !!(
+    userSettings.discogs_oauth_token && userSettings.discogs_oauth_token_secret
+  );
+  const discogsOAuthConfigured = !!(
+    process.env.DISCOGS_CONSUMER_KEY && process.env.DISCOGS_CONSUMER_SECRET
+  );
+
   return (
     <SettingsClient
       ebayConnected={!!ebayCreds}
@@ -28,6 +39,11 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
       ebayEnvironment={userSettings.ebay_environment}
       ebayError={params?.ebay_error}
       discogsEnvTokenConfigured={!!process.env.DISCOGS_PERSONAL_ACCESS_TOKEN}
+      discogsConnectedViaOAuth={discogsConnectedViaOAuth}
+      discogsUsername={userSettings.discogs_username}
+      discogsOAuthConfigured={discogsOAuthConfigured}
+      discogsConnectedNotice={params?.discogs}
+      discogsError={params?.discogs_error}
       userEmail={user?.email ?? ""}
       userSettings={userSettings}
     />

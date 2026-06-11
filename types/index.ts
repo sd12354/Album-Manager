@@ -96,6 +96,9 @@ export interface CSVAlbumRow {
 
 export interface UserSettings {
   discogs_token?: string;
+  discogs_oauth_token?: string;
+  discogs_oauth_token_secret?: string;
+  discogs_username?: string;
   minimum_floor_price?: number;
   condition_multipliers?: Partial<Record<AlbumCondition, number>>;
   email_on_sale?: boolean;

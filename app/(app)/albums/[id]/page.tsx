@@ -40,9 +40,13 @@ export default async function AlbumDetailPage({ params }: AlbumDetailPageProps) 
 
   const userMeta = (user?.user_metadata ?? {}) as {
     discogs_token?: string;
+    discogs_oauth_token?: string;
+    discogs_oauth_token_secret?: string;
   };
   const discogsConnected = !!(
-    userMeta.discogs_token || process.env.DISCOGS_PERSONAL_ACCESS_TOKEN
+    (userMeta.discogs_oauth_token && userMeta.discogs_oauth_token_secret) ||
+    userMeta.discogs_token ||
+    process.env.DISCOGS_PERSONAL_ACCESS_TOKEN
   );
 
   // Resolve Discogs release ID from album column (migration 004) or pricing cache

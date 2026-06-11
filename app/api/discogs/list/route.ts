@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import {
   createDiscogsListing,
   getDiscogsListingStatus,
+  resolveDiscogsAuth,
   DiscogsError,
 } from "@/lib/discogs";
 import { generateListingDescription } from "@/lib/ai-pricing";
@@ -22,13 +23,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const userToken = (user.user_metadata as { discogs_token?: string } | null)
-    ?.discogs_token;
-  const discogsToken = userToken || process.env.DISCOGS_PERSONAL_ACCESS_TOKEN;
+  const discogsAuth = resolveDiscogsAuth(user.user_metadata);
 
-  if (!discogsToken) {
+  if (!discogsAuth) {
     return NextResponse.json(
-      { error: "Discogs token not configured. Add it in Settings." },
+      { error: "Discogs not connected. Connect your account in Settings." },
       { status: 400 }
     );
   }
@@ -92,7 +91,7 @@ export async function POST(request: Request) {
     releaseId,
     condition: typedAlbum.condition,
     price,
-    tokenSource: userToken ? "user_metadata" : "env",
+    authType: discogsAuth.tokenSecret ? "oauth" : "token",
   });
 
   // Use stored AI description as the Discogs listing comment. Generate on the
@@ -124,13 +123,13 @@ export async function POST(request: Request) {
       releaseId,
       condition: typedAlbum.condition as AlbumCondition,
       price,
-      token: discogsToken,
+      token: discogsAuth,
       comments,
     });
 
     // Verify the listing landed as "For Sale" — if it comes back as anything
     // else the seller account setup is incomplete on Discogs.
-    const status = await getDiscogsListingStatus(listingId, discogsToken).catch(
+    const status = await getDiscogsListingStatus(listingId, discogsAuth).catch(
       () => null
     );
     const sellerWarning =

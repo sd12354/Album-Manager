@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { deleteDiscogsListing } from "@/lib/discogs";
-import type { Album, UserSettings } from "@/types";
+import { deleteDiscogsListing, resolveDiscogsAuth } from "@/lib/discogs";
+import type { Album } from "@/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -23,11 +23,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Album is not listed on Discogs" }, { status: 400 });
   }
 
-  const userMeta = (user.user_metadata ?? {}) as UserSettings;
-  const discogsToken = userMeta.discogs_token || process.env.DISCOGS_PERSONAL_ACCESS_TOKEN;
+  const discogsAuth = resolveDiscogsAuth(user.user_metadata);
 
-  if (discogsToken) {
-    await deleteDiscogsListing(parseInt(typedAlbum.discogs_listing_id, 10), discogsToken);
+  if (discogsAuth) {
+    await deleteDiscogsListing(parseInt(typedAlbum.discogs_listing_id, 10), discogsAuth);
   }
 
   // Keep as listed if still on eBay, otherwise revert to unlisted

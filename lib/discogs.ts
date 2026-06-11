@@ -1,7 +1,72 @@
 import type { AlbumCondition } from "@/types";
+import {
+  buildOAuthAuthorizationHeader,
+  getDiscogsOAuthConfig,
+} from "@/lib/discogs-oauth";
 
 const DISCOGS_BASE = "https://api.discogs.com";
 const USER_AGENT = process.env.DISCOGS_USER_AGENT ?? "VinylVault/1.0";
+
+/**
+ * Discogs auth — either a personal access token (legacy) or an OAuth 1.0a
+ * token pair (token + secret). A plain string is treated as a personal token.
+ */
+export interface DiscogsAuth {
+  token: string;
+  tokenSecret?: string;
+}
+
+export type DiscogsAuthInput = string | DiscogsAuth;
+
+function normalizeDiscogsAuth(auth: DiscogsAuthInput): DiscogsAuth {
+  return typeof auth === "string" ? { token: auth } : auth;
+}
+
+/** Build the right Authorization header for token or OAuth 1.0a auth. */
+function buildDiscogsAuthHeader(auth: DiscogsAuthInput): string {
+  const normalized = normalizeDiscogsAuth(auth);
+  if (normalized.tokenSecret) {
+    const config = getDiscogsOAuthConfig();
+    if (!config) {
+      throw new DiscogsError(
+        500,
+        "Discogs OAuth is not configured on the server (missing DISCOGS_CONSUMER_KEY / DISCOGS_CONSUMER_SECRET)."
+      );
+    }
+    return buildOAuthAuthorizationHeader({
+      consumerKey: config.consumerKey,
+      consumerSecret: config.consumerSecret,
+      token: normalized.token,
+      tokenSecret: normalized.tokenSecret,
+    });
+  }
+  return `Discogs token=${normalized.token}`;
+}
+
+/**
+ * Resolve the Discogs auth for a user from their Supabase metadata, falling
+ * back to the server-wide personal token. OAuth takes precedence over a
+ * pasted personal token, which takes precedence over the env token.
+ */
+export function resolveDiscogsAuth(
+  userMetadata: Record<string, unknown> | null | undefined
+): DiscogsAuth | null {
+  const meta = (userMetadata ?? {}) as {
+    discogs_oauth_token?: string;
+    discogs_oauth_token_secret?: string;
+    discogs_token?: string;
+  };
+  if (meta.discogs_oauth_token && meta.discogs_oauth_token_secret) {
+    return {
+      token: meta.discogs_oauth_token,
+      tokenSecret: meta.discogs_oauth_token_secret,
+    };
+  }
+  if (meta.discogs_token) return { token: meta.discogs_token };
+  const envToken = process.env.DISCOGS_PERSONAL_ACCESS_TOKEN;
+  if (envToken) return { token: envToken };
+  return null;
+}
 
 /**
  * In-process rate limiter for Discogs. Authenticated users get 60 req/min;
@@ -109,12 +174,12 @@ async function discogsErrorFromResponse(
   return new DiscogsError(res.status, message);
 }
 
-async function discogsFetch<T>(path: string, token: string): Promise<T> {
+async function discogsFetch<T>(path: string, auth: DiscogsAuthInput): Promise<T> {
   await rateLimit();
   const res = await fetch(`${DISCOGS_BASE}${path}`, {
     headers: {
       "User-Agent": USER_AGENT,
-      Authorization: `Discogs token=${token}`,
+      Authorization: buildDiscogsAuthHeader(auth),
       Accept: "application/json",
     },
     cache: "no-store",
@@ -361,7 +426,7 @@ export async function searchDiscogsRelease(
   artist: string,
   title: string,
   catalogNumber: string | undefined,
-  token: string
+  token: DiscogsAuthInput
 ): Promise<DiscogsSearchOutcome> {
   const attempts = buildAttempts(artist, title, catalogNumber);
   const tried: string[] = [];
@@ -386,7 +451,7 @@ export async function searchDiscogsRelease(
 
 export async function fetchMarketplaceStats(
   releaseId: number,
-  token: string
+  token: DiscogsAuthInput
 ): Promise<DiscogsStats | null> {
   try {
     return await discogsFetch<DiscogsStats>(
@@ -401,7 +466,7 @@ export async function fetchMarketplaceStats(
 
 export async function fetchPriceSuggestions(
   releaseId: number,
-  token: string
+  token: DiscogsAuthInput
 ): Promise<DiscogsPriceSuggestions | null> {
   try {
     return await discogsFetch<DiscogsPriceSuggestions>(
@@ -439,7 +504,7 @@ export async function fetchDiscogsPricing(
   title: string,
   catalogNumber: string | undefined,
   condition: AlbumCondition,
-  token: string
+  token: DiscogsAuthInput
 ): Promise<DiscogsPriceResult> {
   let outcome: DiscogsSearchOutcome;
   try {
@@ -533,14 +598,14 @@ const CONDITION_TO_DISCOGS_GRADE: Record<AlbumCondition, string> = {
 async function discogsPost<T>(
   path: string,
   body: unknown,
-  token: string
+  auth: DiscogsAuthInput
 ): Promise<T> {
   await rateLimit();
   const res = await fetch(`${DISCOGS_BASE}${path}`, {
     method: "POST",
     headers: {
       "User-Agent": USER_AGENT,
-      Authorization: `Discogs token=${token}`,
+      Authorization: buildDiscogsAuthHeader(auth),
       "Content-Type": "application/json",
       Accept: "application/json",
     },
@@ -552,13 +617,13 @@ async function discogsPost<T>(
   return res.json() as Promise<T>;
 }
 
-async function discogsDelete(path: string, token: string): Promise<void> {
+async function discogsDelete(path: string, auth: DiscogsAuthInput): Promise<void> {
   await rateLimit();
   const res = await fetch(`${DISCOGS_BASE}${path}`, {
     method: "DELETE",
     headers: {
       "User-Agent": USER_AGENT,
-      Authorization: `Discogs token=${token}`,
+      Authorization: buildDiscogsAuthHeader(auth),
     },
     cache: "no-store",
   });
@@ -571,7 +636,7 @@ export async function createDiscogsListing(params: {
   releaseId: number;
   condition: AlbumCondition;
   price: number;
-  token: string;
+  token: DiscogsAuthInput;
   comments?: string;
 }): Promise<{ listingId: number; listingUrl: string }> {
   const grade = CONDITION_TO_DISCOGS_GRADE[params.condition];
@@ -642,14 +707,14 @@ export async function createDiscogsListing(params: {
 
 export async function deleteDiscogsListing(
   listingId: number,
-  token: string
+  token: DiscogsAuthInput
 ): Promise<void> {
   await discogsDelete(`/marketplace/listings/${listingId}`, token);
 }
 
 export async function getDiscogsListingStatus(
   listingId: number,
-  token: string
+  token: DiscogsAuthInput
 ): Promise<{ status: string; price: number } | null> {
   try {
     const data = await discogsFetch<{ status: string; price: { value: number } }>(
@@ -686,7 +751,7 @@ interface DiscogsOrdersResponse {
 
 export async function getDiscogsOrderForListing(
   listingId: number,
-  token: string
+  token: DiscogsAuthInput
 ): Promise<{ orderId: string; shippingAddress: string; buyerName: string } | null> {
   // Check the first 3 pages of recent orders (newest first)
   for (let page = 1; page <= 3; page++) {
@@ -785,7 +850,9 @@ export function parseDiscogsShippingAddress(
   return { name, street1, street2, city, state, zip, country };
 }
 
-export async function testDiscogsConnection(token: string): Promise<boolean> {
+export async function testDiscogsConnection(
+  token: DiscogsAuthInput
+): Promise<boolean> {
   try {
     await discogsFetch<{ id: number }>(`/oauth/identity`, token);
     return true;

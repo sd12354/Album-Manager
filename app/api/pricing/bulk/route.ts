@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { fetchDiscogsPricing } from "@/lib/discogs";
+import { fetchDiscogsPricing, resolveDiscogsAuth } from "@/lib/discogs";
 import { searchEbayActiveListings, type EbayPriceResult } from "@/lib/ebay";
 import { buildCombinedPricing } from "@/lib/pricing";
 import type { Album, AlbumCondition, PricingResult } from "@/types";
@@ -24,9 +24,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const userToken = (user.user_metadata as { discogs_token?: string } | null)
-    ?.discogs_token;
-  const discogsToken = userToken || process.env.DISCOGS_PERSONAL_ACCESS_TOKEN;
+  const discogsAuth = resolveDiscogsAuth(user.user_metadata);
 
   const body = await request.json().catch(() => ({}));
   const { albumIds, force } = body as { albumIds?: string[]; force?: boolean };
@@ -90,13 +88,13 @@ export async function POST(request: Request) {
       }
 
       // Discogs first
-      const discogsResult = discogsToken
+      const discogsResult = discogsAuth
         ? await fetchDiscogsPricing(
             typedAlbum.artist,
             typedAlbum.title,
             typedAlbum.catalog_number ?? undefined,
             typedAlbum.condition as AlbumCondition,
-            discogsToken
+            discogsAuth
           )
         : null;
 

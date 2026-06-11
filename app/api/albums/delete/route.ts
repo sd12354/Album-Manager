@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { endEbayListing, getValidEbayToken, type EbayTokenCredentials } from "@/lib/ebay";
-import { deleteDiscogsListing } from "@/lib/discogs";
+import { deleteDiscogsListing, resolveDiscogsAuth } from "@/lib/discogs";
 import type { Album, UserSettings } from "@/types";
 
 export const runtime = "nodejs";
@@ -31,7 +31,7 @@ export async function POST(request: Request) {
   }
 
   const userMeta = (user.user_metadata ?? {}) as UserSettings;
-  const discogsToken = userMeta.discogs_token || process.env.DISCOGS_PERSONAL_ACCESS_TOKEN;
+  const discogsAuth = resolveDiscogsAuth(user.user_metadata);
   const ebayEnvironment = userMeta.ebay_environment ?? "stub";
 
   const { data: ebayCreds } = await supabase
@@ -59,8 +59,8 @@ export async function POST(request: Request) {
 
   // Remove active platform listings before deleting
   for (const album of albums as Album[]) {
-    if (album.discogs_listing_id && discogsToken) {
-      await deleteDiscogsListing(parseInt(album.discogs_listing_id, 10), discogsToken).catch(() => null);
+    if (album.discogs_listing_id && discogsAuth) {
+      await deleteDiscogsListing(parseInt(album.discogs_listing_id, 10), discogsAuth).catch(() => null);
     }
     if (album.ebay_listing_id && ebayToken && isRealEbay) {
       await endEbayListing(album.ebay_listing_id, ebayToken).catch(() => null);

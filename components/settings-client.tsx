@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { EbayConnectButton } from "@/components/ebay-connect-button";
+import { DiscogsConnectButton } from "@/components/discogs-connect-button";
 import {
   Accordion,
   AccordionContent,
@@ -31,6 +32,11 @@ interface SettingsClientProps {
   ebayEnvironment?: "production" | "sandbox" | "stub";
   ebayError?: string;
   discogsEnvTokenConfigured: boolean;
+  discogsConnectedViaOAuth: boolean;
+  discogsUsername?: string;
+  discogsOAuthConfigured: boolean;
+  discogsConnectedNotice?: string;
+  discogsError?: string;
   userEmail: string;
   userSettings: {
     discogs_token?: string;
@@ -56,10 +62,18 @@ export function SettingsClient({
   ebayEnvironment,
   ebayError,
   discogsEnvTokenConfigured,
+  discogsConnectedViaOAuth,
+  discogsUsername,
+  discogsOAuthConfigured,
+  discogsConnectedNotice,
+  discogsError,
   userEmail,
   userSettings,
 }: SettingsClientProps) {
   const [ebayConnected, setEbayConnected] = useState(initialConnected);
+  const [discogsOAuthConnected, setDiscogsOAuthConnected] = useState(
+    discogsConnectedViaOAuth
+  );
   const [newEmail, setNewEmail] = useState(userEmail);
   const [changingEmail, setChangingEmail] = useState(false);
   const [discogsToken, setDiscogsToken] = useState(
@@ -90,6 +104,26 @@ export function SettingsClient({
   const [sellerCountry, setSellerCountry] = useState(userSettings.seller_country ?? "US");
 
   const supabase = createClient();
+
+  useEffect(() => {
+    if (discogsConnectedNotice === "connected") {
+      toast.success("Discogs account connected");
+    }
+    if (discogsError) {
+      toast.error(discogsError, { duration: 8000 });
+    }
+    // Clean the query string so the toast doesn't re-fire on refresh.
+    if (
+      typeof window !== "undefined" &&
+      (discogsConnectedNotice || discogsError)
+    ) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("discogs");
+      url.searchParams.delete("discogs_error");
+      window.history.replaceState({}, "", url.toString());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function saveSettings(updates: Record<string, unknown>) {
     setSaving(true);
@@ -281,7 +315,7 @@ export function SettingsClient({
           <AccordionTrigger className="font-display text-lg">
             <div className="flex items-center gap-2">
               <span>Discogs Integration</span>
-              {(discogsToken || discogsEnvTokenConfigured) ? (
+              {(discogsOAuthConnected || discogsToken || discogsEnvTokenConfigured) ? (
                 <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-emerald-400">
                   Configured
                 </span>
@@ -294,57 +328,87 @@ export function SettingsClient({
           </AccordionTrigger>
           <AccordionContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Discogs powers your pricing. Generate a free Personal Access
-              Token at{" "}
-              <a
-                href="https://www.discogs.com/settings/developers"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-accent hover:underline"
-              >
-                discogs.com/settings/developers
-              </a>{" "}
-              and paste it below. Per-user tokens override the server default.
+              Discogs powers your pricing and listings. Connect your account
+              with one click — you&apos;ll be sent to Discogs to log in and
+              authorize VinylVault, then redirected back here.
             </p>
-            <div className="space-y-2">
-              <Label htmlFor="discogs_token">Personal Access Token</Label>
-              <Input
-                id="discogs_token"
-                type="password"
-                placeholder={
-                  discogsEnvTokenConfigured
-                    ? "Server default is set — paste to override"
-                    : "Enter your Discogs token"
-                }
-                value={discogsToken}
-                onChange={(e) => setDiscogsToken(e.target.value)}
-              />
-            </div>
-            <div className="flex gap-3">
-              <Button
-                variant="outline"
-                onClick={testDiscogs}
-                disabled={
-                  testingDiscogs ||
-                  (!discogsToken && !discogsEnvTokenConfigured)
-                }
-              >
-                {testingDiscogs ? (
-                  <>
-                    <VinylSpinner size="xs" />
-                    Testing...
-                  </>
-                ) : (
-                  "Test Connection"
-                )}
-              </Button>
-              <Button
-                onClick={() => saveSettings({ discogs_token: discogsToken })}
-                disabled={saving}
-              >
-                Save Token
-              </Button>
-            </div>
+
+            <DiscogsConnectButton
+              connected={discogsOAuthConnected}
+              username={discogsUsername}
+              oauthConfigured={discogsOAuthConfigured}
+              onStatusChange={setDiscogsOAuthConnected}
+            />
+
+            {!discogsOAuthConfigured && !discogsOAuthConnected && (
+              <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-400">
+                Discogs OAuth isn&apos;t configured on this server yet. Add{" "}
+                <code>DISCOGS_CONSUMER_KEY</code> and{" "}
+                <code>DISCOGS_CONSUMER_SECRET</code> to enable one-click connect,
+                or use a personal access token below.
+              </div>
+            )}
+
+            <details className="group rounded-lg border border-border bg-muted/10">
+              <summary className="cursor-pointer list-none px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
+                Advanced: use a personal access token instead
+              </summary>
+              <div className="space-y-3 px-3 pb-3">
+                <p className="text-xs text-muted-foreground">
+                  Prefer not to use OAuth? Generate a free Personal Access Token
+                  at{" "}
+                  <a
+                    href="https://www.discogs.com/settings/developers"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-accent hover:underline"
+                  >
+                    discogs.com/settings/developers
+                  </a>{" "}
+                  and paste it below. A connected OAuth account takes precedence
+                  over this token.
+                </p>
+                <div className="space-y-2">
+                  <Label htmlFor="discogs_token">Personal Access Token</Label>
+                  <Input
+                    id="discogs_token"
+                    type="password"
+                    placeholder={
+                      discogsEnvTokenConfigured
+                        ? "Server default is set — paste to override"
+                        : "Enter your Discogs token"
+                    }
+                    value={discogsToken}
+                    onChange={(e) => setDiscogsToken(e.target.value)}
+                  />
+                </div>
+                <div className="flex gap-3">
+                  <Button
+                    variant="outline"
+                    onClick={testDiscogs}
+                    disabled={
+                      testingDiscogs ||
+                      (!discogsToken && !discogsEnvTokenConfigured)
+                    }
+                  >
+                    {testingDiscogs ? (
+                      <>
+                        <VinylSpinner size="xs" />
+                        Testing...
+                      </>
+                    ) : (
+                      "Test Connection"
+                    )}
+                  </Button>
+                  <Button
+                    onClick={() => saveSettings({ discogs_token: discogsToken })}
+                    disabled={saving}
+                  >
+                    Save Token
+                  </Button>
+                </div>
+              </div>
+            </details>
           </AccordionContent>
         </AccordionItem>
 
