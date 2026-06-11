@@ -20,12 +20,17 @@ export default function ResetPage() {
     setLoading(true);
     setError("");
 
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/login`,
+    const trimmedEmail = email.trim();
+    const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
+      redirectTo: `${window.location.origin}/update-password`,
     });
 
     if (error) {
-      setError(error.message);
+      setError(
+        error.message.includes("Error sending")
+          ? "We couldn't send the reset email. Please try again shortly or contact support if it keeps happening."
+          : error.message
+      );
     } else {
       setSent(true);
     }
