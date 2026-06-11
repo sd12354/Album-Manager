@@ -5,14 +5,15 @@ import { searchEbayActiveListings, type EbayPriceResult } from "@/lib/ebay";
 import { buildCombinedPricing } from "@/lib/pricing";
 import type { Album, AlbumCondition, PricingResult } from "@/types";
 
-// Bulk pricing is sequential (Discogs allows 60 req/min). With ~3s/album we
-// cap MAX_BULK so the request can complete inside Vercel's 60s function limit.
+// Bulk pricing is sequential and each album can issue multiple Discogs searches
+// plus an eBay fallback. Keep each request small so Vercel doesn't terminate it
+// near the 60s serverless limit; the client chunks larger selections.
 export const runtime = "nodejs";
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-const MAX_BULK = 15;
+const MAX_BULK = 3;
 
 export async function POST(request: Request) {
   const supabase = await createClient();

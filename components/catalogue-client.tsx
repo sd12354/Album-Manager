@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   useReactTable,
@@ -52,6 +52,7 @@ export function CatalogueClient({ albums }: CatalogueClientProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [bulkLoading, setBulkLoading] = useState<null | "price" | "list" | "delete">(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const priceAllStartedRef = useRef(false);
 
   useEffect(() => {
     if (searchParams.get("add") === "true") {
@@ -164,21 +165,20 @@ export function CatalogueClient({ albums }: CatalogueClientProps) {
     .getFilteredSelectedRowModel()
     .rows.map((r) => r.original.id);
 
-  const handleBulkPrice = useCallback(async () => {
-    if (selectedIds.length === 0) return;
+  const handleBulkPrice = useCallback(async (ids = selectedIds) => {
+    if (ids.length === 0) return;
     setBulkLoading("price");
 
-    // Server caps each request at 15 albums to fit within Vercel's 60s
-    // serverless function limit. Chunk the selection client-side so users
-    // can price arbitrarily large selections without thinking about it.
-    const CHUNK_SIZE = 15;
+    // The server caps each request at 3 albums so one slow Discogs match can't
+    // run the whole batch into Vercel's 60s function limit.
+    const CHUNK_SIZE = 3;
     const chunks: string[][] = [];
-    for (let i = 0; i < selectedIds.length; i += CHUNK_SIZE) {
-      chunks.push(selectedIds.slice(i, i + CHUNK_SIZE));
+    for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
+      chunks.push(ids.slice(i, i + CHUNK_SIZE));
     }
 
     toast.info(
-      `Pricing ${selectedIds.length} albums via Discogs${
+      `Pricing ${ids.length} albums via Discogs${
         chunks.length > 1 ? ` (in ${chunks.length} batches)` : ""
       }...`
     );
@@ -189,49 +189,82 @@ export function CatalogueClient({ albums }: CatalogueClientProps) {
     }> = [];
     let failed = false;
 
-    for (let i = 0; i < chunks.length; i++) {
-      const res = await fetch("/api/pricing/bulk", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ albumIds: chunks[i] }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        toast.error(err.error ?? `Batch ${i + 1} failed`);
-        failed = true;
-        break;
+    try {
+      for (let i = 0; i < chunks.length; i++) {
+        const res = await fetch("/api/pricing/bulk", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ albumIds: chunks[i] }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          toast.error(err.error ?? `Batch ${i + 1} failed`);
+          failed = true;
+          break;
+        }
+        const { results } = (await res.json()) as { results: typeof allResults };
+        allResults.push(...results);
+        if (chunks.length > 1) {
+          toast.info(`Batch ${i + 1}/${chunks.length} done`);
+        }
       }
-      const { results } = (await res.json()) as { results: typeof allResults };
-      allResults.push(...results);
-      if (chunks.length > 1) {
-        toast.info(`Batch ${i + 1}/${chunks.length} done`);
+
+      if (!failed) {
+        const ok = allResults.filter((r) => r.status === "ok").length;
+        const cached = allResults.filter((r) => r.status === "cached").length;
+        const noData = allResults.filter((r) => r.status === "no_data").length;
+        const errors = allResults.filter((r) => r.status === "error").length;
+        const ebayCount = allResults.filter(
+          (r) => r.status === "ok" && r.source === "ebay-active"
+        ).length;
+        const parts: string[] = [];
+        if (ok) {
+          parts.push(
+            ebayCount > 0
+              ? `${ok} priced (${ebayCount} via eBay fallback)`
+              : `${ok} priced`
+          );
+        }
+        if (cached) parts.push(`${cached} cached`);
+        if (noData) parts.push(`${noData} no match`);
+        if (errors) parts.push(`${errors} failed`);
+        toast.success(parts.length > 0 ? parts.join(" · ") : "No albums needed pricing");
+        setRowSelection({});
+        router.refresh();
       }
+    } catch (err) {
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Pricing request failed. Try again in a moment."
+      );
+    } finally {
+      setBulkLoading(null);
+    }
+  }, [selectedIds, router]);
+
+  useEffect(() => {
+    if (searchParams.get("action") !== "price-all" || priceAllStartedRef.current) {
+      return;
     }
 
-    if (!failed) {
-      const ok = allResults.filter((r) => r.status === "ok").length;
-      const cached = allResults.filter((r) => r.status === "cached").length;
-      const noData = allResults.filter((r) => r.status === "no_data").length;
-      const errors = allResults.filter((r) => r.status === "error").length;
-      const ebayCount = allResults.filter(
-        (r) => r.status === "ok" && r.source === "ebay-active"
-      ).length;
-      const parts: string[] = [];
-      if (ok) {
-        parts.push(
-          ebayCount > 0
-            ? `${ok} priced (${ebayCount} via eBay fallback)`
-            : `${ok} priced`
-        );
-      }
-      if (cached) parts.push(`${cached} cached`);
-      if (noData) parts.push(`${noData} no match`);
-      if (errors) parts.push(`${errors} failed`);
-      toast.success(parts.join(" · "));
-      router.refresh();
+    priceAllStartedRef.current = true;
+    const idsToPrice = albums
+      .filter((album) => {
+        if (album.status === "sold") return false;
+        const price = album.list_price ?? album.suggested_price;
+        return price == null || price <= 0;
+      })
+      .map((album) => album.id);
+
+    if (idsToPrice.length === 0) {
+      toast.info("All unsold albums already have pricing.");
+      router.replace("/albums");
+      return;
     }
-    setBulkLoading(null);
-  }, [selectedIds, router]);
+
+    void handleBulkPrice(idsToPrice).finally(() => router.replace("/albums"));
+  }, [albums, handleBulkPrice, router, searchParams]);
 
   const handleBulkDelete = useCallback(async () => {
     if (!confirmDelete) { setConfirmDelete(true); return; }
@@ -353,7 +386,7 @@ export function CatalogueClient({ albums }: CatalogueClientProps) {
           <Button
             size="sm"
             variant="outline"
-            onClick={handleBulkPrice}
+            onClick={() => handleBulkPrice()}
             disabled={!!bulkLoading}
           >
             {bulkLoading === "price" ? (
