@@ -17,6 +17,15 @@ const COOKIE_OPTS = {
   maxAge: 600, // 10 minutes to complete the handshake
 };
 
+function getCallbackUrl(request: Request): string {
+  const explicit = process.env.DISCOGS_CALLBACK_URL?.trim();
+  if (explicit) return explicit;
+
+  // Use the actual host handling this request so production, preview, and
+  // local dev do not depend on a possibly stale NEXT_PUBLIC_APP_URL value.
+  return new URL("/api/discogs/callback", request.url).toString();
+}
+
 export async function GET(request: Request) {
   const config = getDiscogsOAuthConfig();
   if (!config) {
@@ -36,9 +45,7 @@ export async function GET(request: Request) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  const appUrl =
-    process.env.NEXT_PUBLIC_APP_URL ?? new URL(request.url).origin;
-  const callbackUrl = `${appUrl}/api/discogs/callback`;
+  const callbackUrl = getCallbackUrl(request);
 
   try {
     const { token, tokenSecret } = await getDiscogsRequestToken(
@@ -49,6 +56,11 @@ export async function GET(request: Request) {
     const res = NextResponse.redirect(
       `${DISCOGS_AUTHORIZE_URL}?oauth_token=${encodeURIComponent(token)}`
     );
+    console.log("[discogs]", {
+      scope: "discogs",
+      event: "connect_started",
+      callbackUrl,
+    });
     // Stash the request token secret so the callback can exchange it. The
     // request token itself is echoed back by Discogs and re-verified.
     res.cookies.set("discogs_req_token", token, COOKIE_OPTS);
