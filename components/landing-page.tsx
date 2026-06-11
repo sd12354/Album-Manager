@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { CursorEffect } from "@/components/cursor-effect";
+import { HomeIntro } from "@/components/home-intro";
 import {
   ArrowRight,
   Disc2,
@@ -270,6 +271,7 @@ export function LandingPage({ isLoggedIn = false }: { isLoggedIn?: boolean }) {
 
   return (
     <div className="min-h-screen bg-[#050507] text-white selection:bg-accent/30 [&_*]:cursor-none cursor-none">
+      <HomeIntro />
       <CursorEffect />
       <style>{`
         @keyframes blob {
