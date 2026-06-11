@@ -13,8 +13,10 @@ import {
   Upload,
 } from "lucide-react";
 import { VinylLogo } from "@/components/vinyl-logo";
+import { CollectionSwitcher } from "@/components/collection-switcher";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
+import type { AccessibleCollection } from "@/types";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -28,6 +30,8 @@ interface SidebarProps {
   ebayConnected?: boolean;
   discogsConnected?: boolean;
   collapsed?: boolean;
+  collections?: AccessibleCollection[];
+  activeOwnerId?: string;
   onToggle?: () => void;
   onHelpClick?: () => void;
 }
@@ -37,6 +41,8 @@ export function Sidebar({
   ebayConnected = false,
   discogsConnected = false,
   collapsed = false,
+  collections = [],
+  activeOwnerId = "",
   onToggle,
   onHelpClick,
 }: SidebarProps) {
@@ -78,6 +84,16 @@ export function Sidebar({
           )}
         </button>
       </div>
+
+      {collections.length > 1 && (
+        <div className={cn("pb-3", collapsed ? "px-2" : "px-3")}>
+          <CollectionSwitcher
+            collections={collections}
+            activeOwnerId={activeOwnerId}
+            collapsed={collapsed}
+          />
+        </div>
+      )}
 
       <nav className={cn("flex-1 space-y-1", collapsed ? "px-2" : "px-3")}>
         {navItems.map(({ href, label, icon: Icon }) => {

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getActiveContext } from "@/lib/collections";
 import type { CSVAlbumRow } from "@/types";
 
 export const runtime = "nodejs";
@@ -8,12 +9,16 @@ export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const ctx = await getActiveContext();
 
-  if (!user) {
+  if (!ctx) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!ctx.canEdit) {
+    return NextResponse.json(
+      { error: "You have view-only access to this collection." },
+      { status: 403 }
+    );
   }
 
   const body = await request.json();
@@ -24,7 +29,7 @@ export async function POST(request: Request) {
   }
 
   const records = albums.map((album) => ({
-    user_id: user.id,
+    user_id: ctx.ownerId,
     title: album.title,
     artist: album.artist,
     genre: album.genre ?? null,

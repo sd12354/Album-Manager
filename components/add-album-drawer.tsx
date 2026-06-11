@@ -41,9 +41,15 @@ type AlbumFormData = z.infer<typeof albumSchema>;
 interface AddAlbumDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Collection owner to create the album under (defaults to current user). */
+  ownerId?: string;
 }
 
-export function AddAlbumDrawer({ open, onOpenChange }: AddAlbumDrawerProps) {
+export function AddAlbumDrawer({
+  open,
+  onOpenChange,
+  ownerId,
+}: AddAlbumDrawerProps) {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const supabase = createClient();
@@ -72,7 +78,7 @@ export function AddAlbumDrawer({ open, onOpenChange }: AddAlbumDrawerProps) {
     }
 
     const { error } = await supabase.from("albums").insert({
-      user_id: user.id,
+      user_id: ownerId || user.id,
       title: data.title,
       artist: data.artist,
       genre: data.genre || null,

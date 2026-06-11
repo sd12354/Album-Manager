@@ -5,6 +5,7 @@ import { Bell, CircleHelp, Moon, Sun } from "lucide-react";
 import { Sidebar } from "@/components/sidebar";
 import { OnboardingModal } from "@/components/onboarding-modal";
 import { HelpPanel } from "@/components/help-panel";
+import type { AccessibleCollection } from "@/types";
 
 const SIDEBAR_KEY = "vinylvault.sidebar.collapsed";
 const THEME_KEY = "vinylvault.theme";
@@ -13,6 +14,8 @@ interface AppShellProps {
   userEmail?: string;
   ebayConnected?: boolean;
   discogsConnected?: boolean;
+  collections?: AccessibleCollection[];
+  activeOwnerId?: string;
   children: React.ReactNode;
 }
 
@@ -20,6 +23,8 @@ export function AppShell({
   userEmail,
   ebayConnected,
   discogsConnected,
+  collections,
+  activeOwnerId,
   children,
 }: AppShellProps) {
   const [collapsed, setCollapsed] = useState(false);
@@ -81,6 +86,8 @@ export function AppShell({
         userEmail={userEmail}
         ebayConnected={ebayConnected}
         discogsConnected={discogsConnected}
+        collections={collections}
+        activeOwnerId={activeOwnerId}
         collapsed={collapsed}
         onToggle={() => setCollapsed((v) => !v)}
         onHelpClick={() => setHelpPanelOpen(true)}

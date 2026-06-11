@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getActiveContext } from "@/lib/collections";
 import type { AlbumCondition } from "@/types";
 
 export const runtime = "nodejs";
@@ -78,11 +79,15 @@ function buildNotes(item: BoxRecord, conditionNote?: string): string {
 
 export async function POST(request: Request) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
+  const ctx = await getActiveContext();
+  if (!ctx) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!ctx.canEdit) {
+    return NextResponse.json(
+      { error: "You have view-only access to this collection." },
+      { status: 403 }
+    );
   }
 
   const body = await request.json() as { files: ImportFile[] };
@@ -127,7 +132,7 @@ export async function POST(request: Request) {
             : null;
 
       albumRows.push({
-        user_id: user.id,
+        user_id: ctx.ownerId,
         title: record.title.trim(),
         artist: record.artist.trim(),
         genre: record.genre?.trim() || null,

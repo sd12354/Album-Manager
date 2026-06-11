@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { EbayConnectButton } from "@/components/ebay-connect-button";
 import { DiscogsConnectButton } from "@/components/discogs-connect-button";
 import { ShippoConnectButton } from "@/components/shippo-connect-button";
+import { CollaboratorsSection } from "@/components/collaborators-section";
 import {
   Accordion,
   AccordionContent,
@@ -279,6 +280,15 @@ export function SettingsClient({
                 "Update Email"
               )}
             </Button>
+          </AccordionContent>
+        </AccordionItem>
+
+        <AccordionItem value="collaborators" className="animate-fade-in-up stagger-1">
+          <AccordionTrigger className="font-display text-lg">
+            Collaborators
+          </AccordionTrigger>
+          <AccordionContent className="space-y-4">
+            <CollaboratorsSection />
           </AccordionContent>
         </AccordionItem>
 

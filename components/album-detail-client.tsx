@@ -84,6 +84,10 @@ interface AlbumDetailClientProps {
   discogsConnected: boolean;
   discogsReleaseId: number | null;
   initialPricing?: PricingResult | null;
+  /** Whether the current user can edit this collection's albums. */
+  canEdit?: boolean;
+  /** Whether the current user owns this collection (gates marketplace actions). */
+  isOwner?: boolean;
 }
 
 export function AlbumDetailClient({
@@ -92,6 +96,8 @@ export function AlbumDetailClient({
   discogsConnected,
   discogsReleaseId,
   initialPricing,
+  canEdit = true,
+  isOwner = true,
 }: AlbumDetailClientProps) {
   const router = useRouter();
   const supabase = createClient();
@@ -355,6 +361,7 @@ export function AlbumDetailClient({
   }
 
   async function handleDelete() {
+    if (!canEdit) return;
     if (!confirmDelete) { setConfirmDelete(true); return; }
     setDeleting(true);
     const res = await fetch("/api/albums/delete", {
@@ -374,6 +381,7 @@ export function AlbumDetailClient({
   }
 
   async function handleSave() {
+    if (!canEdit) return;
     setSaving(true);
     const { error } = await supabase
       .from("albums")
@@ -402,6 +410,10 @@ export function AlbumDetailClient({
     const files = Array.from(e.target.files ?? []);
     e.target.value = "";
     if (files.length === 0) return;
+    if (!canEdit) {
+      toast.error("You have view-only access to this collection.");
+      return;
+    }
 
     const {
       data: { user },
@@ -443,7 +455,9 @@ export function AlbumDetailClient({
       );
 
       const safeName = sanitizeFilename(file.name);
-      const path = `${user.id}/${album.id}/${Date.now()}-${safeName}`;
+      // Store under the collection owner's folder so shared editors land in the
+      // right bucket path (storage RLS keys on the owner id).
+      const path = `${album.user_id}/${album.id}/${Date.now()}-${safeName}`;
 
       const { error: uploadError } = await supabase.storage
         .from("album-photos")
@@ -515,6 +529,19 @@ export function AlbumDetailClient({
         <AlbumStatusBadge status={album.status} />
       </div>
 
+      {!canEdit && (
+        <div className="mt-4 rounded-lg border border-border bg-secondary/30 px-4 py-3 text-sm text-muted-foreground animate-fade-in">
+          You have <span className="font-medium text-foreground">view-only</span>{" "}
+          access to this shared collection. Editing is disabled.
+        </div>
+      )}
+      {canEdit && !isOwner && (
+        <div className="mt-4 rounded-lg border border-border bg-secondary/30 px-4 py-3 text-sm text-muted-foreground animate-fade-in">
+          You can manage this shared album. Marketplace listing and shipping
+          actions are available to the collection owner.
+        </div>
+      )}
+
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
         <div className="space-y-6">
           <div>
@@ -532,7 +559,7 @@ export function AlbumDetailClient({
                   <span className="absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/20" />
                 </button>
               ))}
-              {(album.photo_urls ?? []).length < EBAY_MAX_PHOTOS && (
+              {canEdit && (album.photo_urls ?? []).length < EBAY_MAX_PHOTOS && (
                 <label className="flex aspect-square cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-border transition-colors hover:border-accent/50">
                   {uploading ? (
                     <VinylSpinner size="md" />
@@ -685,16 +712,18 @@ export function AlbumDetailClient({
               )}
             </div>
 
-            <Button onClick={handleSave} disabled={saving}>
-              {saving ? (
-                <>
-                  <VinylSpinner size="xs" />
-                  Saving...
-                </>
-              ) : (
-                "Save Changes"
-              )}
-            </Button>
+            {canEdit && (
+              <Button onClick={handleSave} disabled={saving}>
+                {saving ? (
+                  <>
+                    <VinylSpinner size="xs" />
+                    Saving...
+                  </>
+                ) : (
+                  "Save Changes"
+                )}
+              </Button>
+            )}
           </div>
         </div>
 
@@ -851,7 +880,7 @@ export function AlbumDetailClient({
             </div>
 
             {/* Platform listing buttons */}
-            {album.status !== "sold" && (
+            {isOwner && album.status !== "sold" && (
               <div className="border-t border-border px-5 py-4 space-y-2">
                 <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-3">
                   List on
@@ -1063,15 +1092,20 @@ export function AlbumDetailClient({
                       <a href="/settings" className="text-accent hover:underline">
                         Settings → Shipping
                       </a>{" "}
-                      to auto-generate labels on future sales, or{" "}
-                      <CreateLabelButton albumId={album.id} onCreated={(label) =>
-                        setAlbum((prev) => ({
-                          ...prev,
-                          tracking_number: label.trackingNumber,
-                          shipping_label_url: label.labelUrl,
-                          shipping_carrier: `${label.carrier} — ${label.serviceLevel}`,
-                        }))
-                      } />
+                      to auto-generate labels on future sales
+                      {isOwner ? (
+                        <>
+                          , or{" "}
+                          <CreateLabelButton albumId={album.id} onCreated={(label) =>
+                            setAlbum((prev) => ({
+                              ...prev,
+                              tracking_number: label.trackingNumber,
+                              shipping_label_url: label.labelUrl,
+                              shipping_carrier: `${label.carrier} — ${label.serviceLevel}`,
+                            }))
+                          } />
+                        </>
+                      ) : null}
                       .
                     </p>
                   </div>
@@ -1080,6 +1114,7 @@ export function AlbumDetailClient({
             </div>
           )}
           {/* Delete album */}
+          {canEdit && (
           <div className="flex items-center justify-end gap-3 pt-2">
             {confirmDelete && (
               <button onClick={() => setConfirmDelete(false)} className="text-xs text-muted-foreground hover:text-foreground">
@@ -1099,6 +1134,7 @@ export function AlbumDetailClient({
               {confirmDelete ? "Confirm — delete this album?" : "Delete album"}
             </button>
           </div>
+          )}
         </div>
       </div>
 

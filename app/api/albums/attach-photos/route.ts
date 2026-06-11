@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getActiveContext } from "@/lib/collections";
 import { EBAY_MAX_PHOTOS } from "@/lib/photos";
 import type { Album } from "@/types";
 
@@ -20,12 +21,16 @@ interface AttachItem {
  */
 export async function POST(request: Request) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const ctx = await getActiveContext();
 
-  if (!user) {
+  if (!ctx) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!ctx.canEdit) {
+    return NextResponse.json(
+      { error: "You have view-only access to this collection." },
+      { status: 403 }
+    );
   }
 
   let body: { items?: AttachItem[] };
@@ -73,7 +78,7 @@ export async function POST(request: Request) {
   const { data: albums, error: albumsError } = await supabase
     .from("albums")
     .select("id, photo_urls")
-    .eq("user_id", user.id)
+    .eq("user_id", ctx.ownerId)
     .in("id", albumIds);
 
   if (albumsError) {
@@ -112,7 +117,7 @@ export async function POST(request: Request) {
       .from("albums")
       .update({ photo_urls: merged })
       .eq("id", albumId)
-      .eq("user_id", user.id);
+      .eq("user_id", ctx.ownerId);
 
     if (error) {
       errors.push(`${albumId}: ${error.message}`);

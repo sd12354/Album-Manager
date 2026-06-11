@@ -10,7 +10,7 @@ import {
   type ColumnDef,
   type RowSelectionState,
 } from "@tanstack/react-table";
-import { Disc2, Plus, Search, Trash2 } from "lucide-react";
+import { Disc2, Eye, Plus, Search, Trash2, Users } from "lucide-react";
 import { VinylSpinner } from "@/components/vinyl-spinner";
 import { toast } from "sonner";
 import { AddAlbumDrawer } from "@/components/add-album-drawer";
@@ -40,9 +40,23 @@ import type { Album, AlbumCondition, AlbumStatus } from "@/types";
 
 interface CatalogueClientProps {
   albums: Album[];
+  /** Whether the current user can modify this collection. */
+  canEdit?: boolean;
+  /** Whether the current user owns this collection (gates marketplace actions). */
+  isOwner?: boolean;
+  /** Label shown when viewing a collection shared by someone else. */
+  collectionLabel?: string;
+  /** Owner id new albums should be created under (the active collection). */
+  ownerId?: string;
 }
 
-export function CatalogueClient({ albums }: CatalogueClientProps) {
+export function CatalogueClient({
+  albums,
+  canEdit = true,
+  isOwner = true,
+  collectionLabel,
+  ownerId,
+}: CatalogueClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
@@ -86,28 +100,32 @@ export function CatalogueClient({ albums }: CatalogueClientProps) {
 
   const columns = useMemo<ColumnDef<Album>[]>(
     () => [
-      {
-        id: "select",
-        header: ({ table }) => (
-          <Checkbox
-            checked={
-              table.getIsAllPageRowsSelected() ||
-              (table.getIsSomePageRowsSelected() && "indeterminate")
-            }
-            onCheckedChange={(value) =>
-              table.toggleAllPageRowsSelected(!!value)
-            }
-          />
-        ),
-        cell: ({ row }) => (
-          <Checkbox
-            checked={row.getIsSelected()}
-            onCheckedChange={(value) => row.toggleSelected(!!value)}
-            onClick={(e) => e.stopPropagation()}
-          />
-        ),
-        enableSorting: false,
-      },
+      ...(canEdit
+        ? [
+            {
+              id: "select",
+              header: ({ table }) => (
+                <Checkbox
+                  checked={
+                    table.getIsAllPageRowsSelected() ||
+                    (table.getIsSomePageRowsSelected() && "indeterminate")
+                  }
+                  onCheckedChange={(value) =>
+                    table.toggleAllPageRowsSelected(!!value)
+                  }
+                />
+              ),
+              cell: ({ row }) => (
+                <Checkbox
+                  checked={row.getIsSelected()}
+                  onCheckedChange={(value) => row.toggleSelected(!!value)}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              ),
+              enableSorting: false,
+            } as ColumnDef<Album>,
+          ]
+        : []),
       {
         id: "cover",
         header: "",
@@ -180,7 +198,7 @@ export function CatalogueClient({ albums }: CatalogueClientProps) {
         ),
       },
     ],
-    []
+    [canEdit]
   );
 
   const table = useReactTable({
@@ -275,7 +293,11 @@ export function CatalogueClient({ albums }: CatalogueClientProps) {
   }, [selectedIds, router]);
 
   useEffect(() => {
-    if (searchParams.get("action") !== "price-all" || priceAllStartedRef.current) {
+    if (
+      !canEdit ||
+      searchParams.get("action") !== "price-all" ||
+      priceAllStartedRef.current
+    ) {
       return;
     }
 
@@ -359,14 +381,28 @@ export function CatalogueClient({ albums }: CatalogueClientProps) {
   return (
     <div className="animate-fade-in">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <h1 className="font-display text-3xl font-bold">Catalogue</h1>
           <Badge variant="secondary">{albums.length} albums</Badge>
+          {collectionLabel && (
+            <Badge variant="outline" className="gap-1">
+              <Users className="h-3 w-3" />
+              {collectionLabel}
+            </Badge>
+          )}
+          {!canEdit && (
+            <Badge variant="outline" className="gap-1 text-muted-foreground">
+              <Eye className="h-3 w-3" />
+              View only
+            </Badge>
+          )}
         </div>
-        <Button onClick={() => setDrawerOpen(true)}>
-          <Plus className="h-4 w-4" />
-          Add Album
-        </Button>
+        {canEdit && (
+          <Button onClick={() => setDrawerOpen(true)}>
+            <Plus className="h-4 w-4" />
+            Add Album
+          </Button>
+        )}
       </div>
 
       <div className="mt-6 flex flex-wrap items-center gap-3">
@@ -439,21 +475,23 @@ export function CatalogueClient({ albums }: CatalogueClientProps) {
               "Auto-Price Selected"
             )}
           </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleBulkList}
-            disabled={!!bulkLoading}
-          >
-            {bulkLoading === "list" ? (
-              <>
-                <VinylSpinner size="xs" />
-                Listing...
-              </>
-            ) : (
-              "List on eBay"
-            )}
-          </Button>
+          {isOwner && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleBulkList}
+              disabled={!!bulkLoading}
+            >
+              {bulkLoading === "list" ? (
+                <>
+                  <VinylSpinner size="xs" />
+                  Listing...
+                </>
+              ) : (
+                "List on eBay"
+              )}
+            </Button>
+          )}
           <Button
             size="sm"
             variant="outline"
@@ -531,7 +569,13 @@ export function CatalogueClient({ albums }: CatalogueClientProps) {
         </Table>
       </div>
 
-      <AddAlbumDrawer open={drawerOpen} onOpenChange={setDrawerOpen} />
+      {canEdit && (
+        <AddAlbumDrawer
+          open={drawerOpen}
+          onOpenChange={setDrawerOpen}
+          ownerId={ownerId}
+        />
+      )}
     </div>
   );
 }

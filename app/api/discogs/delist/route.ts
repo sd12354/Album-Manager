@@ -18,6 +18,13 @@ export async function POST(request: Request) {
   const { data: album } = await supabase.from("albums").select("*").eq("id", albumId).single();
   if (!album) return NextResponse.json({ error: "Album not found" }, { status: 404 });
 
+  if ((album as Album).user_id !== user.id) {
+    return NextResponse.json(
+      { error: "Only the collection owner can manage marketplace listings." },
+      { status: 403 }
+    );
+  }
+
   const typedAlbum = album as Album;
   if (!typedAlbum.discogs_listing_id) {
     return NextResponse.json({ error: "Album is not listed on Discogs" }, { status: 400 });

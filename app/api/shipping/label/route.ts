@@ -82,6 +82,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Album not found" }, { status: 404 });
   }
 
+  if ((album as Album).user_id !== user.id) {
+    return NextResponse.json(
+      {
+        error:
+          "Only the collection owner can create shipping labels for this album.",
+      },
+      { status: 403 }
+    );
+  }
+
   const typedAlbum = album as Album;
 
   const to: ShippoAddress | null =

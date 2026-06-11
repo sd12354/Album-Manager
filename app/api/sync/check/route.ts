@@ -51,6 +51,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Album not found" }, { status: 404 });
   }
 
+  if ((album as Album).user_id !== user.id) {
+    return NextResponse.json(
+      { error: "Only the collection owner can sync marketplace sales." },
+      { status: 403 }
+    );
+  }
+
   const typedAlbum = album as Album;
 
   if (typedAlbum.status === "sold") {

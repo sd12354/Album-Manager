@@ -94,6 +94,41 @@ export interface CSVAlbumRow {
   purchase_price?: number;
 }
 
+export type CollectionRole = "viewer" | "editor";
+
+export interface CollectionMember {
+  id: string;
+  owner_id: string;
+  owner_email?: string | null;
+  member_id: string;
+  member_email?: string | null;
+  role: CollectionRole;
+  created_at: string;
+}
+
+export interface CollectionInvite {
+  id: string;
+  owner_id: string;
+  owner_email?: string | null;
+  email: string;
+  role: CollectionRole;
+  token: string;
+  status: "pending" | "accepted" | "revoked";
+  invited_by?: string | null;
+  created_at: string;
+  accepted_at?: string | null;
+}
+
+/** A collection the current user can act in (their own or a shared one). */
+export interface AccessibleCollection {
+  ownerId: string;
+  ownerEmail: string;
+  /** "owner" when it's the user's own collection. */
+  role: CollectionRole | "owner";
+  isOwner: boolean;
+  label: string;
+}
+
 export interface UserSettings {
   discogs_token?: string;
   discogs_oauth_token?: string;

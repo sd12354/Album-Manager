@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { endEbayListing, getValidEbayToken, type EbayTokenCredentials } from "@/lib/ebay";
 import { deleteDiscogsListing, resolveDiscogsAuth } from "@/lib/discogs";
+import { getActiveContext } from "@/lib/collections";
 import type { Album, UserSettings } from "@/types";
 
 export const runtime = "nodejs";
@@ -10,10 +11,16 @@ export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const ctx = await getActiveContext();
+  if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!ctx.canEdit) {
+    return NextResponse.json(
+      { error: "You have view-only access to this collection." },
+      { status: 403 }
+    );
+  }
+  const user = ctx.user;
+  const isOwner = ctx.role === "owner";
 
   const { albumIds } = await request.json() as { albumIds: string[] };
   if (!albumIds || albumIds.length === 0) {
@@ -24,7 +31,7 @@ export async function POST(request: Request) {
     .from("albums")
     .select("*")
     .in("id", albumIds)
-    .eq("user_id", user.id);
+    .eq("user_id", ctx.ownerId);
 
   if (!albums || albums.length === 0) {
     return NextResponse.json({ error: "No albums found" }, { status: 404 });
@@ -57,13 +64,16 @@ export async function POST(request: Request) {
     }
   }
 
-  // Remove active platform listings before deleting
-  for (const album of albums as Album[]) {
-    if (album.discogs_listing_id && discogsAuth) {
-      await deleteDiscogsListing(parseInt(album.discogs_listing_id, 10), discogsAuth).catch(() => null);
-    }
-    if (album.ebay_listing_id && ebayToken && isRealEbay) {
-      await endEbayListing(album.ebay_listing_id, ebayToken).catch(() => null);
+  // Remove active platform listings before deleting. Marketplace credentials
+  // belong to the owner, so only attempt delisting in the owner's own context.
+  if (isOwner) {
+    for (const album of albums as Album[]) {
+      if (album.discogs_listing_id && discogsAuth) {
+        await deleteDiscogsListing(parseInt(album.discogs_listing_id, 10), discogsAuth).catch(() => null);
+      }
+      if (album.ebay_listing_id && ebayToken && isRealEbay) {
+        await endEbayListing(album.ebay_listing_id, ebayToken).catch(() => null);
+      }
     }
   }
 
@@ -71,7 +81,7 @@ export async function POST(request: Request) {
     .from("albums")
     .delete()
     .in("id", albumIds)
-    .eq("user_id", user.id);
+    .eq("user_id", ctx.ownerId);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 

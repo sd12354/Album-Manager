@@ -18,7 +18,8 @@ export async function POST() {
   const { data: listedAlbums } = await supabase
     .from("albums")
     .select("*")
-    .eq("status", "listed");
+    .eq("status", "listed")
+    .eq("user_id", user.id);
 
   const synced = [];
 

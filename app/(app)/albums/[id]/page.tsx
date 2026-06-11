@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AlbumDetailClient } from "@/components/album-detail-client";
+import { canManage, getRoleForOwner } from "@/lib/collections";
 import type { Album, PricingResult } from "@/types";
 
 interface AlbumDetailPageProps {
@@ -32,6 +33,11 @@ export default async function AlbumDetailPage({ params }: AlbumDetailPageProps) 
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  const typedAlbum = album as Album;
+  const isOwner = !!user && typedAlbum.user_id === user.id;
+  const role = user ? await getRoleForOwner(user, typedAlbum.user_id) : null;
+  const canEdit = canManage(role);
 
   const { data: ebayCreds } = await supabase
     .from("ebay_credentials")
@@ -125,6 +131,8 @@ export default async function AlbumDetailPage({ params }: AlbumDetailPageProps) 
       discogsConnected={discogsConnected}
       discogsReleaseId={discogsReleaseId}
       initialPricing={initialPricing}
+      canEdit={canEdit}
+      isOwner={isOwner}
     />
   );
 }

@@ -7,6 +7,7 @@ import { SalesChart, type SalesPoint } from "@/components/sales-chart";
 import { AnimatedStats } from "@/components/animated-stats";
 import { AnimatedCollectionValue } from "@/components/animated-collection-value";
 import { formatRelativeTime, getActivityDescription } from "@/lib/utils";
+import { getActiveCollection } from "@/lib/collections";
 import type { Album } from "@/types";
 
 function getStartOfMonth(): string {
@@ -75,9 +76,16 @@ export default async function DashboardPage() {
   const supabase = await createClient();
   const startOfMonth = getStartOfMonth();
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const active = user ? await getActiveCollection(user) : null;
+  const ownerId = active?.ownerId ?? user?.id ?? "";
+
   const { data: albums } = await supabase
     .from("albums")
     .select("*")
+    .eq("user_id", ownerId)
     .order("updated_at", { ascending: false });
 
   const allAlbums = (albums ?? []) as Album[];

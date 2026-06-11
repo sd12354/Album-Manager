@@ -107,15 +107,37 @@ export function PhotoMatchPanel() {
   const [done, setDone] = useState<{ attached: number; failed: number } | null>(
     null
   );
+  const [ownerId, setOwnerId] = useState<string>("");
+  const [canEdit, setCanEdit] = useState(true);
+  const [collectionLabel, setCollectionLabel] = useState<string | null>(null);
 
   const supabase = createClient();
 
   useEffect(() => {
     void (async () => {
-      const { data } = await supabase
+      // Resolve the active collection so photos land under the right owner.
+      let activeOwner = "";
+      try {
+        const res = await fetch("/api/collection/active");
+        if (res.ok) {
+          const { active } = await res.json();
+          if (active) {
+            activeOwner = active.ownerId as string;
+            setOwnerId(activeOwner);
+            setCanEdit(active.role === "owner" || active.role === "editor");
+            setCollectionLabel(active.isOwner ? null : (active.label as string));
+          }
+        }
+      } catch {
+        // Fall back to RLS-scoped query below.
+      }
+
+      let query = supabase
         .from("albums")
         .select("id, artist, title")
         .order("title", { ascending: true });
+      if (activeOwner) query = query.eq("user_id", activeOwner);
+      const { data } = await query;
       setAlbums((data ?? []) as Pick<Album, "id" | "artist" | "title">[]);
     })();
   }, [supabase]);
@@ -298,7 +320,10 @@ export function PhotoMatchPanel() {
       try {
         const safeName = sanitizeFilename(row.file.name || "cover.jpg");
         const rand = Math.random().toString(36).slice(2, 8);
-        const path = `${user.id}/${row.selectedAlbumId}/${Date.now()}-${rand}-${safeName}`;
+        // Upload under the active collection owner's folder (storage RLS keys
+        // on the owner id), falling back to the current user for own albums.
+        const folderOwner = ownerId || user.id;
+        const path = `${folderOwner}/${row.selectedAlbumId}/${Date.now()}-${rand}-${safeName}`;
 
         const { error: uploadError } = await supabase.storage
           .from("album-photos")
@@ -405,6 +430,19 @@ export function PhotoMatchPanel() {
         are attached.
       </p>
 
+      {collectionLabel && (
+        <p className="mb-4 rounded-lg border border-border bg-secondary/30 px-4 py-2 text-xs text-muted-foreground">
+          Matching photos into the shared collection{" "}
+          <span className="font-medium text-foreground">{collectionLabel}</span>.
+        </p>
+      )}
+
+      {!canEdit ? (
+        <div className="rounded-xl border border-border bg-card px-6 py-10 text-center text-sm text-muted-foreground">
+          You have view-only access to this collection, so cover photos can&apos;t
+          be attached here.
+        </div>
+      ) : (
       <label
         className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-border bg-card px-6 py-10 text-center transition-colors hover:border-accent/40"
         onDragOver={(e) => e.preventDefault()}
@@ -428,6 +466,7 @@ export function PhotoMatchPanel() {
           onChange={(e) => void addFiles(e.target.files)}
         />
       </label>
+      )}
 
       {rows.length > 0 && (
         <>
