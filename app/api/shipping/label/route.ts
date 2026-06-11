@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createShippingLabel, type ShippoAddress } from "@/lib/shippo";
+import {
+  createShippingLabel,
+  resolveShippoAuth,
+  type ShippoAddress,
+} from "@/lib/shippo";
 import type { Album, UserSettings } from "@/types";
 
 export const runtime = "nodejs";
@@ -26,12 +30,14 @@ export async function POST(request: Request) {
     );
   }
 
-  const shippoKey =
-    settings.shippo_api_key || process.env.SHIPPO_API_KEY;
+  const shippoAuth = resolveShippoAuth(settings);
 
-  if (!shippoKey) {
+  if (!shippoAuth) {
     return NextResponse.json(
-      { error: "Shippo API key not configured. Add it in Settings → Shipping." },
+      {
+        error:
+          "Shippo isn't connected. Connect your account or add an API key in Settings → Shipping.",
+      },
       { status: 400 }
     );
   }
@@ -101,7 +107,7 @@ export async function POST(request: Request) {
     const label = await createShippingLabel({
       from: sellerAddress,
       to,
-      apiKey: shippoKey,
+      auth: shippoAuth,
     });
 
     await supabase

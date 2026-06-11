@@ -1,5 +1,31 @@
 const SHIPPO_BASE = "https://api.goshippo.com";
 
+/**
+ * Shippo accepts two kinds of credentials:
+ *  - Private API tokens (from the dashboard) → `Authorization: ShippoToken <key>`
+ *  - OAuth 2.0 access tokens (from the Connect flow) → `Authorization: Bearer <token>`
+ */
+export type ShippoAuth = {
+  token: string;
+  scheme: "ShippoToken" | "Bearer";
+};
+
+/**
+ * Resolves the credential to use for Shippo, preferring an OAuth-connected
+ * account, then a saved/manual API key, then the server-wide env key.
+ */
+export function resolveShippoAuth(settings: {
+  shippo_oauth_token?: string;
+  shippo_api_key?: string;
+}): ShippoAuth | null {
+  if (settings.shippo_oauth_token) {
+    return { token: settings.shippo_oauth_token, scheme: "Bearer" };
+  }
+  const key = settings.shippo_api_key || process.env.SHIPPO_API_KEY;
+  if (key) return { token: key, scheme: "ShippoToken" };
+  return null;
+}
+
 export interface ShippoAddress {
   name: string;
   street1: string;
@@ -60,13 +86,13 @@ interface ShippoTransaction {
 
 async function shippoFetch<T>(
   path: string,
-  apiKey: string,
+  auth: ShippoAuth,
   body?: unknown
 ): Promise<T> {
   const res = await fetch(`${SHIPPO_BASE}${path}`, {
     method: body !== undefined ? "POST" : "GET",
     headers: {
-      Authorization: `ShippoToken ${apiKey}`,
+      Authorization: `${auth.scheme} ${auth.token}`,
       "Content-Type": "application/json",
       Accept: "application/json",
     },
@@ -84,10 +110,10 @@ async function shippoFetch<T>(
 export async function createShippingLabel(params: {
   from: ShippoAddress;
   to: ShippoAddress;
-  apiKey: string;
+  auth: ShippoAuth;
 }): Promise<ShippoLabelResult> {
   // Step 1 — create shipment and get rates synchronously
-  const shipment = await shippoFetch<ShippoShipment>("/shipments/", params.apiKey, {
+  const shipment = await shippoFetch<ShippoShipment>("/shipments/", params.auth, {
     address_from: {
       name: params.from.name,
       street1: params.from.street1,
@@ -136,7 +162,7 @@ export async function createShippingLabel(params: {
   // Step 3 — purchase the label
   const transaction = await shippoFetch<ShippoTransaction>(
     "/transactions/",
-    params.apiKey,
+    params.auth,
     {
       rate: chosenRate.object_id,
       label_file_type: "PDF",
@@ -167,9 +193,9 @@ export async function createShippingLabel(params: {
   };
 }
 
-export async function validateShippoKey(apiKey: string): Promise<boolean> {
+export async function validateShippoAuth(auth: ShippoAuth): Promise<boolean> {
   try {
-    await shippoFetch("/carrier_accounts/", apiKey);
+    await shippoFetch("/carrier_accounts/", auth);
     return true;
   } catch {
     return false;

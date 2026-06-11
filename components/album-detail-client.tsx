@@ -657,6 +657,20 @@ export function AlbumDetailClient({
                   )}
                 </button>
               </div>
+              {generatingDesc && (
+                <div className="space-y-2 rounded-lg border border-accent/20 bg-accent/5 px-3 py-3 animate-fade-in">
+                  <div className="flex items-center gap-2 text-xs font-medium text-accent">
+                    <VinylSpinner size="xs" />
+                    <span>Writing your listing description…</span>
+                  </div>
+                  <div className="space-y-1.5 pt-0.5">
+                    <div className="h-2.5 w-full rounded-full bg-accent/15 animate-pulse-soft" />
+                    <div className="h-2.5 w-[92%] rounded-full bg-accent/15 animate-pulse-soft stagger-1" />
+                    <div className="h-2.5 w-[80%] rounded-full bg-accent/15 animate-pulse-soft stagger-2" />
+                    <div className="h-2.5 w-[88%] rounded-full bg-accent/15 animate-pulse-soft stagger-3" />
+                  </div>
+                </div>
+              )}
               <Textarea
                 value={listingDescription}
                 onChange={(e) => setListingDescription(e.target.value)}

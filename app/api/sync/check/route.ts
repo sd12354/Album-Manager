@@ -15,7 +15,11 @@ import {
   parseDiscogsShippingAddress,
   resolveDiscogsAuth,
 } from "@/lib/discogs";
-import { createShippingLabel, type ShippoAddress } from "@/lib/shippo";
+import {
+  createShippingLabel,
+  resolveShippoAuth,
+  type ShippoAddress,
+} from "@/lib/shippo";
 import type { Album, UserSettings } from "@/types";
 
 export const runtime = "nodejs";
@@ -180,11 +184,11 @@ export async function POST(request: Request) {
   let labelError: string | null = null;
 
   const shippoEnabled = userMeta.shippo_enabled ?? false;
-  const shippoKey = userMeta.shippo_api_key || process.env.SHIPPO_API_KEY;
+  const shippoAuth = resolveShippoAuth(userMeta);
   const sellerReady =
     userMeta.seller_name && userMeta.seller_street1 && userMeta.seller_city;
 
-  if (shippoEnabled && shippoKey && sellerReady && buyerAddress) {
+  if (shippoEnabled && shippoAuth && sellerReady && buyerAddress) {
     const from: ShippoAddress = {
       name: userMeta.seller_name!,
       street1: userMeta.seller_street1!,
@@ -199,7 +203,7 @@ export async function POST(request: Request) {
       label = await createShippingLabel({
         from,
         to: buyerAddress,
-        apiKey: shippoKey,
+        auth: shippoAuth,
       });
 
       await supabase
@@ -215,12 +219,12 @@ export async function POST(request: Request) {
       labelError =
         err instanceof Error ? err.message : "Label creation failed";
     }
-  } else if (shippoEnabled && shippoKey && sellerReady && !buyerAddress) {
+  } else if (shippoEnabled && shippoAuth && sellerReady && !buyerAddress) {
     labelError = "Buyer address unavailable — create the label manually from the album page.";
-  } else if (shippoEnabled && shippoKey && !sellerReady) {
+  } else if (shippoEnabled && shippoAuth && !sellerReady) {
     labelError = "Seller address incomplete — fill it in Settings → Shipping.";
-  } else if (shippoEnabled && !shippoKey) {
-    labelError = "Shippo API key not set — add it in Settings → Shipping.";
+  } else if (shippoEnabled && !shippoAuth) {
+    labelError = "Shippo isn't connected — connect it in Settings → Shipping.";
   }
   // If shippoEnabled is false, labelError stays null — silent, no nagging.
 

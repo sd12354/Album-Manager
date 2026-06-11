@@ -10,7 +10,7 @@ import {
   type ColumnDef,
   type RowSelectionState,
 } from "@tanstack/react-table";
-import { Plus, Search, Trash2 } from "lucide-react";
+import { Disc2, Plus, Search, Trash2 } from "lucide-react";
 import { VinylSpinner } from "@/components/vinyl-spinner";
 import { toast } from "sonner";
 import { AddAlbumDrawer } from "@/components/add-album-drawer";
@@ -106,6 +106,27 @@ export function CatalogueClient({ albums }: CatalogueClientProps) {
             onClick={(e) => e.stopPropagation()}
           />
         ),
+        enableSorting: false,
+      },
+      {
+        id: "cover",
+        header: "",
+        cell: ({ row }) => {
+          const cover = row.original.photo_urls?.[0];
+          return cover ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={cover}
+              alt={`${row.original.title} cover`}
+              loading="lazy"
+              className="h-11 w-11 shrink-0 rounded-md border border-border object-cover"
+            />
+          ) : (
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-border bg-secondary/40 text-muted-foreground">
+              <Disc2 className="h-5 w-5" />
+            </div>
+          );
+        },
         enableSorting: false,
       },
       {

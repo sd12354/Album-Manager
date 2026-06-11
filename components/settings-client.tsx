@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { EbayConnectButton } from "@/components/ebay-connect-button";
 import { DiscogsConnectButton } from "@/components/discogs-connect-button";
+import { ShippoConnectButton } from "@/components/shippo-connect-button";
 import {
   Accordion,
   AccordionContent,
@@ -37,6 +38,11 @@ interface SettingsClientProps {
   discogsOAuthConfigured: boolean;
   discogsConnectedNotice?: string;
   discogsError?: string;
+  shippoConnectedViaOAuth: boolean;
+  shippoOAuthConfigured: boolean;
+  shippoAccountLabel?: string;
+  shippoConnectedNotice?: string;
+  shippoError?: string;
   userEmail: string;
   userSettings: {
     discogs_token?: string;
@@ -46,6 +52,8 @@ interface SettingsClientProps {
     condition_multipliers?: Partial<Record<AlbumCondition, number>>;
     shippo_enabled?: boolean;
     shippo_api_key?: string;
+    shippo_oauth_token?: string;
+    shippo_account_label?: string;
     seller_name?: string;
     seller_street1?: string;
     seller_street2?: string;
@@ -67,12 +75,20 @@ export function SettingsClient({
   discogsOAuthConfigured,
   discogsConnectedNotice,
   discogsError,
+  shippoConnectedViaOAuth,
+  shippoOAuthConfigured,
+  shippoAccountLabel,
+  shippoConnectedNotice,
+  shippoError,
   userEmail,
   userSettings,
 }: SettingsClientProps) {
   const [ebayConnected, setEbayConnected] = useState(initialConnected);
   const [discogsOAuthConnected, setDiscogsOAuthConnected] = useState(
     discogsConnectedViaOAuth
+  );
+  const [shippoOAuthConnected, setShippoOAuthConnected] = useState(
+    shippoConnectedViaOAuth
   );
   const [newEmail, setNewEmail] = useState(userEmail);
   const [changingEmail, setChangingEmail] = useState(false);
@@ -112,14 +128,22 @@ export function SettingsClient({
     if (discogsError) {
       toast.error(discogsError, { duration: 8000 });
     }
+    if (shippoConnectedNotice === "connected") {
+      toast.success("Shippo account connected");
+    }
+    if (shippoError) {
+      toast.error(shippoError, { duration: 8000 });
+    }
     // Clean the query string so the toast doesn't re-fire on refresh.
     if (
       typeof window !== "undefined" &&
-      (discogsConnectedNotice || discogsError)
+      (discogsConnectedNotice || discogsError || shippoConnectedNotice || shippoError)
     ) {
       const url = new URL(window.location.href);
       url.searchParams.delete("discogs");
       url.searchParams.delete("discogs_error");
+      url.searchParams.delete("shippo");
+      url.searchParams.delete("shippo_error");
       window.history.replaceState({}, "", url.toString());
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -483,7 +507,7 @@ export function SettingsClient({
           <AccordionTrigger className="font-display text-lg">
             <div className="flex items-center gap-2">
               <span>Shipping</span>
-              {(shippoKey || process.env.NEXT_PUBLIC_SHIPPO_CONFIGURED) ? (
+              {(shippoOAuthConnected || shippoKey || process.env.NEXT_PUBLIC_SHIPPO_CONFIGURED) ? (
                 <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-emerald-400">
                   Configured
                 </span>
@@ -531,52 +555,74 @@ export function SettingsClient({
             {shippoEnabled && (
               <>
 
-            {/* Shippo API key */}
-            <div className="space-y-2">
-              <Label htmlFor="shippo_key">Shippo API Key</Label>
-              <Input
-                id="shippo_key"
-                type="password"
-                placeholder="shippo_test_... or shippo_live_..."
-                value={shippoKey}
-                onChange={(e) => setShippoKey(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                Get your key at{" "}
-                <a
-                  href="https://app.goshippo.com/user/apikeys"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-accent hover:underline"
-                >
-                  app.goshippo.com/user/apikeys
-                </a>
-                . Use a test key while setting up; switch to live when ready to
-                purchase real labels.
-              </p>
-            </div>
-            <div className="flex gap-3">
-              <Button
-                variant="outline"
-                onClick={testShippo}
-                disabled={testingShippo || !shippoKey}
-              >
-                {testingShippo ? (
-                  <>
-                    <VinylSpinner size="xs" />
-                    Testing...
-                  </>
-                ) : (
-                  "Test Connection"
-                )}
-              </Button>
-              <Button
-                onClick={() => saveSettings({ shippo_api_key: shippoKey })}
-                disabled={saving}
-              >
-                Save Key
-              </Button>
-            </div>
+            {/* Connect with OAuth (mirrors eBay / Discogs) */}
+            <ShippoConnectButton
+              connected={shippoOAuthConnected}
+              accountLabel={shippoAccountLabel}
+              oauthConfigured={shippoOAuthConfigured}
+              onStatusChange={setShippoOAuthConnected}
+            />
+
+            {!shippoOAuthConfigured && !shippoOAuthConnected && (
+              <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-400">
+                Shippo OAuth isn&apos;t configured on this server yet. Add{" "}
+                <code>SHIPPO_CLIENT_ID</code> and <code>SHIPPO_CLIENT_SECRET</code>{" "}
+                to enable one-click connect, or use an API key below.
+              </div>
+            )}
+
+            {/* Advanced: API key fallback */}
+            <details className="group rounded-lg border border-border bg-muted/10">
+              <summary className="cursor-pointer list-none px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
+                Advanced: use an API key instead
+              </summary>
+              <div className="space-y-3 px-3 pb-3">
+                <div className="space-y-2">
+                  <Label htmlFor="shippo_key">Shippo API Key</Label>
+                  <Input
+                    id="shippo_key"
+                    type="password"
+                    placeholder="shippo_test_... or shippo_live_..."
+                    value={shippoKey}
+                    onChange={(e) => setShippoKey(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Prefer not to use OAuth? Get your key at{" "}
+                    <a
+                      href="https://app.goshippo.com/user/apikeys"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-accent hover:underline"
+                    >
+                      app.goshippo.com/user/apikeys
+                    </a>
+                    . A connected OAuth account takes precedence over this key.
+                  </p>
+                </div>
+                <div className="flex gap-3">
+                  <Button
+                    variant="outline"
+                    onClick={testShippo}
+                    disabled={testingShippo || (!shippoKey && !shippoOAuthConnected)}
+                  >
+                    {testingShippo ? (
+                      <>
+                        <VinylSpinner size="xs" />
+                        Testing...
+                      </>
+                    ) : (
+                      "Test Connection"
+                    )}
+                  </Button>
+                  <Button
+                    onClick={() => saveSettings({ shippo_api_key: shippoKey })}
+                    disabled={saving}
+                  >
+                    Save Key
+                  </Button>
+                </div>
+              </div>
+            </details>
 
             {/* Seller / ship-from address */}
             <div className="space-y-3 rounded-xl border border-border p-4">

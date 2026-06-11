@@ -107,6 +107,8 @@ export interface UserSettings {
   ebay_environment?: "production" | "sandbox" | "stub";
   shippo_enabled?: boolean;
   shippo_api_key?: string;
+  shippo_oauth_token?: string;
+  shippo_account_label?: string;
   seller_name?: string;
   seller_street1?: string;
   seller_street2?: string;
