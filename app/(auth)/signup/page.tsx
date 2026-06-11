@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
+import { getAppUrl } from "@/lib/site-url";
 
 const PASSWORD_RULES = [
   { id: "length", label: "At least 8 characters", test: (p: string) => p.length >= 8 },
@@ -62,11 +63,9 @@ export default function SignupPage() {
       password,
       options: {
         // Ensures the confirmation link (when email confirmation is enabled
-        // in Supabase) returns the user to this app rather than localhost.
-        emailRedirectTo:
-          typeof window !== "undefined"
-            ? `${window.location.origin}/login`
-            : undefined,
+        // in Supabase) returns the user to the canonical production app rather
+        // than an ephemeral deployment URL or localhost.
+        emailRedirectTo: `${getAppUrl()}/login`,
       },
     });
 

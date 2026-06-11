@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
+import { getAppUrl } from "@/lib/site-url";
 
 export default function ResetPage() {
   const [email, setEmail] = useState("");
@@ -22,7 +23,7 @@ export default function ResetPage() {
 
     const trimmedEmail = email.trim();
     const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
-      redirectTo: `${window.location.origin}/update-password`,
+      redirectTo: `${getAppUrl()}/update-password`,
     });
 
     if (error) {
