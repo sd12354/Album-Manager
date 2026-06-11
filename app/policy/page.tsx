@@ -58,9 +58,9 @@ export default function PolicyPage() {
           <Section title="Data we collect">
             <p><strong className="text-white">Account data:</strong> Your email address and password (hashed and stored securely via Supabase Auth).</p>
             <p><strong className="text-white">Album catalogue:</strong> Record titles, artists, conditions, pricing data, and sale records you enter into the app.</p>
-            <p><strong className="text-white">Integration credentials:</strong> eBay OAuth tokens and your Discogs personal access token, stored encrypted in our database. These are used solely to make API calls on your behalf.</p>
-            <p><strong className="text-white">Shipping data:</strong> Your seller address and Shippo API key (stored in your account preferences). Buyer shipping addresses are retrieved from eBay/Discogs at sale time and stored only on the specific album record.</p>
-            <p><strong className="text-white">Photos:</strong> Album photos you upload are stored in Supabase Storage and linked only to your account.</p>
+            <p><strong className="text-white">Integration credentials:</strong> eBay, Discogs, and Shippo access tokens obtained when you connect those accounts via OAuth (or, optionally, a Discogs personal access token / Shippo API key you paste yourself). These are stored securely and used solely to make API calls on your behalf.</p>
+            <p><strong className="text-white">Shipping data:</strong> Your seller address and your Shippo credentials (OAuth token or API key), stored in your account preferences. Buyer shipping addresses are retrieved from eBay/Discogs at sale time and stored only on the specific album record.</p>
+            <p><strong className="text-white">Photos:</strong> Album photos you upload are stored in Supabase Storage and linked only to your account. HEIC/HEIF images are converted to JPEG in your browser before upload.</p>
           </Section>
 
           <Section title="How we use your data">
@@ -70,6 +70,8 @@ export default function PolicyPage() {
                 "Authenticating your account",
                 "Storing and displaying your vinyl catalogue",
                 "Fetching pricing from Discogs and eBay using your credentials",
+                "Generating AI pricing suggestions and listing descriptions",
+                "Matching uploaded cover photos to the correct album using AI",
                 "Creating and managing listings on eBay and Discogs on your behalf",
                 "Generating shipping labels via Shippo",
                 "Computing portfolio analytics shown in your dashboard",
@@ -85,6 +87,11 @@ export default function PolicyPage() {
 
           <Section title="Third-party integrations">
             <p>When you connect eBay, Discogs, or Shippo, you agree to their respective terms of service and privacy policies. VinylVault acts as an intermediary and only calls these APIs with credentials you provide.</p>
+          </Section>
+
+          <Section title="AI processing">
+            <p>VinylVault uses Anthropic&apos;s Claude models to power AI pricing analysis, listing-description generation, and cover-photo matching. To do this, relevant album metadata (such as title, artist, and condition) and album cover photos you choose to analyse are sent to Anthropic&apos;s API.</p>
+            <p>This data is processed only to return results to you. Per Anthropic&apos;s API terms, it is not used to train their models. AI features are optional — they only run when you trigger pricing, description generation, or photo matching.</p>
           </Section>
 
           <Section title="Data storage & security">

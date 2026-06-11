@@ -1,5 +1,15 @@
 import Link from "next/link";
-import { ArrowLeft, Disc2 } from "lucide-react";
+import {
+  ArrowLeft,
+  Camera,
+  Disc2,
+  Package,
+  Plug,
+  ShoppingBag,
+  Sparkles,
+  TrendingUp,
+  Upload,
+} from "lucide-react";
 
 function MarketingNav() {
   return (
@@ -51,29 +61,77 @@ export default function AboutPage() {
             </p>
             <p className="mt-3">
               We built VinylVault to handle the entire pipeline: import your collection in bulk,
-              pull live market pricing from Discogs and eBay, list to both platforms simultaneously,
-              auto-cancel when something sells, and generate prepaid shipping labels automatically.
+              let AI price and describe every record from live market data, list to both platforms
+              simultaneously, auto-cancel when something sells, and generate prepaid shipping labels
+              automatically.
             </p>
           </section>
 
           <section>
-            <h2 className="font-display text-xl font-semibold text-white mb-3">What we built</h2>
-            <ul className="space-y-2">
+            <h2 className="font-display text-xl font-semibold text-white mb-4">What we built</h2>
+            <div className="grid gap-3 sm:grid-cols-2">
               {[
-                "Bulk import from CSV or pre-analysed JSON box files",
-                "Live Discogs marketplace pricing by grade",
-                "eBay active listing comparables as a fallback",
-                "Dual-platform listing on eBay and Discogs with one click",
-                "Automatic cross-cancellation when a sale is detected",
-                "Shippo integration for prepaid USPS Media Mail labels",
-                "Portfolio analytics: collection value, revenue, profit margin",
-              ].map((item) => (
-                <li key={item} className="flex items-start gap-2.5">
-                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#8b7fe8]" />
-                  {item}
-                </li>
+                {
+                  icon: Upload,
+                  title: "Bulk import",
+                  desc: "CSV or pre-analysed JSON box files, with pricing auto-loaded.",
+                  color: "text-green-400 bg-green-400/10",
+                },
+                {
+                  icon: Sparkles,
+                  title: "AI pricing & descriptions",
+                  desc: "Claude prices each record from live Discogs & eBay data and writes the listing.",
+                  color: "text-[#8b7fe8] bg-[#8b7fe8]/10",
+                },
+                {
+                  icon: Camera,
+                  title: "AI photo matching",
+                  desc: "Auto-attach cover photos to the right album — even matching cover art to Discogs when text is hard to read. Supports HEIC/HEIF.",
+                  color: "text-pink-400 bg-pink-400/10",
+                },
+                {
+                  icon: ShoppingBag,
+                  title: "Dual-platform listing",
+                  desc: "List to eBay and Discogs at once, with automatic cross-cancellation on sale.",
+                  color: "text-blue-400 bg-blue-400/10",
+                },
+                {
+                  icon: Package,
+                  title: "Auto shipping labels",
+                  desc: "Shippo generates prepaid USPS Media Mail labels the moment a sale is detected.",
+                  color: "text-purple-400 bg-purple-400/10",
+                },
+                {
+                  icon: Plug,
+                  title: "One-click connections",
+                  desc: "Connect eBay, Discogs, and Shippo with secure OAuth — no tokens to paste.",
+                  color: "text-amber-400 bg-amber-400/10",
+                },
+                {
+                  icon: TrendingUp,
+                  title: "Portfolio analytics",
+                  desc: "Track collection value, monthly revenue, and profit vs. purchase price.",
+                  color: "text-orange-400 bg-orange-400/10",
+                },
+                {
+                  icon: Disc2,
+                  title: "Grade-aware pricing",
+                  desc: "Live Discogs marketplace prices by condition, with eBay comparables as a fallback.",
+                  color: "text-cyan-400 bg-cyan-400/10",
+                },
+              ].map(({ icon: Icon, title, desc, color }) => (
+                <div
+                  key={title}
+                  className="group rounded-xl border border-white/[0.08] bg-white/[0.02] p-4 transition-all duration-300 hover:-translate-y-0.5 hover:border-[#8b7fe8]/30 hover:bg-white/[0.04]"
+                >
+                  <div className={`mb-3 inline-flex h-9 w-9 items-center justify-center rounded-lg ${color} transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-6`}>
+                    <Icon className="h-4 w-4" />
+                  </div>
+                  <p className="font-display text-sm font-semibold text-white">{title}</p>
+                  <p className="mt-1 text-sm text-white/55 leading-relaxed">{desc}</p>
+                </div>
               ))}
-            </ul>
+            </div>
           </section>
 
           <section>
