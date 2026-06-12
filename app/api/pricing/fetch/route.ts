@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { fetchDiscogsPricing, resolveDiscogsAuth } from "@/lib/discogs";
+import { fetchDiscogsPricing } from "@/lib/discogs";
 import { searchEbayActiveListings, type EbayPriceResult } from "@/lib/ebay";
 import { buildCombinedPricing } from "@/lib/pricing";
+import {
+  canManage,
+  getDiscogsAuthForOwner,
+  getRoleForOwner,
+} from "@/lib/collections";
 import type { Album, AlbumCondition, PricingResult } from "@/types";
 
 // Single-album fetch can issue ~12 sequential Discogs requests at 1.1s each
@@ -101,8 +106,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const discogsAuth = resolveDiscogsAuth(user.user_metadata);
-
   const body = await request.json().catch(() => ({}));
   const { albumId, force } = body as { albumId?: string; force?: boolean };
 
@@ -121,6 +124,14 @@ export async function POST(request: Request) {
   }
 
   const typedAlbum = album as Album;
+  const role = await getRoleForOwner(user, typedAlbum.user_id);
+  if (!canManage(role)) {
+    return NextResponse.json(
+      { error: "You need editor access to refresh pricing for this album." },
+      { status: 403 }
+    );
+  }
+  const discogsAuth = await getDiscogsAuthForOwner(user, typedAlbum.user_id);
 
   // ===== Cache check =====
   if (!force) {

@@ -2,6 +2,7 @@ import "server-only";
 import { cookies } from "next/headers";
 import type { User } from "@supabase/supabase-js";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { resolveDiscogsAuth, type DiscogsAuth } from "@/lib/discogs";
 import type {
   AccessibleCollection,
   CollectionMember,
@@ -12,6 +13,79 @@ export const ACTIVE_COLLECTION_COOKIE = "vv_active_collection";
 
 export function canManage(role: CollectionRole | "owner" | null): boolean {
   return role === "owner" || role === "editor";
+}
+
+type DiscogsMeta = {
+  discogs_token?: string;
+  discogs_oauth_token?: string;
+  discogs_oauth_token_secret?: string;
+};
+
+export function discogsConnectedFromMeta(
+  meta: DiscogsMeta | Record<string, unknown> | null | undefined
+): boolean {
+  return resolveDiscogsAuth(meta) !== null;
+}
+
+export async function getDiscogsAuthForOwner(
+  user: User,
+  ownerId: string
+): Promise<DiscogsAuth | null> {
+  if (ownerId === user.id) {
+    return resolveDiscogsAuth(user.user_metadata);
+  }
+
+  try {
+    const admin = await createServiceClient();
+    const { data } = await admin.auth.admin.getUserById(ownerId);
+    return resolveDiscogsAuth(data?.user?.user_metadata);
+  } catch {
+    // Fall back to any server-wide token if owner metadata cannot be read.
+    return resolveDiscogsAuth(null);
+  }
+}
+
+export async function getOwnerConnectionStatus(
+  user: User,
+  ownerId: string
+): Promise<{ ebayConnected: boolean; discogsConnected: boolean }> {
+  if (ownerId === user.id) {
+    const supabase = await createClient();
+    const { data: ebayCreds } = await supabase
+      .from("ebay_credentials")
+      .select("user_id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    return {
+      ebayConnected: !!ebayCreds,
+      discogsConnected: discogsConnectedFromMeta(user.user_metadata),
+    };
+  }
+
+  try {
+    const admin = await createServiceClient();
+    const [{ data: ebayCreds }, { data: ownerData }] = await Promise.all([
+      admin
+        .from("ebay_credentials")
+        .select("user_id")
+        .eq("user_id", ownerId)
+        .maybeSingle(),
+      admin.auth.admin.getUserById(ownerId),
+    ]);
+
+    return {
+      ebayConnected: !!ebayCreds,
+      discogsConnected: discogsConnectedFromMeta(
+        ownerData?.user?.user_metadata
+      ),
+    };
+  } catch {
+    return {
+      ebayConnected: false,
+      discogsConnected: discogsConnectedFromMeta(null),
+    };
+  }
 }
 
 /**

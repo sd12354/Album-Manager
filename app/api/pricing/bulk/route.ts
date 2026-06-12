@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { fetchDiscogsPricing, resolveDiscogsAuth } from "@/lib/discogs";
+import { fetchDiscogsPricing, type DiscogsAuth } from "@/lib/discogs";
 import { searchEbayActiveListings, type EbayPriceResult } from "@/lib/ebay";
 import { buildCombinedPricing } from "@/lib/pricing";
+import {
+  canManage,
+  getDiscogsAuthForOwner,
+  getRoleForOwner,
+} from "@/lib/collections";
 import type { Album, AlbumCondition, PricingResult } from "@/types";
 
 // Bulk pricing is sequential and each album can issue multiple Discogs searches
@@ -24,8 +29,6 @@ export async function POST(request: Request) {
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const discogsAuth = resolveDiscogsAuth(user.user_metadata);
 
   const body = await request.json().catch(() => ({}));
   const { albumIds, force } = body as { albumIds?: string[]; force?: boolean };
@@ -49,6 +52,7 @@ export async function POST(request: Request) {
     | { albumId: string; status: "error"; error: string };
 
   const results: BulkResult[] = [];
+  const discogsAuthByOwner = new Map<string, DiscogsAuth | null>();
 
   for (const albumId of albumIds) {
     try {
@@ -64,6 +68,20 @@ export async function POST(request: Request) {
       }
 
       const typedAlbum = album as Album;
+      const role = await getRoleForOwner(user, typedAlbum.user_id);
+      if (!canManage(role)) {
+        results.push({
+          albumId,
+          status: "error",
+          error: "You need editor access to refresh pricing for this album.",
+        });
+        continue;
+      }
+      let discogsAuth = discogsAuthByOwner.get(typedAlbum.user_id);
+      if (!discogsAuthByOwner.has(typedAlbum.user_id)) {
+        discogsAuth = await getDiscogsAuthForOwner(user, typedAlbum.user_id);
+        discogsAuthByOwner.set(typedAlbum.user_id, discogsAuth);
+      }
 
       // Cache check
       if (!force) {

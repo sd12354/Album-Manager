@@ -317,7 +317,7 @@ export function CatalogueClient({
     }
 
     void handleBulkPrice(idsToPrice).finally(() => router.replace("/albums"));
-  }, [albums, handleBulkPrice, router, searchParams]);
+  }, [albums, canEdit, handleBulkPrice, router, searchParams]);
 
   const handleBulkDelete = useCallback(async () => {
     if (!confirmDelete) { setConfirmDelete(true); return; }
