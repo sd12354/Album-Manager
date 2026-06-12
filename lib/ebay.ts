@@ -154,7 +154,7 @@ export async function getValidEbayToken(
   }
   const refreshed = await refreshEbayToken(credentials.refresh_token);
   if (!refreshed) {
-    return { token: credentials.access_token, refreshed: false };
+    throw new Error("eBay authorization expired. Reconnect your eBay account in Settings.");
   }
   const expiry = new Date(Date.now() + refreshed.expires_in * 1000).toISOString();
   return { token: refreshed.access_token, refreshed: true, expiry };

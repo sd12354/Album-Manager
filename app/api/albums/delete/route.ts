@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { endEbayListing, getValidEbayToken, type EbayTokenCredentials } from "@/lib/ebay";
 import { deleteDiscogsListing, resolveDiscogsAuth } from "@/lib/discogs";
 import { getActiveContext } from "@/lib/collections";
-import type { Album, UserSettings } from "@/types";
+import type { Album } from "@/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -19,10 +19,9 @@ export async function POST(request: Request) {
       { status: 403 }
     );
   }
-  const user = ctx.user;
   const isOwner = ctx.role === "owner";
 
-  const { albumIds } = await request.json() as { albumIds: string[] };
+  const { albumIds } = await request.json().catch(() => ({})) as { albumIds?: string[] };
   if (!albumIds || albumIds.length === 0) {
     return NextResponse.json({ error: "albumIds required" }, { status: 400 });
   }
@@ -37,17 +36,45 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "No albums found" }, { status: 404 });
   }
 
-  const userMeta = (user.user_metadata ?? {}) as UserSettings;
-  const discogsAuth = resolveDiscogsAuth(user.user_metadata);
-  const ebayEnvironment = userMeta.ebay_environment ?? "stub";
+  const foundIds = new Set((albums as Album[]).map((album) => album.id));
+  const missingIds = albumIds.filter((id) => !foundIds.has(id));
+  if (missingIds.length > 0) {
+    return NextResponse.json(
+      {
+        error: "Some albums were not found in the active collection.",
+        requested: albumIds.length,
+        found: albums.length,
+        missingIds,
+      },
+      { status: 404 }
+    );
+  }
+
+  const hasMarketplaceListings = (albums as Album[]).some(
+    (album) => album.discogs_listing_id || album.ebay_listing_id
+  );
+  if (!isOwner && hasMarketplaceListings) {
+    return NextResponse.json(
+      {
+        error:
+          "Only the collection owner can delete albums with active marketplace listings.",
+      },
+      { status: 403 }
+    );
+  }
+
+  const discogsAuth = resolveDiscogsAuth(ctx.user.user_metadata);
 
   const { data: ebayCreds } = await supabase
     .from("ebay_credentials")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("user_id", ctx.ownerId)
     .maybeSingle();
 
-  const isRealEbay = ebayEnvironment !== "stub" && ebayCreds?.access_token !== "stub-access-token";
+  const isRealEbay =
+    Boolean(process.env.EBAY_CLIENT_ID) &&
+    Boolean(ebayCreds) &&
+    ebayCreds?.access_token !== "stub-access-token";
   let ebayToken: string | null = null;
 
   if (isRealEbay && ebayCreds) {
@@ -59,7 +86,7 @@ export async function POST(request: Request) {
           access_token: tokenResult.token,
           token_expiry: tokenResult.expiry,
           updated_at: new Date().toISOString(),
-        }).eq("user_id", user.id);
+        }).eq("user_id", ctx.ownerId);
       }
     }
   }

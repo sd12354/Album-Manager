@@ -22,13 +22,17 @@ export async function POST(request: Request) {
 
   // Owner removes a collaborator from their collection.
   if (memberId) {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("collection_members")
       .delete()
       .eq("owner_id", user.id)
-      .eq("member_id", memberId);
+      .eq("member_id", memberId)
+      .select("member_id");
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+    if (!data || data.length === 0) {
+      return NextResponse.json({ error: "Collaborator not found" }, { status: 404 });
     }
     return NextResponse.json({ ok: true });
   }
@@ -36,26 +40,34 @@ export async function POST(request: Request) {
   // Owner cancels a pending invite (service role to also clear it cleanly).
   if (inviteId) {
     const admin = await createServiceClient();
-    const { error } = await admin
+    const { data, error } = await admin
       .from("collection_invites")
       .delete()
       .eq("id", inviteId)
-      .eq("owner_id", user.id);
+      .eq("owner_id", user.id)
+      .select("id");
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+    if (!data || data.length === 0) {
+      return NextResponse.json({ error: "Invite not found" }, { status: 404 });
     }
     return NextResponse.json({ ok: true });
   }
 
   // Member leaves a collection shared with them.
   if (leaveOwnerId) {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("collection_members")
       .delete()
       .eq("owner_id", leaveOwnerId)
-      .eq("member_id", user.id);
+      .eq("member_id", user.id)
+      .select("owner_id");
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+    if (!data || data.length === 0) {
+      return NextResponse.json({ error: "Shared collection not found" }, { status: 404 });
     }
     return NextResponse.json({ ok: true });
   }

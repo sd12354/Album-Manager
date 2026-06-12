@@ -36,7 +36,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { albumId } = await request.json();
+  const { albumId } = await request.json().catch(() => ({}));
   if (!albumId) {
     return NextResponse.json({ error: "albumId required" }, { status: 400 });
   }
@@ -73,9 +73,9 @@ export async function POST(request: Request) {
     .eq("user_id", user.id)
     .maybeSingle();
 
-  const ebayEnvironment = userMeta.ebay_environment ?? "stub";
   const isRealEbay =
-    ebayEnvironment !== "stub" &&
+    Boolean(process.env.EBAY_CLIENT_ID) &&
+    Boolean(ebayCreds) &&
     ebayCreds?.access_token !== "stub-access-token";
 
   let soldOn: "ebay" | "discogs" | null = null;

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getActiveContext } from "@/lib/collections";
 import { generateListingDescription } from "@/lib/ai-pricing";
 import type { Album, AlbumCondition } from "@/types";
 
@@ -9,12 +10,16 @@ export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const ctx = await getActiveContext();
 
-  if (!user) {
+  if (!ctx) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!ctx.canEdit) {
+    return NextResponse.json(
+      { error: "You have view-only access to this collection." },
+      { status: 403 }
+    );
   }
 
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -24,7 +29,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const { albumId, save, platform } = await request.json() as {
+  const { albumId, save, platform } = await request.json().catch(() => ({})) as {
     albumId: string;
     save?: boolean;
     platform?: "ebay" | "discogs" | "both";
@@ -45,6 +50,9 @@ export async function POST(request: Request) {
   }
 
   const typedAlbum = album as Album;
+  if (typedAlbum.user_id !== ctx.ownerId) {
+    return NextResponse.json({ error: "Album not found" }, { status: 404 });
+  }
 
   // Pull release year from pricing cache if available
   const { data: cacheRow } = await supabase
@@ -74,10 +82,14 @@ export async function POST(request: Request) {
 
     // Optionally persist to the album record
     if (save !== false) {
-      await supabase
+      const { error: updateError } = await supabase
         .from("albums")
         .update({ listing_description: description })
-        .eq("id", albumId);
+        .eq("id", albumId)
+        .eq("user_id", ctx.ownerId);
+      if (updateError) {
+        return NextResponse.json({ error: updateError.message }, { status: 500 });
+      }
     }
 
     return NextResponse.json({ description });
