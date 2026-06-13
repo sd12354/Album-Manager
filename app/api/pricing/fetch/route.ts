@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchDiscogsPricing, resolveDiscogsAuth } from "@/lib/discogs";
 import { searchEbayActiveListings, type EbayPriceResult } from "@/lib/ebay";
 import { buildCombinedPricing } from "@/lib/pricing";
+import { getActiveContext, getActiveOwnerMetadata } from "@/lib/collections";
 import type { Album, AlbumCondition, PricingResult } from "@/types";
 
 // Single-album fetch can issue ~12 sequential Discogs requests at 1.1s each
@@ -93,15 +94,20 @@ async function persistDiscogsReleaseId(
 
 export async function POST(request: Request) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const ctx = await getActiveContext();
 
-  if (!user) {
+  if (!ctx) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  if (!ctx.canEdit) {
+    return NextResponse.json(
+      { error: "You have view-only access to this collection." },
+      { status: 403 }
+    );
+  }
 
-  const discogsAuth = resolveDiscogsAuth(user.user_metadata);
+  const ownerMetadata = await getActiveOwnerMetadata(ctx);
+  const discogsAuth = resolveDiscogsAuth(ownerMetadata);
 
   const body = await request.json().catch(() => ({}));
   const { albumId, force } = body as { albumId?: string; force?: boolean };
@@ -114,6 +120,7 @@ export async function POST(request: Request) {
     .from("albums")
     .select("*")
     .eq("id", albumId)
+    .eq("user_id", ctx.ownerId)
     .single();
 
   if (fetchError || !album) {
@@ -257,7 +264,8 @@ export async function POST(request: Request) {
         status:
           typedAlbum.status === "unlisted" ? "pricing" : typedAlbum.status,
       })
-      .eq("id", albumId);
+      .eq("id", albumId)
+      .eq("user_id", ctx.ownerId);
   } else {
     await persistDiscogsReleaseId(supabase, albumId, discogsResult?.releaseId);
   }

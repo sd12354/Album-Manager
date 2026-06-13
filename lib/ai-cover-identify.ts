@@ -19,10 +19,16 @@ const ACCEPTED_MEDIA_TYPES = new Set([
   "image/gif",
 ]);
 
+export function isSupportedVisionMediaType(
+  mimeType: string | null | undefined
+): mimeType is "image/jpeg" | "image/png" | "image/webp" | "image/gif" {
+  return !!mimeType && ACCEPTED_MEDIA_TYPES.has(mimeType);
+}
+
 export function resolveImageMediaType(
   mimeType: string | null | undefined
 ): "image/jpeg" | "image/png" | "image/webp" | "image/gif" {
-  if (mimeType && ACCEPTED_MEDIA_TYPES.has(mimeType)) {
+  if (isSupportedVisionMediaType(mimeType)) {
     return mimeType as "image/jpeg" | "image/png" | "image/webp" | "image/gif";
   }
   return "image/jpeg";

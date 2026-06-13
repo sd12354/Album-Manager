@@ -41,6 +41,28 @@ export async function getActiveContext(): Promise<{
 }
 
 /**
+ * Returns auth metadata for the active collection owner. Shared collection
+ * workflows should use the owner's marketplace integrations, not the acting
+ * member's integrations.
+ */
+export async function getActiveOwnerMetadata(ctx: {
+  user: User;
+  ownerId: string;
+}): Promise<Record<string, unknown>> {
+  if (ctx.ownerId === ctx.user.id) {
+    return (ctx.user.user_metadata ?? {}) as Record<string, unknown>;
+  }
+
+  try {
+    const admin = await createServiceClient();
+    const { data } = await admin.auth.admin.getUserById(ctx.ownerId);
+    return (data?.user?.user_metadata ?? {}) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
+/**
  * Collections the user can act in: their own first, then any shared with them.
  */
 export async function getAccessibleCollections(

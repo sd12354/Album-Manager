@@ -113,6 +113,21 @@ export interface EbayTokenCredentials {
   token_expiry: string;
 }
 
+export function hasRealEbayCredentials(
+  creds:
+    | {
+        access_token?: string | null;
+      }
+    | null
+    | undefined
+): boolean {
+  return (
+    !!process.env.EBAY_CLIENT_ID &&
+    !!creds?.access_token &&
+    creds.access_token !== "stub-access-token"
+  );
+}
+
 export async function refreshEbayToken(
   refreshToken: string
 ): Promise<{ access_token: string; expires_in: number } | null> {

@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { identifyAlbumFromCover } from "@/lib/ai-cover-identify";
+import {
+  identifyAlbumFromCover,
+  isSupportedVisionMediaType,
+} from "@/lib/ai-cover-identify";
 import { pickMatchingRelease } from "@/lib/ai-cover-compare";
 import {
   findBestAlbumMatch,
@@ -12,6 +15,7 @@ import {
   searchDiscogsCandidates,
 } from "@/lib/discogs";
 import { ACCEPTED_MIME_TYPES } from "@/lib/photos";
+import { getActiveContext, getActiveOwnerMetadata } from "@/lib/collections";
 import type { Album } from "@/types";
 
 export const runtime = "nodejs";
@@ -20,11 +24,9 @@ export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const ctx = await getActiveContext();
 
-  if (!user) {
+  if (!ctx) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -48,7 +50,22 @@ export async function POST(request: Request) {
   if (!(ACCEPTED_MIME_TYPES as readonly string[]).includes(file.type)) {
     return NextResponse.json(
       {
-        error: `Unsupported image type${file.type ? ` (${file.type})` : ""}. Use JPEG, PNG, or WebP.`,
+        error: `Unsupported image type${file.type ? ` (${file.type})` : ""}. Use JPEG, PNG, WebP, GIF, BMP, or TIFF for photo uploads.`,
+      },
+      { status: 400 }
+    );
+  }
+
+  if (!isSupportedVisionMediaType(file.type)) {
+    return NextResponse.json(
+      {
+        error: `Cover matching supports JPEG, PNG, WebP, or GIF. Convert ${
+          file.type === "image/tiff"
+            ? "TIFF"
+            : file.type === "image/bmp"
+              ? "BMP"
+              : "this image"
+        } before analysis.`,
       },
       { status: 400 }
     );
@@ -77,7 +94,7 @@ export async function POST(request: Request) {
   const { data: albums, error: albumsError } = await supabase
     .from("albums")
     .select("id, artist, title, catalog_number")
-    .eq("user_id", user.id)
+    .eq("user_id", ctx.ownerId)
     .order("title", { ascending: true });
 
   if (albumsError) {
@@ -101,7 +118,8 @@ export async function POST(request: Request) {
   const needsVisualHelp = !matchResult.match || matchResult.match.confidence !== "high";
 
   if (needsVisualHelp && catalogue.length > 0) {
-    const discogsAuth = resolveDiscogsAuth(user.user_metadata);
+    const ownerMetadata = await getActiveOwnerMetadata(ctx);
+    const discogsAuth = resolveDiscogsAuth(ownerMetadata);
     if (discogsAuth) {
       try {
         const candidates = await searchDiscogsCandidates(

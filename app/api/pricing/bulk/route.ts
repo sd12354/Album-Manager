@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchDiscogsPricing, resolveDiscogsAuth } from "@/lib/discogs";
 import { searchEbayActiveListings, type EbayPriceResult } from "@/lib/ebay";
 import { buildCombinedPricing } from "@/lib/pricing";
+import { getActiveContext, getActiveOwnerMetadata } from "@/lib/collections";
 import type { Album, AlbumCondition, PricingResult } from "@/types";
 
 // Bulk pricing is sequential and each album can issue multiple Discogs searches
@@ -17,15 +18,20 @@ const MAX_BULK = 3;
 
 export async function POST(request: Request) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const ctx = await getActiveContext();
 
-  if (!user) {
+  if (!ctx) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  if (!ctx.canEdit) {
+    return NextResponse.json(
+      { error: "You have view-only access to this collection." },
+      { status: 403 }
+    );
+  }
 
-  const discogsAuth = resolveDiscogsAuth(user.user_metadata);
+  const ownerMetadata = await getActiveOwnerMetadata(ctx);
+  const discogsAuth = resolveDiscogsAuth(ownerMetadata);
 
   const body = await request.json().catch(() => ({}));
   const { albumIds, force } = body as { albumIds?: string[]; force?: boolean };
@@ -56,6 +62,7 @@ export async function POST(request: Request) {
         .from("albums")
         .select("*")
         .eq("id", albumId)
+        .eq("user_id", ctx.ownerId)
         .single();
 
       if (!album) {
@@ -175,8 +182,15 @@ export async function POST(request: Request) {
 
       await supabase
         .from("albums")
-        .update({ suggested_price: pricing.suggestedPrice, status: "pricing" })
-        .eq("id", albumId);
+        .update({
+          suggested_price: pricing.suggestedPrice,
+          discogs_release_id:
+            discogsResult?.releaseId ?? typedAlbum.discogs_release_id,
+          status:
+            typedAlbum.status === "unlisted" ? "pricing" : typedAlbum.status,
+        })
+        .eq("id", albumId)
+        .eq("user_id", ctx.ownerId);
 
       results.push({
         albumId,

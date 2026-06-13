@@ -1,9 +1,14 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { endEbayListing, getValidEbayToken, type EbayTokenCredentials } from "@/lib/ebay";
+import {
+  endEbayListing,
+  getValidEbayToken,
+  hasRealEbayCredentials,
+  type EbayTokenCredentials,
+} from "@/lib/ebay";
 import { deleteDiscogsListing, resolveDiscogsAuth } from "@/lib/discogs";
 import { getActiveContext } from "@/lib/collections";
-import type { Album, UserSettings } from "@/types";
+import type { Album } from "@/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -37,9 +42,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "No albums found" }, { status: 404 });
   }
 
-  const userMeta = (user.user_metadata ?? {}) as UserSettings;
   const discogsAuth = resolveDiscogsAuth(user.user_metadata);
-  const ebayEnvironment = userMeta.ebay_environment ?? "stub";
 
   const { data: ebayCreds } = await supabase
     .from("ebay_credentials")
@@ -47,7 +50,7 @@ export async function POST(request: Request) {
     .eq("user_id", user.id)
     .maybeSingle();
 
-  const isRealEbay = ebayEnvironment !== "stub" && ebayCreds?.access_token !== "stub-access-token";
+  const isRealEbay = hasRealEbayCredentials(ebayCreds);
   let ebayToken: string | null = null;
 
   if (isRealEbay && ebayCreds) {

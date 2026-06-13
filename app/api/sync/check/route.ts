@@ -5,6 +5,7 @@ import {
   endEbayListing,
   getEbayOrderForItem,
   getValidEbayToken,
+  hasRealEbayCredentials,
   type EbayBuyerAddress,
   type EbayTokenCredentials,
 } from "@/lib/ebay";
@@ -73,10 +74,7 @@ export async function POST(request: Request) {
     .eq("user_id", user.id)
     .maybeSingle();
 
-  const ebayEnvironment = userMeta.ebay_environment ?? "stub";
-  const isRealEbay =
-    ebayEnvironment !== "stub" &&
-    ebayCreds?.access_token !== "stub-access-token";
+  const isRealEbay = hasRealEbayCredentials(ebayCreds);
 
   let soldOn: "ebay" | "discogs" | null = null;
   let soldPrice: number | undefined;
