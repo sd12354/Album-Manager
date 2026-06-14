@@ -153,16 +153,27 @@ export function SettingsClient({
 
   async function saveSettings(updates: Record<string, unknown>) {
     setSaving(true);
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (user) {
-      await supabase.auth.updateUser({
-        data: { ...userSettings, ...updates },
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error("You must be signed in to save settings.");
+        return;
+      }
+
+      const { error } = await supabase.auth.updateUser({
+        data: { ...(user.user_metadata ?? {}), ...updates },
       });
+
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
       toast.success("Settings saved");
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   }
 
   async function changeEmail() {

@@ -175,7 +175,10 @@ export async function POST(request: Request) {
 
       await supabase
         .from("albums")
-        .update({ suggested_price: pricing.suggestedPrice, status: "pricing" })
+        .update({
+          suggested_price: pricing.suggestedPrice,
+          status: typedAlbum.status === "unlisted" ? "pricing" : typedAlbum.status,
+        })
         .eq("id", albumId);
 
       results.push({
