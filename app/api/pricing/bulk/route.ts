@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { getActiveContext } from "@/lib/collections";
 import { fetchDiscogsPricing, resolveDiscogsAuth } from "@/lib/discogs";
 import { searchEbayActiveListings, type EbayPriceResult } from "@/lib/ebay";
 import { buildCombinedPricing } from "@/lib/pricing";
@@ -15,17 +16,37 @@ export const dynamic = "force-dynamic";
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_BULK = 3;
 
-export async function POST(request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+async function resolveActiveDiscogsAuth(
+  ctx: NonNullable<Awaited<ReturnType<typeof getActiveContext>>>
+) {
+  if (ctx.role === "owner") {
+    return resolveDiscogsAuth(ctx.user.user_metadata);
   }
 
-  const discogsAuth = resolveDiscogsAuth(user.user_metadata);
+  try {
+    const admin = await createServiceClient();
+    const { data } = await admin.auth.admin.getUserById(ctx.ownerId);
+    return resolveDiscogsAuth(data.user?.user_metadata);
+  } catch {
+    return resolveDiscogsAuth(undefined);
+  }
+}
+
+export async function POST(request: Request) {
+  const supabase = await createClient();
+  const ctx = await getActiveContext();
+
+  if (!ctx) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!ctx.canEdit) {
+    return NextResponse.json(
+      { error: "You have view-only access to this collection." },
+      { status: 403 }
+    );
+  }
+
+  const discogsAuth = await resolveActiveDiscogsAuth(ctx);
 
   const body = await request.json().catch(() => ({}));
   const { albumIds, force } = body as { albumIds?: string[]; force?: boolean };
@@ -56,6 +77,7 @@ export async function POST(request: Request) {
         .from("albums")
         .select("*")
         .eq("id", albumId)
+        .eq("user_id", ctx.ownerId)
         .single();
 
       if (!album) {
@@ -176,7 +198,8 @@ export async function POST(request: Request) {
       await supabase
         .from("albums")
         .update({ suggested_price: pricing.suggestedPrice, status: "pricing" })
-        .eq("id", albumId);
+        .eq("id", albumId)
+        .eq("user_id", ctx.ownerId);
 
       results.push({
         albumId,

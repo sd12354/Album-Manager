@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { getActiveContext } from "@/lib/collections";
 import { fetchDiscogsPricing, resolveDiscogsAuth } from "@/lib/discogs";
 import { searchEbayActiveListings, type EbayPriceResult } from "@/lib/ebay";
 import { buildCombinedPricing } from "@/lib/pricing";
@@ -79,29 +80,51 @@ function buildFromCache(
   return result;
 }
 
+async function resolveActiveDiscogsAuth(
+  ctx: NonNullable<Awaited<ReturnType<typeof getActiveContext>>>
+) {
+  if (ctx.role === "owner") {
+    return resolveDiscogsAuth(ctx.user.user_metadata);
+  }
+
+  try {
+    const admin = await createServiceClient();
+    const { data } = await admin.auth.admin.getUserById(ctx.ownerId);
+    return resolveDiscogsAuth(data.user?.user_metadata);
+  } catch {
+    return resolveDiscogsAuth(undefined);
+  }
+}
+
 async function persistDiscogsReleaseId(
   supabase: Awaited<ReturnType<typeof createClient>>,
   albumId: string,
+  ownerId: string,
   releaseId?: number
 ) {
   if (!releaseId) return;
   await supabase
     .from("albums")
     .update({ discogs_release_id: releaseId })
-    .eq("id", albumId);
+    .eq("id", albumId)
+    .eq("user_id", ownerId);
 }
 
 export async function POST(request: Request) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const ctx = await getActiveContext();
 
-  if (!user) {
+  if (!ctx) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  if (!ctx.canEdit) {
+    return NextResponse.json(
+      { error: "You have view-only access to this collection." },
+      { status: 403 }
+    );
+  }
 
-  const discogsAuth = resolveDiscogsAuth(user.user_metadata);
+  const discogsAuth = await resolveActiveDiscogsAuth(ctx);
 
   const body = await request.json().catch(() => ({}));
   const { albumId, force } = body as { albumId?: string; force?: boolean };
@@ -114,6 +137,7 @@ export async function POST(request: Request) {
     .from("albums")
     .select("*")
     .eq("id", albumId)
+    .eq("user_id", ctx.ownerId)
     .single();
 
   if (fetchError || !album) {
@@ -137,7 +161,7 @@ export async function POST(request: Request) {
       const cachedReleaseId = (discogsRow?.raw_data ?? {}).releaseId as
         | number
         | undefined;
-      await persistDiscogsReleaseId(supabase, albumId, cachedReleaseId);
+      await persistDiscogsReleaseId(supabase, albumId, ctx.ownerId, cachedReleaseId);
       return NextResponse.json(
         buildFromCache(
           typedAlbum,
@@ -257,9 +281,15 @@ export async function POST(request: Request) {
         status:
           typedAlbum.status === "unlisted" ? "pricing" : typedAlbum.status,
       })
-      .eq("id", albumId);
+      .eq("id", albumId)
+      .eq("user_id", ctx.ownerId);
   } else {
-    await persistDiscogsReleaseId(supabase, albumId, discogsResult?.releaseId);
+    await persistDiscogsReleaseId(
+      supabase,
+      albumId,
+      ctx.ownerId,
+      discogsResult?.releaseId
+    );
   }
 
   return NextResponse.json(pricing);

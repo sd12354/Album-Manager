@@ -113,6 +113,16 @@ export interface EbayTokenCredentials {
   token_expiry: string;
 }
 
+export function hasRealEbayCredentials(
+  creds?: { access_token?: string | null } | null
+): boolean {
+  return Boolean(
+    process.env.EBAY_CLIENT_ID &&
+      creds?.access_token &&
+      creds.access_token !== "stub-access-token"
+  );
+}
+
 export async function refreshEbayToken(
   refreshToken: string
 ): Promise<{ access_token: string; expires_in: number } | null> {
@@ -170,6 +180,10 @@ function escapeXml(str: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+function escapeCdata(str: string): string {
+  return str.replace(/\]\]>/g, "]]]]><![CDATA[>");
 }
 
 function extractXmlTag(xml: string, tag: string): string | undefined {
@@ -274,11 +288,22 @@ export async function createEbayListing(
   const locationStr = locationParts.length > 0 ? locationParts.join(", ") : country;
   const postalCode = sellerLocation?.zip || "";
 
+  const description = escapeCdata(
+    descriptionOverride ??
+      buildListingDescription(
+        album.artist,
+        album.title,
+        album.condition,
+        album.genre,
+        album.catalog_number
+      )
+  );
+
   const xml = `<?xml version="1.0" encoding="utf-8"?>
 <AddFixedPriceItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
   <Item>
     <Title>${escapeXml(buildListingTitle(album.artist, album.title, album.condition))}</Title>
-    <Description><![CDATA[${descriptionOverride ?? buildListingDescription(album.artist, album.title, album.condition, album.genre, album.catalog_number)}]]></Description>
+    <Description><![CDATA[${description}]]></Description>
     <PrimaryCategory><CategoryID>${categoryId}</CategoryID></PrimaryCategory>
     <StartPrice>${price.toFixed(2)}</StartPrice>
     <ConditionID>${conditionId}</ConditionID>
@@ -357,9 +382,8 @@ export async function checkEbayItemSold(
   const quantitySold = extractXmlTag(responseXml, "QuantitySold");
   const currentPrice = extractXmlTag(responseXml, "CurrentPrice");
 
-  const sold =
-    listingStatus === "Completed" ||
-    (quantitySold != null && parseInt(quantitySold, 10) > 0);
+  const soldQuantity = quantitySold != null ? parseInt(quantitySold, 10) : 0;
+  const sold = Number.isFinite(soldQuantity) && soldQuantity > 0;
 
   return {
     sold,
