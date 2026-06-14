@@ -1,7 +1,11 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AlbumDetailClient } from "@/components/album-detail-client";
-import { canManage, getRoleForOwner } from "@/lib/collections";
+import {
+  canManage,
+  getOwnerConnectionStatus,
+  getRoleForOwner,
+} from "@/lib/collections";
 import type { Album, PricingResult } from "@/types";
 
 interface AlbumDetailPageProps {
@@ -38,22 +42,9 @@ export default async function AlbumDetailPage({ params }: AlbumDetailPageProps) 
   const isOwner = !!user && typedAlbum.user_id === user.id;
   const role = user ? await getRoleForOwner(user, typedAlbum.user_id) : null;
   const canEdit = canManage(role);
-
-  const { data: ebayCreds } = await supabase
-    .from("ebay_credentials")
-    .select("user_id")
-    .maybeSingle();
-
-  const userMeta = (user?.user_metadata ?? {}) as {
-    discogs_token?: string;
-    discogs_oauth_token?: string;
-    discogs_oauth_token_secret?: string;
-  };
-  const discogsConnected = !!(
-    (userMeta.discogs_oauth_token && userMeta.discogs_oauth_token_secret) ||
-    userMeta.discogs_token ||
-    process.env.DISCOGS_PERSONAL_ACCESS_TOKEN
-  );
+  const ownerStatus = user
+    ? await getOwnerConnectionStatus(user, typedAlbum.user_id)
+    : { ebayConnected: false, discogsConnected: false };
 
   // Resolve Discogs release ID from album column (migration 004) or pricing cache
   const typedForRelease = album as Album;
@@ -127,8 +118,8 @@ export default async function AlbumDetailPage({ params }: AlbumDetailPageProps) 
   return (
     <AlbumDetailClient
       album={album as Album}
-      ebayConnected={!!ebayCreds}
-      discogsConnected={discogsConnected}
+      ebayConnected={ownerStatus.ebayConnected}
+      discogsConnected={ownerStatus.discogsConnected}
       discogsReleaseId={discogsReleaseId}
       initialPricing={initialPricing}
       canEdit={canEdit}

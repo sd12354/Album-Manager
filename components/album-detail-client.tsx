@@ -135,6 +135,7 @@ export function AlbumDetailClient({
   }, [lightboxUrl]);
 
   async function handleFetchPrices() {
+    if (!canEdit) return;
     setFetching(true);
     // Manual refresh always bypasses the 24h cache so the user gets live
     // Discogs/eBay data on demand.
@@ -175,6 +176,7 @@ export function AlbumDetailClient({
   }
 
   async function handleAIPricing() {
+    if (!canEdit) return;
     setFetchingAI(true);
     const res = await fetch("/api/pricing/ai", {
       method: "POST",
@@ -847,6 +849,7 @@ export function AlbumDetailClient({
                     step="0.01"
                     value={listPrice}
                     onChange={(e) => setListPrice(e.target.value)}
+                    disabled={!canEdit}
                   />
                 </div>
                 {/* Refresh market prices */}
@@ -854,7 +857,7 @@ export function AlbumDetailClient({
                   variant="outline"
                   size="icon"
                   onClick={handleFetchPrices}
-                  disabled={fetching}
+                  disabled={fetching || !canEdit}
                   title="Refresh Discogs + eBay prices"
                   className="shrink-0 h-10 w-10"
                 >
@@ -865,7 +868,7 @@ export function AlbumDetailClient({
                   variant="outline"
                   size="icon"
                   onClick={handleAIPricing}
-                  disabled={fetchingAI}
+                  disabled={fetchingAI || !canEdit}
                   title="Get AI price analysis"
                   className="shrink-0 h-10 w-10 border-accent/30 text-accent hover:bg-accent/10 hover:border-accent/60"
                 >

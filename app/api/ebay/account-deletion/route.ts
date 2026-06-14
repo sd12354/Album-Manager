@@ -13,12 +13,9 @@ function getEndpointUrl(request: Request): string {
   return new URL(request.url).origin + "/api/ebay/account-deletion";
 }
 
-function getVerificationToken(): string {
+function getVerificationToken(): string | null {
   const token = process.env.EBAY_ACCOUNT_DELETION_VERIFICATION_TOKEN;
-  if (!token) {
-    throw new Error("Missing EBAY_ACCOUNT_DELETION_VERIFICATION_TOKEN");
-  }
-  return token;
+  return token || null;
 }
 
 export async function GET(request: Request) {
@@ -33,6 +30,16 @@ export async function GET(request: Request) {
   }
 
   const verificationToken = getVerificationToken();
+  if (!verificationToken) {
+    return NextResponse.json(
+      {
+        error:
+          "eBay account deletion verification is not configured. Set EBAY_ACCOUNT_DELETION_VERIFICATION_TOKEN.",
+      },
+      { status: 500 }
+    );
+  }
+
   const endpointUrl = getEndpointUrl(request);
   const challengeResponse = createHash("sha256")
     .update(challengeCode)

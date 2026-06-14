@@ -1,24 +1,11 @@
-import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/app-shell";
 import {
   claimPendingInvites,
   getAccessibleCollections,
   getActiveCollection,
+  getOwnerConnectionStatus,
 } from "@/lib/collections";
-
-type DiscogsMeta = {
-  discogs_token?: string;
-  discogs_oauth_token?: string;
-  discogs_oauth_token_secret?: string;
-};
-
-function discogsConnectedFromMeta(meta: DiscogsMeta): boolean {
-  return !!(
-    (meta.discogs_oauth_token && meta.discogs_oauth_token_secret) ||
-    meta.discogs_token ||
-    process.env.DISCOGS_PERSONAL_ACCESS_TOKEN
-  );
-}
 
 export default async function AppLayout({
   children,
@@ -46,35 +33,10 @@ export default async function AppLayout({
   let ebayConnected = false;
   let discogsConnected = false;
 
-  if (active?.isOwner) {
-    const { data: ebayCreds } = await supabase
-      .from("ebay_credentials")
-      .select("user_id")
-      .eq("user_id", user?.id ?? "")
-      .maybeSingle();
-    ebayConnected = !!ebayCreds;
-    discogsConnected = discogsConnectedFromMeta(
-      (user?.user_metadata ?? {}) as DiscogsMeta
-    );
-  } else if (active) {
-    // Shared collection: read the owner's connection status via service role.
-    try {
-      const admin = await createServiceClient();
-      const { data: ebayCreds } = await admin
-        .from("ebay_credentials")
-        .select("user_id")
-        .eq("user_id", active.ownerId)
-        .maybeSingle();
-      ebayConnected = !!ebayCreds;
-      const { data: ownerData } = await admin.auth.admin.getUserById(
-        active.ownerId
-      );
-      discogsConnected = discogsConnectedFromMeta(
-        (ownerData?.user?.user_metadata ?? {}) as DiscogsMeta
-      );
-    } catch {
-      // Leave both false if the lookup fails.
-    }
+  if (user && active) {
+    const status = await getOwnerConnectionStatus(user, active.ownerId);
+    ebayConnected = status.ebayConnected;
+    discogsConnected = status.discogsConnected;
   }
 
   return (

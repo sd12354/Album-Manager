@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { EBAY_AUTH_URL } from "@/lib/ebay";
+import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,6 +12,15 @@ const EBAY_SCOPE = [
 ].join(" ");
 
 export async function GET(request: Request) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return NextResponse.redirect(new URL("/login", request.url));
+  }
+
   const clientId = process.env.EBAY_CLIENT_ID;
   const ruName = process.env.EBAY_RU_NAME;
 
