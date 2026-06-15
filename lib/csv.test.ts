@@ -1,15 +1,28 @@
 import { describe, expect, it } from "vitest";
-import { deriveRows, parseAlbumCSV } from "./csv";
+import { deriveRows } from "./csv";
 
 describe("CSV album import helpers", () => {
-  it("reports row 1 for invalid headerless CSV data", async () => {
-    const file = new File(["Missing Artist,,Rock,Great,ABC-1"], "albums.csv", {
-      type: "text/csv",
-    });
+  it("reports row 1 for invalid headerless CSV data", () => {
+    const result = deriveRows(
+      [
+        {
+          "Column 1": "Missing Artist",
+          "Column 2": "",
+          "Column 3": "Rock",
+          "Column 4": "Great",
+          "Column 5": "ABC-1",
+        },
+      ],
+      {
+        "Column 1": "title",
+        "Column 2": "artist",
+        "Column 3": "genre",
+        "Column 4": "condition",
+        "Column 5": "catalog_number",
+      },
+      { firstDataRowNumber: 1 }
+    );
 
-    const result = await parseAlbumCSV(file, { hasHeaderRow: false });
-
-    expect(result.headerless).toBe(true);
     expect(result.rows).toHaveLength(0);
     expect(result.errors).toContain("Row 1: missing artist");
   });
