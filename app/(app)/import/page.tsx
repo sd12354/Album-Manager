@@ -76,8 +76,11 @@ export default function ImportPage() {
 
   // ── CSV derived ────────────────────────────────────────────────────────────
   const { rows, errors, invalidCount } = useMemo(
-    () => deriveRows(rawRows, columnMapping),
-    [rawRows, columnMapping]
+    () =>
+      deriveRows(rawRows, columnMapping, {
+        firstDataRowNumber: headerless ? 1 : 2,
+      }),
+    [rawRows, columnMapping, headerless]
   );
   const mappedTargets = useMemo(
     () => new Set(Object.values(columnMapping).filter((v) => v !== "skip")),
