@@ -11,6 +11,8 @@ const EBAY_SCOPE = [
   "https://api.ebay.com/oauth/api_scope/commerce.identity.readonly",
 ].join(" ");
 
+const EBAY_STATE_COOKIE = "ebay_oauth_state";
+
 export async function GET(request: Request) {
   const supabase = await createClient();
   const {
@@ -40,19 +42,29 @@ export async function GET(request: Request) {
     );
   }
 
-  // `state` rides along through eBay's OAuth flow untouched. We use it so the
-  // shared RuName's callback (NexIssue) can identify VinylVault traffic and
-  // forward the `code` back to /api/ebay/callback here.
+  // `state` rides along through eBay's OAuth flow untouched. Keep the
+  // VinylVault prefix so the shared RuName callback (NexIssue) can identify and
+  // forward our traffic, plus a per-request nonce for CSRF protection when the
+  // callback binds credentials to the signed-in user.
+  const state = `vinylvault:${crypto.randomUUID()}`;
   const params = new URLSearchParams({
     client_id: clientId,
     response_type: "code",
     redirect_uri: ruName,
     scope: EBAY_SCOPE,
     prompt: "login",
-    state: "vinylvault",
+    state,
   });
 
   const authUrl = `${EBAY_AUTH_URL}?${params.toString()}`;
 
-  return NextResponse.redirect(authUrl);
+  const response = NextResponse.redirect(authUrl);
+  response.cookies.set(EBAY_STATE_COOKIE, state, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 10 * 60,
+  });
+  return response;
 }

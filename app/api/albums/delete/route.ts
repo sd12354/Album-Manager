@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { endEbayListing, getValidEbayToken, type EbayTokenCredentials } from "@/lib/ebay";
+import {
+  endEbayListing,
+  getValidEbayToken,
+  hasRealEbayCredentials,
+  type EbayTokenCredentials,
+} from "@/lib/ebay";
 import { deleteDiscogsListing, resolveDiscogsAuth } from "@/lib/discogs";
 import { getActiveContext } from "@/lib/collections";
 import type { Album } from "@/types";
@@ -71,10 +76,7 @@ export async function POST(request: Request) {
     .eq("user_id", ctx.ownerId)
     .maybeSingle();
 
-  const isRealEbay =
-    Boolean(process.env.EBAY_CLIENT_ID) &&
-    Boolean(ebayCreds) &&
-    ebayCreds?.access_token !== "stub-access-token";
+  const isRealEbay = hasRealEbayCredentials(ebayCreds);
   let ebayToken: string | null = null;
 
   if (isRealEbay && ebayCreds) {

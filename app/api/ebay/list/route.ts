@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import {
   createEbayListing,
   getValidEbayToken,
+  hasRealEbayCredentials,
   type EbayTokenCredentials,
   type SellerLocation,
 } from "@/lib/ebay";
@@ -65,8 +66,7 @@ export async function POST(request: Request) {
   // Stub only when OAuth was never configured or the stored token is the dev
   // placeholder — NOT from user_metadata.ebay_environment, which can be stale
   // or missing even after a real production connect.
-  const isStub =
-    !process.env.EBAY_CLIENT_ID || creds.access_token === "stub-access-token";
+  const isStub = !hasRealEbayCredentials(creds);
 
   if (isStub) {
     const fakeItemId = `STUB-${Date.now()}`;

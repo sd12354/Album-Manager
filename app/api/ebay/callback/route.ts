@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { EBAY_ENVIRONMENT, EBAY_IDENTITY_URL, EBAY_TOKEN_URL } from "@/lib/ebay";
 import { createClient } from "@/lib/supabase/server";
 
@@ -28,9 +29,22 @@ async function fetchEbayUsername(accessToken: string): Promise<string | null> {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const EBAY_STATE_COOKIE = "ebay_oauth_state";
+
+function settingsRedirect(request: Request, params: Record<string, string>) {
+  const url = new URL("/settings", request.url);
+  for (const [key, value] of Object.entries(params)) {
+    url.searchParams.set(key, value);
+  }
+  const response = NextResponse.redirect(url);
+  response.cookies.delete(EBAY_STATE_COOKIE);
+  return response;
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
+  const state = searchParams.get("state");
   const ebayError = searchParams.get("error");
   const ebayErrorDescription = searchParams.get("error_description");
   const stub = searchParams.get("stub");
@@ -45,9 +59,9 @@ export async function GET(request: Request) {
   }
 
   if (ebayError) {
-    const url = new URL("/settings", request.url);
-    url.searchParams.set("ebay_error", ebayErrorDescription ?? ebayError);
-    return NextResponse.redirect(url);
+    return settingsRedirect(request, {
+      ebay_error: ebayErrorDescription ?? ebayError,
+    });
   }
 
   if (stub === "true" || !process.env.EBAY_CLIENT_ID) {
@@ -69,14 +83,20 @@ export async function GET(request: Request) {
     const clientId = process.env.EBAY_CLIENT_ID;
     const clientSecret = process.env.EBAY_CLIENT_SECRET;
     const ruName = process.env.EBAY_RU_NAME;
+    const cookieStore = await cookies();
+    const expectedState = cookieStore.get(EBAY_STATE_COOKIE)?.value;
+
+    if (!state || !expectedState || state !== expectedState) {
+      return settingsRedirect(request, {
+        ebay_error:
+          "eBay authorization expired or did not match this session. Please try connecting again.",
+      });
+    }
 
     if (!code || !clientId || !clientSecret || !ruName) {
-      return NextResponse.redirect(
-        new URL(
-          "/settings?ebay_error=Missing%20eBay%20OAuth%20configuration",
-          request.url
-        )
-      );
+      return settingsRedirect(request, {
+        ebay_error: "Missing eBay OAuth configuration",
+      });
     }
 
     const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString(
@@ -104,9 +124,7 @@ export async function GET(request: Request) {
         tokenData.error_description ??
         tokenData.error ??
         "Could not exchange eBay OAuth code for tokens";
-      const url = new URL("/settings", request.url);
-      url.searchParams.set("ebay_error", message);
-      return NextResponse.redirect(url);
+      return settingsRedirect(request, { ebay_error: message });
     }
 
     await supabase.from("ebay_credentials").upsert({
@@ -134,5 +152,5 @@ export async function GET(request: Request) {
     });
   }
 
-  return NextResponse.redirect(new URL("/settings?ebay=connected", request.url));
+  return settingsRedirect(request, { ebay: "connected" });
 }

@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { endEbayListing, getValidEbayToken, type EbayTokenCredentials } from "@/lib/ebay";
-import type { Album, UserSettings } from "@/types";
+import {
+  endEbayListing,
+  getValidEbayToken,
+  hasRealEbayCredentials,
+  type EbayTokenCredentials,
+} from "@/lib/ebay";
+import type { Album } from "@/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -30,11 +35,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Album is not listed on eBay" }, { status: 400 });
   }
 
-  const userMeta = (user.user_metadata ?? {}) as UserSettings;
-  const ebayEnvironment = userMeta.ebay_environment ?? "stub";
   const { data: ebayCreds } = await supabase.from("ebay_credentials").select("*").eq("user_id", user.id).maybeSingle();
 
-  const isRealEbay = ebayEnvironment !== "stub" && ebayCreds?.access_token !== "stub-access-token";
+  const isRealEbay = hasRealEbayCredentials(ebayCreds);
 
   if (isRealEbay && ebayCreds) {
     const tokenResult = await getValidEbayToken(ebayCreds as EbayTokenCredentials);
