@@ -59,11 +59,13 @@ export function AddAlbumDrawer({
     handleSubmit,
     setValue,
     reset,
+    watch,
     formState: { errors },
   } = useForm<AlbumFormData>({
     resolver: zodResolver(albumSchema),
     defaultValues: { condition: "Great" },
   });
+  const condition = watch("condition");
 
   async function onSubmit(data: AlbumFormData) {
     setLoading(true);
@@ -93,7 +95,7 @@ export function AddAlbumDrawer({
       toast.error(error.message);
     } else {
       toast.success("Album added to catalogue");
-      reset();
+      reset({ condition: "Great" });
       onOpenChange(false);
       router.refresh();
     }
@@ -135,9 +137,12 @@ export function AddAlbumDrawer({
           <div className="space-y-2">
             <Label>Condition</Label>
             <Select
-              defaultValue="Great"
+              value={condition}
               onValueChange={(v) =>
-                setValue("condition", v as AlbumFormData["condition"])
+                setValue("condition", v as AlbumFormData["condition"], {
+                  shouldDirty: true,
+                  shouldValidate: true,
+                })
               }
             >
               <SelectTrigger>
