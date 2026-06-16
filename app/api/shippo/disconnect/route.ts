@@ -14,12 +14,18 @@ export async function POST() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  await supabase.auth.updateUser({
+  const { error } = await supabase.auth.updateUser({
     data: {
+      shippo_api_key: null,
       shippo_oauth_token: null,
       shippo_account_label: null,
+      shippo_enabled: false,
     },
   });
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 
   return NextResponse.json({ ok: true });
 }

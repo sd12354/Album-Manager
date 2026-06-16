@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { getActiveContext } from "@/lib/collections";
+import { canManage, getRoleForOwner } from "@/lib/collections";
 import { getAIPricingSuggestion } from "@/lib/ai-pricing";
 import type { Album, AlbumCondition } from "@/types";
 
@@ -10,16 +10,12 @@ export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
-  const ctx = await getActiveContext();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (!ctx) {
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  if (!ctx.canEdit) {
-    return NextResponse.json(
-      { error: "You have view-only access to this collection." },
-      { status: 403 }
-    );
   }
 
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -46,8 +42,12 @@ export async function POST(request: Request) {
   }
 
   const typedAlbum = album as Album;
-  if (typedAlbum.user_id !== ctx.ownerId) {
-    return NextResponse.json({ error: "Album not found" }, { status: 404 });
+  const role = await getRoleForOwner(user, typedAlbum.user_id);
+  if (!canManage(role)) {
+    return NextResponse.json(
+      { error: "You need editor access to generate AI pricing for this album." },
+      { status: 403 }
+    );
   }
 
   // Pull the latest pricing cache to give the AI real market context

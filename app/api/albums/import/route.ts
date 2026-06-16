@@ -1,11 +1,19 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveContext } from "@/lib/collections";
-import type { CSVAlbumRow } from "@/types";
+import type { AlbumCondition, CSVAlbumRow } from "@/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
+
+const VALID_CONDITIONS = new Set<AlbumCondition>([
+  "Mint",
+  "Great",
+  "Good",
+  "Fair",
+  "Poor",
+]);
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -29,6 +37,18 @@ export async function POST(request: Request) {
 
   if (!albums || !Array.isArray(albums) || albums.length === 0) {
     return NextResponse.json({ error: "No albums to import" }, { status: 400 });
+  }
+
+  const invalidCondition = albums.find(
+    (album) => !VALID_CONDITIONS.has(album.condition)
+  );
+  if (invalidCondition) {
+    return NextResponse.json(
+      {
+        error: `Invalid condition "${invalidCondition.condition}". Use Mint, Great, Good, Fair, or Poor.`,
+      },
+      { status: 400 }
+    );
   }
 
   const records = albums.map((album) => ({

@@ -65,6 +65,7 @@ export default function ImportPage() {
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState(0);
   const [importedCount, setImportedCount] = useState(0);
+  const [importError, setImportError] = useState<string | null>(null);
   const [showAllErrors, setShowAllErrors] = useState(false);
 
   // ── JSON state ─────────────────────────────────────────────────────────────
@@ -89,6 +90,7 @@ export default function ImportPage() {
   async function handleFileSelect(selectedFile: File) {
     setFile(selectedFile);
     setParseError(null);
+    setImportError(null);
     setShowAllErrors(false);
     const result = await parseAlbumCSV(selectedFile);
     setHeaders(result.headers);
@@ -112,11 +114,17 @@ export default function ImportPage() {
 
   function handleContinue() {
     if (step === 0 && file && rawRows.length > 0) setStep(1);
-    else if (step === 1 && rows.length > 0) { setStep(2); handleImport(); }
+    else if (step === 1 && rows.length > 0) {
+      setImportedCount(0);
+      setImportError(null);
+      setStep(2);
+      handleImport();
+    }
   }
 
   async function handleImport() {
     setImporting(true);
+    setImportError(null);
     setProgress(10);
     try {
       const res = await fetch("/api/albums/import", {
@@ -127,7 +135,9 @@ export default function ImportPage() {
       setProgress(80);
       if (!res.ok) {
         const data = await res.json();
-        toast.error(data.error ?? "Import failed");
+        const message = data.error ?? "Import failed";
+        setImportError(message);
+        toast.error(message);
         setImporting(false);
         return;
       }
@@ -135,8 +145,10 @@ export default function ImportPage() {
       setImportedCount(data.count);
       setProgress(100);
       toast.success(`Imported ${data.count} albums`);
-    } catch {
-      toast.error("Import failed");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Import failed";
+      setImportError(message);
+      toast.error(message);
     }
     setImporting(false);
   }
@@ -431,6 +443,16 @@ export default function ImportPage() {
                     <p className="mt-6 text-lg font-medium">Importing albums...</p>
                     <Progress value={progress} className="mt-4" />
                   </>
+                ) : importError ? (
+                  <div className="animate-fade-in-up">
+                    <AlertTriangle className="mx-auto h-10 w-10 text-red-400" />
+                    <p className="mt-4 font-display text-2xl font-bold">Import failed</p>
+                    <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">{importError}</p>
+                    <div className="mt-6 flex justify-center gap-3">
+                      <Button onClick={handleImport}>Try Again</Button>
+                      <Button variant="outline" onClick={() => setStep(1)}>Back to Preview</Button>
+                    </div>
+                  </div>
                 ) : (
                   <div className="animate-fade-in-up">
                     <p className="font-display text-2xl font-bold">Successfully imported {importedCount} albums</p>

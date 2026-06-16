@@ -12,7 +12,13 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { albumId } = await request.json();
+  const body = (await request.json().catch(() => null)) as {
+    albumId?: string;
+  } | null;
+  if (!body || typeof body !== "object") {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+  const { albumId } = body;
   if (!albumId) return NextResponse.json({ error: "albumId required" }, { status: 400 });
 
   const { data: album } = await supabase.from("albums").select("*").eq("id", albumId).single();
@@ -26,6 +32,13 @@ export async function POST(request: Request) {
   }
 
   const typedAlbum = album as Album;
+  if (typedAlbum.status === "sold") {
+    return NextResponse.json(
+      { error: "Sold albums cannot be delisted." },
+      { status: 409 }
+    );
+  }
+
   if (!typedAlbum.discogs_listing_id) {
     return NextResponse.json({ error: "Album is not listed on Discogs" }, { status: 400 });
   }

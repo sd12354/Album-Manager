@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { getActiveContext } from "@/lib/collections";
+import { canManage, getRoleForOwner } from "@/lib/collections";
 import { EBAY_MAX_PHOTOS } from "@/lib/photos";
 import type { Album } from "@/types";
 
@@ -21,16 +21,12 @@ interface AttachItem {
  */
 export async function POST(request: Request) {
   const supabase = await createClient();
-  const ctx = await getActiveContext();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (!ctx) {
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  if (!ctx.canEdit) {
-    return NextResponse.json(
-      { error: "You have view-only access to this collection." },
-      { status: 403 }
-    );
   }
 
   let body: { items?: AttachItem[] };
@@ -77,16 +73,51 @@ export async function POST(request: Request) {
   const albumIds = Array.from(byAlbum.keys());
   const { data: albums, error: albumsError } = await supabase
     .from("albums")
-    .select("id, photo_urls")
-    .eq("user_id", ctx.ownerId)
+    .select("id, user_id, photo_urls")
     .in("id", albumIds);
 
   if (albumsError) {
     return NextResponse.json({ error: albumsError.message }, { status: 500 });
   }
 
+  const foundAlbums = (albums ?? []) as Pick<
+    Album,
+    "id" | "user_id" | "photo_urls"
+  >[];
+  const ownerIds = new Set(foundAlbums.map((album) => album.user_id));
+  if (ownerIds.size !== 1) {
+    return NextResponse.json(
+      { error: "Attach photos to one collection at a time." },
+      { status: 400 }
+    );
+  }
+
+  const ownerId = ownerIds.values().next().value as string | undefined;
+  if (!ownerId) {
+    return NextResponse.json({ error: "No albums found" }, { status: 404 });
+  }
+
+  const role = await getRoleForOwner(user, ownerId);
+  if (!canManage(role)) {
+    return NextResponse.json(
+      { error: "You need editor access to attach photos to this collection." },
+      { status: 403 }
+    );
+  }
+
+  for (const item of valid) {
+    const storagePath = decodeURIComponent(item.url.slice(expectedPrefix.length));
+    const [pathOwnerId, pathAlbumId] = storagePath.split("/");
+    if (pathOwnerId !== ownerId || pathAlbumId !== item.albumId) {
+      return NextResponse.json(
+        { error: "Photo URL does not match the target album storage path." },
+        { status: 400 }
+      );
+    }
+  }
+
   const existingByAlbum = new Map(
-    (albums ?? []).map((a) => [
+    foundAlbums.map((a) => [
       a.id,
       (a as Pick<Album, "id" | "photo_urls">).photo_urls ?? [],
     ])
@@ -117,7 +148,7 @@ export async function POST(request: Request) {
       .from("albums")
       .update({ photo_urls: merged })
       .eq("id", albumId)
-      .eq("user_id", ctx.ownerId);
+      .eq("user_id", ownerId);
 
     if (error) {
       errors.push(`${albumId}: ${error.message}`);

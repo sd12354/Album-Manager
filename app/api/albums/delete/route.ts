@@ -6,8 +6,12 @@ import {
   hasRealEbayCredentials,
   type EbayTokenCredentials,
 } from "@/lib/ebay";
-import { deleteDiscogsListing, resolveDiscogsAuth } from "@/lib/discogs";
-import { getActiveContext } from "@/lib/collections";
+import { deleteDiscogsListing } from "@/lib/discogs";
+import {
+  canManage,
+  getDiscogsAuthForOwner,
+  getRoleForOwner,
+} from "@/lib/collections";
 import type { Album } from "@/types";
 
 export const runtime = "nodejs";
@@ -16,15 +20,10 @@ export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
-  const ctx = await getActiveContext();
-  if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!ctx.canEdit) {
-    return NextResponse.json(
-      { error: "You have view-only access to this collection." },
-      { status: 403 }
-    );
-  }
-  const isOwner = ctx.role === "owner";
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { albumIds } = await request.json().catch(() => ({})) as { albumIds?: string[] };
   if (!albumIds || albumIds.length === 0) {
@@ -34,8 +33,7 @@ export async function POST(request: Request) {
   const { data: albums } = await supabase
     .from("albums")
     .select("*")
-    .in("id", albumIds)
-    .eq("user_id", ctx.ownerId);
+    .in("id", albumIds);
 
   if (!albums || albums.length === 0) {
     return NextResponse.json({ error: "No albums found" }, { status: 404 });
@@ -46,7 +44,7 @@ export async function POST(request: Request) {
   if (missingIds.length > 0) {
     return NextResponse.json(
       {
-        error: "Some albums were not found in the active collection.",
+        error: "Some albums were not found.",
         requested: albumIds.length,
         found: albums.length,
         missingIds,
@@ -54,6 +52,24 @@ export async function POST(request: Request) {
       { status: 404 }
     );
   }
+
+  const ownerIds = new Set((albums as Album[]).map((album) => album.user_id));
+  if (ownerIds.size !== 1) {
+    return NextResponse.json(
+      { error: "Delete albums from one collection at a time." },
+      { status: 400 }
+    );
+  }
+
+  const ownerId = ownerIds.values().next().value as string;
+  const role = await getRoleForOwner(user, ownerId);
+  if (!canManage(role)) {
+    return NextResponse.json(
+      { error: "You need editor access to delete albums from this collection." },
+      { status: 403 }
+    );
+  }
+  const isOwner = role === "owner";
 
   const hasMarketplaceListings = (albums as Album[]).some(
     (album) => album.discogs_listing_id || album.ebay_listing_id
@@ -68,12 +84,12 @@ export async function POST(request: Request) {
     );
   }
 
-  const discogsAuth = resolveDiscogsAuth(ctx.user.user_metadata);
+  const discogsAuth = await getDiscogsAuthForOwner(user, ownerId);
 
   const { data: ebayCreds } = await supabase
     .from("ebay_credentials")
     .select("*")
-    .eq("user_id", ctx.ownerId)
+    .eq("user_id", ownerId)
     .maybeSingle();
 
   const isRealEbay = hasRealEbayCredentials(ebayCreds);
@@ -88,7 +104,7 @@ export async function POST(request: Request) {
           access_token: tokenResult.token,
           token_expiry: tokenResult.expiry,
           updated_at: new Date().toISOString(),
-        }).eq("user_id", ctx.ownerId);
+        }).eq("user_id", ownerId);
       }
     }
   }
@@ -96,13 +112,40 @@ export async function POST(request: Request) {
   // Remove active platform listings before deleting. Marketplace credentials
   // belong to the owner, so only attempt delisting in the owner's own context.
   if (isOwner) {
+    const delistErrors: string[] = [];
     for (const album of albums as Album[]) {
-      if (album.discogs_listing_id && discogsAuth) {
-        await deleteDiscogsListing(parseInt(album.discogs_listing_id, 10), discogsAuth).catch(() => null);
+      if (album.discogs_listing_id && !discogsAuth) {
+        delistErrors.push(`${album.title} (Discogs): credentials unavailable`);
+      } else if (album.discogs_listing_id && discogsAuth) {
+        try {
+          await deleteDiscogsListing(parseInt(album.discogs_listing_id, 10), discogsAuth);
+        } catch (err) {
+          delistErrors.push(
+            `${album.title} (Discogs): ${err instanceof Error ? err.message : "delist failed"}`
+          );
+        }
       }
-      if (album.ebay_listing_id && ebayToken && isRealEbay) {
-        await endEbayListing(album.ebay_listing_id, ebayToken).catch(() => null);
+      if (album.ebay_listing_id && isRealEbay && !ebayToken) {
+        delistErrors.push(`${album.title} (eBay): credentials unavailable`);
+      } else if (album.ebay_listing_id && ebayToken && isRealEbay) {
+        try {
+          await endEbayListing(album.ebay_listing_id, ebayToken);
+        } catch (err) {
+          delistErrors.push(
+            `${album.title} (eBay): ${err instanceof Error ? err.message : "delist failed"}`
+          );
+        }
       }
+    }
+    if (delistErrors.length > 0) {
+      return NextResponse.json(
+        {
+          error:
+            "Could not delete because one or more marketplace listings could not be ended.",
+          details: delistErrors,
+        },
+        { status: 502 }
+      );
     }
   }
 
@@ -110,7 +153,7 @@ export async function POST(request: Request) {
     .from("albums")
     .delete()
     .in("id", albumIds)
-    .eq("user_id", ctx.ownerId);
+    .eq("user_id", ownerId);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
