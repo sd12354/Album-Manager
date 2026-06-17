@@ -129,6 +129,21 @@ export interface AccessibleCollection {
   label: string;
 }
 
+export type AppNotificationType =
+  | "album_sold"
+  | "collection_invite"
+  | "collection_shared"
+  | "collaborator_joined";
+
+export interface AppNotification {
+  id: string;
+  type: AppNotificationType;
+  title: string;
+  message: string;
+  href?: string;
+  createdAt: string;
+}
+
 export interface UserSettings {
   discogs_token?: string;
   discogs_oauth_token?: string;

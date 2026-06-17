@@ -8,7 +8,8 @@ import { AnimatedStats } from "@/components/animated-stats";
 import { AnimatedCollectionValue } from "@/components/animated-collection-value";
 import { formatRelativeTime, getActivityDescription } from "@/lib/utils";
 import { getActiveCollection } from "@/lib/collections";
-import type { Album } from "@/types";
+import { summarizeCollectionValue } from "@/lib/collection-value";
+import type { Album, PricingCache } from "@/types";
 
 function getStartOfMonth(): string {
   const now = new Date();
@@ -99,22 +100,29 @@ export default async function DashboardPage() {
     0
   );
 
-  // Collection value = sum of best available price for every non-sold album.
-  // Priority: list_price → suggested_price. Albums with neither are counted
-  // separately so the user knows how many still need pricing.
+  // Collection value = sum of best available price for every non-sold album,
+  // with low/high bands from pricing cache where available.
   const unsoldAlbums = allAlbums.filter((a) => a.status !== "sold");
-  let collectionValue = 0;
-  let pricedCount = 0;
-  let unpricedCount = 0;
-  for (const a of unsoldAlbums) {
-    const price = a.list_price ?? a.suggested_price;
-    if (price != null && price > 0) {
-      collectionValue += price;
-      pricedCount++;
-    } else {
-      unpricedCount++;
-    }
+  const unsoldIds = unsoldAlbums.map((a) => a.id);
+
+  let cacheRows: PricingCache[] = [];
+  if (unsoldIds.length > 0) {
+    const { data } = await supabase
+      .from("pricing_cache")
+      .select("album_id, source, median_price, lowest_price, raw_data, fetched_at")
+      .in("album_id", unsoldIds);
+    cacheRows = (data ?? []) as PricingCache[];
   }
+
+  const valueSummary = summarizeCollectionValue(allAlbums, cacheRows);
+  const {
+    estimatedTotal: collectionValue,
+    lowTotal: collectionLow,
+    highTotal: collectionHigh,
+    pricedCount,
+    unpricedCount,
+    marketDataCount,
+  } = valueSummary;
 
   const recentActivity = allAlbums.slice(0, 10);
   const monthlySales = buildMonthlySales(allAlbums);
@@ -144,8 +152,11 @@ export default async function DashboardPage() {
       <div className="mt-4">
         <AnimatedCollectionValue
           collectionValue={collectionValue}
+          collectionLow={collectionLow}
+          collectionHigh={collectionHigh}
           pricedCount={pricedCount}
           unpricedCount={unpricedCount}
+          marketDataCount={marketDataCount}
           unlistedValue={unlistedValue}
           listedValue={listedValue}
         />

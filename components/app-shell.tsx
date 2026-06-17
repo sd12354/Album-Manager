@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Bell, CircleHelp, Moon, Sun } from "lucide-react";
+import { CircleHelp, Moon, Sun } from "lucide-react";
 import { Sidebar } from "@/components/sidebar";
 import { OnboardingModal } from "@/components/onboarding-modal";
 import { HelpPanel } from "@/components/help-panel";
+import { NotificationsBell } from "@/components/notifications-bell";
 import type { AccessibleCollection } from "@/types";
 
 const SIDEBAR_KEY = "vinylvault.sidebar.collapsed";
@@ -109,15 +110,8 @@ export function AppShell({
             <CircleHelp className="h-4 w-4" />
           </button>
 
-          {/* Notifications (placeholder) */}
-          <button
-            title="Notifications"
-            className="relative flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
-          >
-            <Bell className="h-4 w-4" />
-            {/* Unread dot — remove when no notifications */}
-            <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-accent" />
-          </button>
+          {/* Notifications */}
+          <NotificationsBell />
 
           {/* Theme toggle */}
           <button

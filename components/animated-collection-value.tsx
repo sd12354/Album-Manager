@@ -8,7 +8,10 @@ function useCountUp(target: number, duration = 1100, enabled = true) {
   const [current, setCurrent] = useState(0);
   const raf = useRef<number>(0);
   useEffect(() => {
-    if (!enabled || target === 0) { setCurrent(target); return; }
+    if (!enabled || target === 0) {
+      setCurrent(target);
+      return;
+    }
     const start = performance.now();
     function tick(now: number) {
       const progress = Math.min((now - start) / duration, 1);
@@ -24,16 +27,23 @@ function useCountUp(target: number, duration = 1100, enabled = true) {
 
 interface AnimatedCollectionValueProps {
   collectionValue: number;
+  collectionLow: number;
+  collectionHigh: number;
   pricedCount: number;
   unpricedCount: number;
+  /** Albums whose low/high band used live Discogs/eBay cache data. */
+  marketDataCount: number;
   unlistedValue: number;
   listedValue: number;
 }
 
 export function AnimatedCollectionValue({
   collectionValue,
+  collectionLow,
+  collectionHigh,
   pricedCount,
   unpricedCount,
+  marketDataCount,
   unlistedValue,
   listedValue,
 }: AnimatedCollectionValueProps) {
@@ -44,7 +54,12 @@ export function AnimatedCollectionValue({
     const el = ref.current;
     if (!el) return;
     const observer = new IntersectionObserver(
-      ([e]) => { if (e.isIntersecting) { setVisible(true); observer.disconnect(); } },
+      ([e]) => {
+        if (e.isIntersecting) {
+          setVisible(true);
+          observer.disconnect();
+        }
+      },
       { threshold: 0.2 }
     );
     observer.observe(el);
@@ -52,8 +67,14 @@ export function AnimatedCollectionValue({
   }, []);
 
   const animatedTotal = useCountUp(collectionValue, 1100, visible);
+  const animatedLow = useCountUp(collectionLow, 1000, visible);
+  const animatedHigh = useCountUp(collectionHigh, 1000, visible);
   const animatedUnlisted = useCountUp(unlistedValue, 1000, visible);
   const animatedListed = useCountUp(listedValue, 1000, visible);
+
+  const showRange =
+    pricedCount > 0 &&
+    (collectionLow < collectionValue || collectionHigh > collectionValue);
 
   return (
     <div ref={ref}>
@@ -61,14 +82,41 @@ export function AnimatedCollectionValue({
         <CardContent className="p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-sm text-muted-foreground">Total Collection Value</p>
+              <p className="text-sm text-muted-foreground">
+                Total Collection Value
+              </p>
               <p className="mt-1 font-display text-4xl font-bold text-accent tabular-nums">
                 {formatCurrency(visible ? animatedTotal : 0)}
+                <span className="ml-2 text-lg font-semibold text-muted-foreground">
+                  estimated
+                </span>
               </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Based on {pricedCount} priced album{pricedCount !== 1 ? "s" : ""} in your unsold inventory
+              {showRange && (
+                <p className="mt-2 text-sm tabular-nums text-foreground/90">
+                  <span className="text-muted-foreground">Range </span>
+                  {formatCurrency(visible ? animatedLow : 0)}
+                  <span className="mx-1.5 text-muted-foreground">–</span>
+                  {formatCurrency(visible ? animatedHigh : 0)}
+                </p>
+              )}
+              <p className="mt-1.5 text-xs text-muted-foreground">
+                Based on {pricedCount} priced album
+                {pricedCount !== 1 ? "s" : ""} in your unsold inventory
+                {marketDataCount > 0 && (
+                  <>
+                    {" "}
+                    · {marketDataCount} with marketplace comparables
+                  </>
+                )}
                 {unpricedCount > 0 && (
-                  <> · <span className="text-amber-400">{unpricedCount} still need{unpricedCount === 1 ? "s" : ""} pricing</span></>
+                  <>
+                    {" "}
+                    ·{" "}
+                    <span className="text-amber-400">
+                      {unpricedCount} still need
+                      {unpricedCount === 1 ? "s" : ""} pricing
+                    </span>
+                  </>
                 )}
               </p>
             </div>
