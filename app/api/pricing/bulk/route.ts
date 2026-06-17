@@ -195,6 +195,8 @@ export async function POST(request: Request) {
         .from("albums")
         .update({
           suggested_price: pricing.suggestedPrice,
+          discogs_release_id:
+            discogsResult?.releaseId ?? typedAlbum.discogs_release_id,
           status: typedAlbum.status === "unlisted" ? "pricing" : typedAlbum.status,
         })
         .eq("id", albumId);

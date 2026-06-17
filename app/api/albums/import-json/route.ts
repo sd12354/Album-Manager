@@ -104,7 +104,10 @@ export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as
     | { files?: ImportFile[] }
     | null;
-  const files = body?.files;
+  if (!body || typeof body !== "object") {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+  const { files } = body;
 
   if (!files || !Array.isArray(files) || files.length === 0) {
     return NextResponse.json({ error: "No files provided" }, { status: 400 });
@@ -119,6 +122,16 @@ export async function POST(request: Request) {
   ) {
     return NextResponse.json(
       { error: "Each file must include a name and records array." },
+      { status: 400 }
+    );
+  }
+
+  const malformedFile = files.find((file) => !Array.isArray(file.records));
+  if (malformedFile) {
+    return NextResponse.json(
+      {
+        error: `File "${malformedFile.name || "unknown"}" must include a records array.`,
+      },
       { status: 400 }
     );
   }

@@ -96,7 +96,7 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!albums || !Array.isArray(albums) || albums.length === 0) {
+  if (!albums || albums.length === 0) {
     return NextResponse.json({ error: "No albums to import" }, { status: 400 });
   }
 

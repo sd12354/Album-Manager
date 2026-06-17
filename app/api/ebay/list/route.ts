@@ -24,7 +24,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { albumId, listPrice } = await request.json();
+  const body = (await request.json().catch(() => null)) as {
+    albumId?: string;
+    listPrice?: number;
+  } | null;
+  if (!body || typeof body !== "object") {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+  const { albumId, listPrice } = body;
   if (!albumId) {
     return NextResponse.json({ error: "albumId required" }, { status: 400 });
   }
@@ -60,6 +67,13 @@ export async function POST(request: Request) {
   }
 
   const typedAlbum = album as Album;
+  if (typedAlbum.ebay_listing_id) {
+    return NextResponse.json(
+      { error: "Album is already listed on eBay" },
+      { status: 409 }
+    );
+  }
+
   const price =
     listPrice ?? typedAlbum.list_price ?? typedAlbum.suggested_price ?? 9.99;
 

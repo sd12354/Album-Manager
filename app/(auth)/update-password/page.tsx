@@ -11,6 +11,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
 
+const PASSWORD_RULES = [
+  { id: "length", label: "at least 8 characters", test: (p: string) => p.length >= 8 },
+  { id: "upper", label: "one uppercase letter", test: (p: string) => /[A-Z]/.test(p) },
+  { id: "lower", label: "one lowercase letter", test: (p: string) => /[a-z]/.test(p) },
+  { id: "number", label: "one number", test: (p: string) => /[0-9]/.test(p) },
+  { id: "special", label: "one special character", test: (p: string) => /[^A-Za-z0-9]/.test(p) },
+] as const;
+
 export default function UpdatePasswordPage() {
   const router = useRouter();
   const supabase = createClient();
@@ -32,9 +40,17 @@ export default function UpdatePasswordPage() {
           : null;
 
       if (code) {
-        await supabase.auth.exchangeCodeForSession(code);
+        const { error } = await supabase.auth.exchangeCodeForSession(code);
         if (typeof window !== "undefined") {
           window.history.replaceState(null, "", "/update-password");
+        }
+        if (error) {
+          if (!mounted) return;
+          setError(
+            "This reset link is invalid or has expired. Request a new password reset email."
+          );
+          setCheckingSession(false);
+          return;
         }
       }
 
@@ -61,8 +77,9 @@ export default function UpdatePasswordPage() {
     e.preventDefault();
     setError("");
 
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters.");
+    const failedRule = PASSWORD_RULES.find((rule) => !rule.test(password));
+    if (failedRule) {
+      setError(`Password must include ${failedRule.label}.`);
       return;
     }
     if (password !== confirmPassword) {

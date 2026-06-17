@@ -394,6 +394,7 @@ export function AlbumDetailClient({
   }
 
   async function handleGenerateDescription() {
+    if (!canEdit) return;
     setGeneratingDesc(true);
     const res = await fetch("/api/albums/generate-description", {
       method: "POST",
@@ -680,6 +681,7 @@ export function AlbumDetailClient({
               <Label>Title</Label>
               <Input
                 value={album.title}
+                disabled={!canEdit}
                 onChange={(e) =>
                   setAlbum((prev) => ({ ...prev, title: e.target.value }))
                 }
@@ -689,6 +691,7 @@ export function AlbumDetailClient({
               <Label>Artist</Label>
               <Input
                 value={album.artist}
+                disabled={!canEdit}
                 onChange={(e) =>
                   setAlbum((prev) => ({ ...prev, artist: e.target.value }))
                 }
@@ -699,6 +702,7 @@ export function AlbumDetailClient({
                 <Label>Genre</Label>
                 <Input
                   value={album.genre ?? ""}
+                  disabled={!canEdit}
                   onChange={(e) =>
                     setAlbum((prev) => ({ ...prev, genre: e.target.value }))
                   }
@@ -708,6 +712,7 @@ export function AlbumDetailClient({
                 <Label>Condition</Label>
                 <Select
                   value={album.condition}
+                  disabled={!canEdit}
                   onValueChange={(v) =>
                     setAlbum((prev) => ({
                       ...prev,
@@ -734,6 +739,7 @@ export function AlbumDetailClient({
               <Label>Catalog #</Label>
               <Input
                 value={album.catalog_number ?? ""}
+                disabled={!canEdit}
                 onChange={(e) =>
                   setAlbum((prev) => ({
                     ...prev,
@@ -746,6 +752,7 @@ export function AlbumDetailClient({
               <Label>Notes</Label>
               <Textarea
                 value={album.notes ?? ""}
+                disabled={!canEdit}
                 onChange={(e) =>
                   setAlbum((prev) => ({ ...prev, notes: e.target.value }))
                 }
@@ -762,7 +769,7 @@ export function AlbumDetailClient({
                 <button
                   type="button"
                   onClick={handleGenerateDescription}
-                  disabled={generatingDesc}
+                  disabled={generatingDesc || !canEdit}
                   className="inline-flex items-center gap-1 rounded-full bg-accent/10 border border-accent/25 px-2.5 py-1 text-[11px] font-medium text-accent hover:bg-accent/20 transition-colors disabled:opacity-50"
                 >
                   {generatingDesc ? (
@@ -788,6 +795,7 @@ export function AlbumDetailClient({
               )}
               <Textarea
                 value={listingDescription}
+                disabled={!canEdit}
                 onChange={(e) => setListingDescription(e.target.value)}
                 rows={5}
                 placeholder="Click Generate with AI to write a sales-optimised description, or type your own…"

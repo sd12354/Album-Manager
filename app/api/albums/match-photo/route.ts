@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { getActiveContext } from "@/lib/collections";
+import {
+  getActiveContext,
+  getDiscogsAuthForOwner,
+} from "@/lib/collections";
 import { identifyAlbumFromCover } from "@/lib/ai-cover-identify";
 import { pickMatchingRelease } from "@/lib/ai-cover-compare";
 import {
@@ -9,7 +12,6 @@ import {
   type ScoredIdentification,
 } from "@/lib/album-matching";
 import {
-  resolveDiscogsAuth,
   searchDiscogsCandidates,
 } from "@/lib/discogs";
 import { ACCEPTED_MIME_TYPES } from "@/lib/photos";
@@ -106,7 +108,7 @@ export async function POST(request: Request) {
   const needsVisualHelp = !matchResult.match || matchResult.match.confidence !== "high";
 
   if (needsVisualHelp && catalogue.length > 0) {
-    const discogsAuth = resolveDiscogsAuth(ctx.user.user_metadata);
+    const discogsAuth = await getDiscogsAuthForOwner(ctx.user, ctx.ownerId);
     if (discogsAuth) {
       try {
         const candidates = await searchDiscogsCandidates(

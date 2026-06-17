@@ -14,13 +14,18 @@ export async function POST() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  await supabase.auth.updateUser({
+  const { error } = await supabase.auth.updateUser({
     data: {
+      discogs_token: null,
       discogs_oauth_token: null,
       discogs_oauth_token_secret: null,
       discogs_username: null,
     },
   });
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 
   return NextResponse.json({ ok: true });
 }

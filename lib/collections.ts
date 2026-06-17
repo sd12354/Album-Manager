@@ -40,8 +40,7 @@ export async function getDiscogsAuthForOwner(
     const { data } = await admin.auth.admin.getUserById(ownerId);
     return resolveDiscogsAuth(data?.user?.user_metadata);
   } catch {
-    // Fall back to any server-wide token if owner metadata cannot be read.
-    return resolveDiscogsAuth(null);
+    return null;
   }
 }
 
@@ -83,7 +82,7 @@ export async function getOwnerConnectionStatus(
   } catch {
     return {
       ebayConnected: false,
-      discogsConnected: discogsConnectedFromMeta(null),
+      discogsConnected: false,
     };
   }
 }
