@@ -175,6 +175,10 @@ export interface DerivedRowsResult {
   invalidCount: number;
 }
 
+interface DeriveRowsOptions {
+  firstDataRowNumber?: number;
+}
+
 /**
  * Default positional layout for headerless CSVs. Matches the example format
  * documented in README ("album_title, artist, genre, condition, catalog_number"
@@ -308,7 +312,9 @@ function parseWithoutHeaderRow(file: File): Promise<ParsedCSVResult> {
           detectedMapping[h] = HEADERLESS_DEFAULT_ORDER[i] ?? "skip";
         });
 
-        const { rows, errors } = deriveRows(rawRows, detectedMapping);
+        const { rows, errors } = deriveRows(rawRows, detectedMapping, {
+          firstDataRowNumber: 1,
+        });
         resolve({
           rows,
           rawRows,
@@ -363,10 +369,12 @@ export async function parseAlbumCSV(
  */
 export function deriveRows(
   rawRows: Record<string, string>[],
-  mapping: Record<string, string>
+  mapping: Record<string, string>,
+  options: DeriveRowsOptions = {}
 ): DerivedRowsResult {
   const errors: string[] = [];
   const rows: CSVAlbumRow[] = [];
+  const firstDataRowNumber = options.firstDataRowNumber ?? 2;
 
   rawRows.forEach((row, index) => {
     const mapped: Record<string, string> = {};
@@ -383,7 +391,7 @@ export function deriveRows(
     const artist = mapped.artist;
     const condition = normalizeCondition(mapped.condition);
 
-    const rowNum = index + 2; // +1 for header row, +1 for 1-indexing
+    const rowNum = firstDataRowNumber + index;
     const rowErrors: string[] = [];
     if (!title) rowErrors.push(`Row ${rowNum}: missing title`);
     if (!artist) rowErrors.push(`Row ${rowNum}: missing artist`);
@@ -393,6 +401,18 @@ export function deriveRows(
       rowErrors.push(
         `Row ${rowNum}: unrecognized condition "${mapped.condition}" — use Mint, Great, Good, Fair, or Poor`
       );
+    }
+
+    let purchasePrice: number | undefined;
+    if (mapped.purchase_price) {
+      purchasePrice = Number.parseFloat(
+        mapped.purchase_price.replace(/[^0-9.\-]/g, "")
+      );
+      if (!Number.isFinite(purchasePrice) || purchasePrice < 0) {
+        rowErrors.push(
+          `Row ${rowNum}: invalid purchase price "${mapped.purchase_price}"`
+        );
+      }
     }
 
     if (rowErrors.length > 0) {
@@ -407,9 +427,7 @@ export function deriveRows(
       condition: condition!,
       catalog_number: mapped.catalog_number || undefined,
       notes: mapped.notes || undefined,
-      purchase_price: mapped.purchase_price
-        ? Number.parseFloat(mapped.purchase_price.replace(/[^0-9.\-]/g, ""))
-        : undefined,
+      purchase_price: purchasePrice,
     });
   });
 

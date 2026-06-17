@@ -76,6 +76,17 @@ function buildNotes(item: BoxRecord, conditionNote?: string): string {
   return parts.join("\n");
 }
 
+function deriveEstimatedPrice(priceLow?: number, priceHigh?: number): number | null {
+  const low = Number.isFinite(priceLow) && priceLow != null ? priceLow : 0;
+  const high = Number.isFinite(priceHigh) && priceHigh != null ? priceHigh : 0;
+
+  if (low > 0 && high > 0) {
+    return Math.round(((low + high) / 2) * 100) / 100;
+  }
+  if (high > 0) return high;
+  if (low > 0) return low;
+  return null;
+}
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -90,11 +101,26 @@ export async function POST(request: Request) {
     );
   }
 
-  const body = await request.json() as { files: ImportFile[] };
-  const { files } = body;
+  const body = (await request.json().catch(() => null)) as
+    | { files?: ImportFile[] }
+    | null;
+  const files = body?.files;
 
   if (!files || !Array.isArray(files) || files.length === 0) {
     return NextResponse.json({ error: "No files provided" }, { status: 400 });
+  }
+  if (
+    !files.every(
+      (file) =>
+        file &&
+        typeof file.name === "string" &&
+        Array.isArray(file.records)
+    )
+  ) {
+    return NextResponse.json(
+      { error: "Each file must include a name and records array." },
+      { status: 400 }
+    );
   }
 
   const now = new Date().toISOString();
@@ -103,6 +129,10 @@ export async function POST(request: Request) {
 
   for (const file of files) {
     for (const record of file.records) {
+      if (!record || typeof record !== "object") {
+        skipped.push({ file: file.name, num: 0, reason: "Invalid record" });
+        continue;
+      }
       // Skip empty/blank records
       if (!record.title?.trim() || !record.artist?.trim()) {
         if (record.num) skipped.push({ file: file.name, num: record.num ?? 0, reason: "Empty record" });
@@ -122,14 +152,10 @@ export async function POST(request: Request) {
               ? `Original condition label: "${rawCondition}"`
               : undefined;
 
-      const priceLow = record.price_low ?? 0;
-      const priceHigh = record.price_high ?? 0;
-      const suggestedPrice =
-        priceLow > 0 && priceHigh > 0
-          ? Math.round(((priceLow + priceHigh) / 2) * 100) / 100
-          : priceHigh > 0
-            ? priceHigh
-            : null;
+      const suggestedPrice = deriveEstimatedPrice(
+        record.price_low,
+        record.price_high
+      );
 
       albumRows.push({
         user_id: ctx.ownerId,
@@ -170,15 +196,15 @@ export async function POST(request: Request) {
 
   for (const file of files) {
     for (const record of file.records) {
+      if (!record || typeof record !== "object") continue;
       if (!record.title?.trim() || !record.artist?.trim()) continue;
       const album = insertedAlbums[albumIdx++];
       if (!album) continue;
 
       const priceLow = record.price_low ?? 0;
       const priceHigh = record.price_high ?? 0;
-      if (priceLow <= 0 && priceHigh <= 0) continue;
-
-      const median = Math.round(((priceLow + priceHigh) / 2) * 100) / 100;
+      const median = deriveEstimatedPrice(record.price_low, record.price_high);
+      if (median == null) continue;
       const rawCondition = record.condition?.trim() ?? "";
       const goldmine = record.goldmine_grade?.trim() ?? "";
       const confidenceRaw = (record.confidence ?? "").toLowerCase() as
@@ -198,7 +224,8 @@ export async function POST(request: Request) {
         album_id: album.id,
         source: "discogs",
         median_price: median,
-        lowest_price: priceLow > 0 ? priceLow : null,
+        lowest_price:
+          priceLow > 0 && priceHigh > 0 ? Math.min(priceLow, priceHigh) : null,
         num_sales: null,
         raw_data: {
           priceForCondition: median,
