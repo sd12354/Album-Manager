@@ -815,6 +815,25 @@ export async function getDiscogsListingStatus(
   }
 }
 
+export type DiscogsListingState =
+  | "active"
+  | "sold"
+  | "inactive"
+  | "not_found";
+
+/** Whether a Discogs listing is still live on the marketplace. */
+export async function getDiscogsListingState(
+  listingId: number,
+  token: DiscogsAuthInput
+): Promise<{ state: DiscogsListingState; price?: number }> {
+  const data = await getDiscogsListingStatus(listingId, token);
+  if (!data) return { state: "not_found" };
+  if (data.status === "Sold") return { state: "sold", price: data.price };
+  if (data.status === "For Sale") return { state: "active", price: data.price };
+  // Draft, Expired, Suspended, etc.
+  return { state: "inactive" };
+}
+
 // ============================================================================
 // Discogs Marketplace — order lookup for buyer address
 // ============================================================================

@@ -371,10 +371,27 @@ export async function endEbayListing(
   if (ebayError) throw new Error(ebayError);
 }
 
-export async function checkEbayItemSold(
+export type EbayListingState =
+  | { state: "active" }
+  | { state: "sold"; price?: number }
+  | { state: "ended" }
+  | { state: "not_found" };
+
+function isEbayItemMissingError(message: string): boolean {
+  const lower = message.toLowerCase();
+  return (
+    lower.includes("not found") ||
+    lower.includes("does not exist") ||
+    lower.includes("invalid item") ||
+    lower.includes("no longer available")
+  );
+}
+
+/** Live eBay listing state from GetItem — sold, still active, ended, or gone. */
+export async function getEbayListingState(
   itemId: string,
   accessToken: string
-): Promise<{ sold: boolean; price?: number }> {
+): Promise<EbayListingState> {
   const xml = `<?xml version="1.0" encoding="utf-8"?>
 <GetItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
   <ItemID>${escapeXml(itemId)}</ItemID>
@@ -383,20 +400,40 @@ export async function checkEbayItemSold(
 
   const responseXml = await callTradingApi("GetItem", xml, accessToken);
   const ebayError = extractXmlError(responseXml);
-  if (ebayError) throw new Error(ebayError);
+  if (ebayError) {
+    if (isEbayItemMissingError(ebayError)) return { state: "not_found" };
+    throw new Error(ebayError);
+  }
 
+  const listingStatus = extractXmlTag(responseXml, "ListingStatus");
   const quantitySold = extractXmlTag(responseXml, "QuantitySold");
   const currentPrice = extractXmlTag(responseXml, "CurrentPrice");
-
-  // Only treat an item as sold when a positive quantity actually sold. A
-  // "Completed" listing status alone also covers ended-but-unsold items.
   const soldQuantity = quantitySold != null ? parseInt(quantitySold, 10) : 0;
-  const sold = Number.isFinite(soldQuantity) && soldQuantity > 0;
 
-  return {
-    sold,
-    price: currentPrice ? parseFloat(currentPrice) : undefined,
-  };
+  if (Number.isFinite(soldQuantity) && soldQuantity > 0) {
+    return {
+      state: "sold",
+      price: currentPrice ? parseFloat(currentPrice) : undefined,
+    };
+  }
+
+  if (listingStatus === "Active") {
+    return { state: "active" };
+  }
+
+  // Completed / Ended with zero quantity sold — delisted on eBay.
+  return { state: "ended" };
+}
+
+export async function checkEbayItemSold(
+  itemId: string,
+  accessToken: string
+): Promise<{ sold: boolean; price?: number }> {
+  const result = await getEbayListingState(itemId, accessToken);
+  if (result.state === "sold") {
+    return { sold: true, price: result.price };
+  }
+  return { sold: false };
 }
 
 // ============================================================================

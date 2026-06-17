@@ -1,21 +1,15 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import {
-  checkEbayItemSold,
-  endEbayListing,
-  getEbayOrderForItem,
   getValidEbayToken,
   hasRealEbayCredentials,
-  type EbayBuyerAddress,
   type EbayTokenCredentials,
 } from "@/lib/ebay";
 import {
-  deleteDiscogsListing,
-  getDiscogsListingStatus,
-  getDiscogsOrderForListing,
-  parseDiscogsShippingAddress,
-  resolveDiscogsAuth,
-} from "@/lib/discogs";
+  buildMarketplaceSyncContext,
+  checkAlbumMarketplaceState,
+  crossCancelOtherMarketplace,
+} from "@/lib/marketplace-sync";
 import {
   createShippingLabel,
   resolveShippoAuth,
@@ -65,8 +59,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ status: "sold", changed: false });
   }
 
+  if (!typedAlbum.ebay_listing_id && !typedAlbum.discogs_listing_id) {
+    return NextResponse.json({ status: typedAlbum.status, changed: false });
+  }
+
   const userMeta = (user.user_metadata ?? {}) as UserSettings;
-  const discogsAuth = resolveDiscogsAuth(user.user_metadata);
 
   const { data: ebayCreds } = await supabase
     .from("ebay_credentials")
@@ -75,15 +72,9 @@ export async function POST(request: Request) {
     .maybeSingle();
 
   const isRealEbay = hasRealEbayCredentials(ebayCreds);
-
-  let soldOn: "ebay" | "discogs" | null = null;
-  let soldPrice: number | undefined;
-  let buyerAddress: EbayBuyerAddress | null = null;
-  let buyerAddressRaw: string | null = null;
   let ebayToken: string | null = null;
 
-  // ── Check eBay ──────────────────────────────────────────────────────────────
-  if (typedAlbum.ebay_listing_id && ebayCreds && isRealEbay) {
+  if (isRealEbay && ebayCreds) {
     try {
       const tokenResult = await getValidEbayToken(
         ebayCreds as EbayTokenCredentials
@@ -99,99 +90,58 @@ export async function POST(request: Request) {
           .eq("user_id", user.id);
       }
       ebayToken = tokenResult.token;
-
-      const { sold, price } = await checkEbayItemSold(
-        typedAlbum.ebay_listing_id,
-        tokenResult.token
-      );
-
-      if (sold) {
-        soldOn = "ebay";
-        soldPrice = price ?? typedAlbum.list_price ?? undefined;
-
-        // Fetch buyer address from GetOrders
-        buyerAddress = await getEbayOrderForItem(
-          typedAlbum.ebay_listing_id,
-          tokenResult.token
-        ).catch(() => null);
-      }
     } catch {
-      // Non-fatal — continue to check Discogs
+      // Continue — delist detection may still work for Discogs.
     }
   }
 
-  // ── Check Discogs ────────────────────────────────────────────────────────────
-  if (!soldOn && typedAlbum.discogs_listing_id && discogsAuth) {
-    try {
-      const result = await getDiscogsListingStatus(
-        parseInt(typedAlbum.discogs_listing_id, 10),
-        discogsAuth
-      );
+  const outcome = await checkAlbumMarketplaceState(
+    buildMarketplaceSyncContext(typedAlbum, user.user_metadata, ebayCreds)
+  );
 
-      if (result?.status === "Sold") {
-        soldOn = "discogs";
-        soldPrice = result.price ?? typedAlbum.list_price ?? undefined;
-
-        // Fetch buyer address from Discogs order
-        const order = await getDiscogsOrderForListing(
-          parseInt(typedAlbum.discogs_listing_id, 10),
-          discogsAuth
-        ).catch(() => null);
-
-        if (order?.shippingAddress) {
-          buyerAddressRaw = order.shippingAddress;
-          const parsed = parseDiscogsShippingAddress(
-            order.shippingAddress,
-            order.buyerName
-          );
-          if (parsed) {
-            buyerAddress = parsed;
-          }
-        }
-      }
-    } catch {
-      // Non-fatal
-    }
-  }
-
-  if (!soldOn) {
+  if (!outcome.changed) {
     return NextResponse.json({ status: typedAlbum.status, changed: false });
   }
 
-  // ── Mark sold ────────────────────────────────────────────────────────────────
   await supabase
     .from("albums")
-    .update({
-      status: "sold",
-      sold_price: soldPrice ?? null,
-      sold_at: new Date().toISOString(),
-      buyer_name: buyerAddress?.name ?? null,
-      buyer_address_raw:
-        buyerAddressRaw ??
-        (buyerAddress ? formatAddress(buyerAddress) : null),
-    })
+    .update(outcome.updates)
     .eq("id", albumId);
 
-  // ── Cross-cancel other platform ───────────────────────────────────────────────
-  if (soldOn === "ebay" && typedAlbum.discogs_listing_id && discogsAuth) {
-    await deleteDiscogsListing(
-      parseInt(typedAlbum.discogs_listing_id, 10),
-      discogsAuth
-    ).catch(() => null);
+  if (outcome.soldOn) {
+    await crossCancelOtherMarketplace(
+      typedAlbum,
+      outcome.soldOn,
+      buildMarketplaceSyncContext(typedAlbum, user.user_metadata, ebayCreds)
+        .discogsAuth,
+      ebayToken,
+      isRealEbay
+    );
   }
 
-  if (soldOn === "discogs" && typedAlbum.ebay_listing_id && ebayCreds && isRealEbay && ebayToken) {
-    await endEbayListing(typedAlbum.ebay_listing_id, ebayToken).catch(() => null);
+  if (!outcome.soldOn) {
+    return NextResponse.json({
+      status: outcome.status,
+      changed: true,
+      delistedFrom: outcome.delistedFrom,
+    });
   }
 
-  // ── Auto-create shipping label ────────────────────────────────────────────────
-  let label: { trackingNumber: string; labelUrl: string; carrier: string; serviceLevel: string; rate: number } | null = null;
+  // ── Auto-create shipping label after a sale ───────────────────────────────
+  let label: {
+    trackingNumber: string;
+    labelUrl: string;
+    carrier: string;
+    serviceLevel: string;
+    rate: number;
+  } | null = null;
   let labelError: string | null = null;
 
   const shippoEnabled = userMeta.shippo_enabled ?? false;
   const shippoAuth = resolveShippoAuth(userMeta);
   const sellerReady =
     userMeta.seller_name && userMeta.seller_street1 && userMeta.seller_city;
+  const buyerAddress = outcome.buyerAddress;
 
   if (shippoEnabled && shippoAuth && sellerReady && buyerAddress) {
     const from: ShippoAddress = {
@@ -225,35 +175,21 @@ export async function POST(request: Request) {
         err instanceof Error ? err.message : "Label creation failed";
     }
   } else if (shippoEnabled && shippoAuth && sellerReady && !buyerAddress) {
-    labelError = "Buyer address unavailable — create the label manually from the album page.";
+    labelError =
+      "Buyer address unavailable — create the label manually from the album page.";
   } else if (shippoEnabled && shippoAuth && !sellerReady) {
     labelError = "Seller address incomplete — fill it in Settings → Shipping.";
   } else if (shippoEnabled && !shippoAuth) {
     labelError = "Shippo isn't connected — connect it in Settings → Shipping.";
   }
-  // If shippoEnabled is false, labelError stays null — silent, no nagging.
 
   return NextResponse.json({
     status: "sold",
-    soldOn,
-    soldPrice,
+    soldOn: outcome.soldOn,
+    soldPrice: outcome.soldPrice,
     changed: true,
     label,
     labelError,
-    buyerAddressRaw,
+    buyerAddressRaw: outcome.buyerAddressRaw,
   });
-}
-
-function formatAddress(a: {
-  name: string;
-  street1: string;
-  street2?: string;
-  city: string;
-  state: string;
-  zip: string;
-  country: string;
-}): string {
-  return [a.name, a.street1, a.street2, `${a.city}, ${a.state} ${a.zip}`, a.country]
-    .filter(Boolean)
-    .join("\n");
 }

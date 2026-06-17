@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Disc2, ExternalLink, Package, RefreshCw, ShoppingBag, Sparkles, Trash2, Upload, X } from "lucide-react";
@@ -124,6 +124,7 @@ export function AlbumDetailClient({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const autoSyncStartedRef = useRef(false);
 
   useEffect(() => {
     if (!lightboxUrl) return;
@@ -133,6 +134,114 @@ export function AlbumDetailClient({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [lightboxUrl]);
+
+  function applyMarketplaceSync(
+    data: {
+      changed?: boolean;
+      status?: string;
+      soldOn?: string;
+      soldPrice?: number;
+      delistedFrom?: string[];
+      label?: {
+        trackingNumber: string;
+        labelUrl: string;
+        carrier: string;
+        serviceLevel: string;
+      };
+      labelError?: string;
+      buyerAddressRaw?: string;
+    },
+    options?: { silent?: boolean }
+  ): boolean {
+    if (!data.changed) return false;
+
+    if (data.status === "sold") {
+      setAlbum((prev) => ({
+        ...prev,
+        status: "sold",
+        sold_price: data.soldPrice ?? prev.list_price,
+        sold_at: new Date().toISOString(),
+        ebay_listing_id: data.soldOn === "ebay" ? null : prev.ebay_listing_id,
+        ebay_listing_url: data.soldOn === "ebay" ? null : prev.ebay_listing_url,
+        discogs_listing_id:
+          data.soldOn === "discogs" ? null : prev.discogs_listing_id,
+        discogs_listing_url:
+          data.soldOn === "discogs" ? null : prev.discogs_listing_url,
+        tracking_number: data.label?.trackingNumber ?? prev.tracking_number,
+        shipping_label_url: data.label?.labelUrl ?? prev.shipping_label_url,
+        shipping_carrier: data.label?.carrier
+          ? `${data.label.carrier} — ${data.label.serviceLevel}`
+          : prev.shipping_carrier,
+        buyer_address_raw: data.buyerAddressRaw ?? prev.buyer_address_raw,
+      }));
+      if (!options?.silent) {
+        const platform = data.soldOn === "ebay" ? "eBay" : "Discogs";
+        if (data.label) {
+          toast.success(`Sold on ${platform} — shipping label created`);
+        } else {
+          toast.success(`Sold on ${platform} — other listing cancelled`);
+          if (data.labelError) {
+            toast.warning(data.labelError, { duration: 10000 });
+          }
+        }
+      }
+      router.refresh();
+      return true;
+    }
+
+    if (data.delistedFrom && data.delistedFrom.length > 0) {
+      setAlbum((prev) => {
+        const next = { ...prev, status: (data.status ?? prev.status) as typeof prev.status };
+        if (data.delistedFrom!.includes("ebay")) {
+          next.ebay_listing_id = null;
+          next.ebay_listing_url = null;
+        }
+        if (data.delistedFrom!.includes("discogs")) {
+          next.discogs_listing_id = null;
+          next.discogs_listing_url = null;
+        }
+        return next;
+      });
+      if (!options?.silent) {
+        const names = data.delistedFrom
+          .map((p) => (p === "ebay" ? "eBay" : "Discogs"))
+          .join(" and ");
+        toast.info(`No longer listed on ${names} — catalogue updated`);
+      }
+      router.refresh();
+      return true;
+    }
+
+    return false;
+  }
+
+  // Quietly reconcile marketplace state when opening an album that still
+  // shows listing IDs — catches delists done directly on eBay/Discogs.
+  useEffect(() => {
+    if (!isOwner || album.status === "sold") return;
+    if (!album.ebay_listing_id && !album.discogs_listing_id) return;
+    if (autoSyncStartedRef.current) return;
+    autoSyncStartedRef.current = true;
+
+    let cancelled = false;
+
+    (async () => {
+      const res = await fetch("/api/sync/check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ albumId: album.id }),
+      });
+      if (!res.ok || cancelled) return;
+      const data = await res.json();
+      if (cancelled) return;
+      applyMarketplaceSync(data);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once per album page
+  }, [album.id, isOwner]);
 
   async function handleFetchPrices() {
     if (!canEdit) return;
@@ -274,31 +383,8 @@ export function AlbumDetailClient({
     });
     if (res.ok) {
       const data = await res.json();
-      if (data.changed && data.status === "sold") {
-        setAlbum((prev) => ({
-          ...prev,
-          status: "sold",
-          sold_price: data.soldPrice ?? prev.list_price,
-          sold_at: new Date().toISOString(),
-          tracking_number: data.label?.trackingNumber ?? prev.tracking_number,
-          shipping_label_url: data.label?.labelUrl ?? prev.shipping_label_url,
-          shipping_carrier: data.label?.carrier
-            ? `${data.label.carrier} — ${data.label.serviceLevel}`
-            : prev.shipping_carrier,
-          buyer_address_raw: data.buyerAddressRaw ?? prev.buyer_address_raw,
-        }));
-        const platform = data.soldOn === "ebay" ? "eBay" : "Discogs";
-        if (data.label) {
-          toast.success(`Sold on ${platform} — shipping label created`);
-        } else {
-          toast.success(`Sold on ${platform} — other listing cancelled`);
-          if (data.labelError) {
-            toast.warning(data.labelError, { duration: 10000 });
-          }
-        }
-        router.refresh();
-      } else {
-        toast.info("No sale detected yet on either platform");
+      if (!applyMarketplaceSync(data)) {
+        toast.info("Still listed — no sale detected on either platform");
       }
     } else {
       const err = await res.json().catch(() => ({}));

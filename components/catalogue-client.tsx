@@ -68,12 +68,38 @@ export function CatalogueClient({
   const [bulkLoading, setBulkLoading] = useState<null | "price" | "list" | "delete">(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const priceAllStartedRef = useRef(false);
+  const marketplaceSyncStartedRef = useRef(false);
 
   useEffect(() => {
     if (searchParams.get("add") === "true") {
       setDrawerOpen(true);
     }
   }, [searchParams]);
+
+  // Reconcile catalogue with live eBay/Discogs state on load so delists
+  // done outside VinylVault don't linger as "listed".
+  useEffect(() => {
+    if (!isOwner || marketplaceSyncStartedRef.current) return;
+    const hasListings = albums.some(
+      (a) => a.ebay_listing_id || a.discogs_listing_id
+    );
+    if (!hasListings) return;
+    marketplaceSyncStartedRef.current = true;
+
+    let cancelled = false;
+    (async () => {
+      const res = await fetch("/api/ebay/sync", { method: "POST" });
+      if (!res.ok || cancelled) return;
+      const data = await res.json();
+      if (!cancelled && data.changed > 0) {
+        router.refresh();
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOwner, albums, router]);
 
   const filteredData = useMemo(() => {
     const filtered = albums.filter((album) => {
