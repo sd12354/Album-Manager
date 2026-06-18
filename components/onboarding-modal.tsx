@@ -387,7 +387,7 @@ const steps: Step[] = [
   {
     icon: <Package className="h-8 w-8 text-accent" />,
     title: "Listing & Shipping",
-    subtitle: "List on eBay & Discogs, ship with Shippo",
+    subtitle: "List on eBay & Discogs, ship manually",
     image: <ListingShippingImage />,
     content: (
       <div className="space-y-2 text-sm text-muted-foreground">
@@ -395,8 +395,8 @@ const steps: Step[] = [
           {[
             "Open any album → use List on eBay and/or List on Discogs.",
             "If it sells on one platform, click Check if Sold — VinylVault auto-cancels the other listing.",
-            "Add your Shippo API key + seller address in Settings → Shipping for auto labels.",
-            "USPS Media Mail is selected by default — cheapest for vinyl.",
+            "When a sale comes in, buyer's address is captured automatically — ship with the carrier of your choice.",
+            "USPS Media Mail is the cheapest option for vinyl.",
           ].map((item, i) => (
             <li key={i} className="flex gap-2">
               <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />

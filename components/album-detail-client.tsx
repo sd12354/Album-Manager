@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Disc2, ExternalLink, Package, RefreshCw, ShoppingBag, Sparkles, Trash2, Upload, X } from "lucide-react";
+import { ArrowLeft, Disc2, ExternalLink, RefreshCw, ShoppingBag, Sparkles, Trash2, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { AlbumStatusBadge } from "@/components/album-status-badge";
 import { ConditionBadge } from "@/components/condition-badge";
@@ -32,51 +32,6 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/utils";
 import type { Album, AlbumCondition, PricingResult } from "@/types";
-
-interface LabelResult {
-  trackingNumber: string;
-  labelUrl: string;
-  carrier: string;
-  serviceLevel: string;
-}
-
-function CreateLabelButton({
-  albumId,
-  onCreated,
-}: {
-  albumId: string;
-  onCreated: (label: LabelResult) => void;
-}) {
-  const [loading, setLoading] = useState(false);
-
-  async function handleCreate() {
-    setLoading(true);
-    const res = await fetch("/api/shipping/label", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ albumId }),
-    });
-    if (res.ok) {
-      const data: LabelResult = await res.json();
-      onCreated(data);
-      toast.success("Shipping label created");
-    } else {
-      const err = await res.json().catch(() => ({}));
-      toast.error(err.error ?? "Label creation failed");
-    }
-    setLoading(false);
-  }
-
-  return (
-    <button
-      onClick={handleCreate}
-      disabled={loading}
-      className="text-accent hover:underline disabled:opacity-50"
-    >
-      {loading ? "Creating..." : "create one now"}
-    </button>
-  );
-}
 
 interface AlbumDetailClientProps {
   album: Album;
@@ -119,6 +74,11 @@ export function AlbumDetailClient({
   const [syncing, setSyncing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [delistingEbay, setDelistingEbay] = useState(false);
+  const [manualOpen, setManualOpen] = useState(false);
+  const [manualPlatform, setManualPlatform] = useState<"ebay" | "discogs">("ebay");
+  const [manualUrl, setManualUrl] = useState("");
+  const [manualPrice, setManualPrice] = useState("");
+  const [savingManual, setSavingManual] = useState(false);
   const [delistingDiscogs, setDelistingDiscogs] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -174,13 +134,6 @@ export function AlbumDetailClient({
       soldOn?: string;
       soldPrice?: number;
       delistedFrom?: string[];
-      label?: {
-        trackingNumber: string;
-        labelUrl: string;
-        carrier: string;
-        serviceLevel: string;
-      };
-      labelError?: string;
       buyerAddressRaw?: string;
     },
     options?: { silent?: boolean }
@@ -197,23 +150,11 @@ export function AlbumDetailClient({
         ebay_listing_url: null,
         discogs_listing_id: null,
         discogs_listing_url: null,
-        tracking_number: data.label?.trackingNumber ?? prev.tracking_number,
-        shipping_label_url: data.label?.labelUrl ?? prev.shipping_label_url,
-        shipping_carrier: data.label?.carrier
-          ? `${data.label.carrier} — ${data.label.serviceLevel}`
-          : prev.shipping_carrier,
         buyer_address_raw: data.buyerAddressRaw ?? prev.buyer_address_raw,
       }));
       if (!options?.silent) {
         const platform = data.soldOn === "ebay" ? "eBay" : "Discogs";
-        if (data.label) {
-          toast.success(`Sold on ${platform} — shipping label created`);
-        } else {
-          toast.success(`Sold on ${platform} — other listing cancelled`);
-          if (data.labelError) {
-            toast.warning(data.labelError, { duration: 10000 });
-          }
-        }
+        toast.success(`Marked as sold on ${platform}`);
       }
       router.refresh();
       return true;
@@ -406,6 +347,58 @@ export function AlbumDetailClient({
       toast.error(err.error ?? "Failed to list on Discogs");
     }
     setListingDiscogs(false);
+  }
+
+  async function handleSaveManualListing() {
+    const price = parseFloat(manualPrice);
+    if (!Number.isFinite(price) || price <= 0) {
+      toast.error("Enter a valid listing price.");
+      return;
+    }
+    const url = manualUrl.trim();
+    if (url && !/^https?:\/\//i.test(url)) {
+      toast.error("Listing URL must start with http:// or https://");
+      return;
+    }
+
+    setSavingManual(true);
+    const roundedPrice = Math.round(price * 100) / 100;
+    const manualId = `manual-${Date.now()}`;
+    const updates =
+      manualPlatform === "ebay"
+        ? {
+            ebay_listing_id: manualId,
+            ebay_listing_url: url || null,
+            list_price: roundedPrice,
+            status: "listed" as const,
+          }
+        : {
+            discogs_listing_id: manualId,
+            discogs_listing_url: url || null,
+            list_price: roundedPrice,
+            status: "listed" as const,
+          };
+
+    const { error } = await supabase
+      .from("albums")
+      .update(updates)
+      .eq("id", album.id);
+
+    if (error) {
+      toast.error(error.message);
+      setSavingManual(false);
+      return;
+    }
+
+    setAlbum((prev) => ({ ...prev, ...updates }));
+    setManualOpen(false);
+    setManualUrl("");
+    setManualPrice("");
+    toast.success(
+      `Tracked as manually listed on ${manualPlatform === "ebay" ? "eBay" : "Discogs"}`
+    );
+    router.refresh();
+    setSavingManual(false);
   }
 
   async function handleSyncSales() {
@@ -1087,6 +1080,100 @@ export function AlbumDetailClient({
                   )}
                 </div>
 
+                {/* Manual listing — record an external listing without posting via API */}
+                {!album.ebay_listing_id || !album.discogs_listing_id ? (
+                  <div className="pt-2">
+                    {!manualOpen ? (
+                      <button
+                        onClick={() => {
+                          const defaultPlatform: "ebay" | "discogs" =
+                            !album.ebay_listing_id ? "ebay" : "discogs";
+                          setManualPlatform(defaultPlatform);
+                          setManualPrice(
+                            (album.list_price ?? album.suggested_price ?? "").toString()
+                          );
+                          setManualOpen(true);
+                        }}
+                        className="text-xs text-muted-foreground hover:text-accent transition-colors"
+                      >
+                        Already listed it yourself? Track it manually →
+                      </button>
+                    ) : (
+                      <div className="mt-2 space-y-3 rounded-lg border border-border bg-muted/10 p-3">
+                        <p className="text-xs font-medium">Track a manual listing</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setManualPlatform("ebay")}
+                            disabled={!!album.ebay_listing_id}
+                            className={`rounded-md border px-3 py-2 text-xs transition-colors ${
+                              manualPlatform === "ebay"
+                                ? "border-accent bg-accent/10 text-accent"
+                                : "border-border text-muted-foreground hover:text-foreground"
+                            } disabled:opacity-40 disabled:cursor-not-allowed`}
+                          >
+                            eBay
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setManualPlatform("discogs")}
+                            disabled={!!album.discogs_listing_id}
+                            className={`rounded-md border px-3 py-2 text-xs transition-colors ${
+                              manualPlatform === "discogs"
+                                ? "border-accent bg-accent/10 text-accent"
+                                : "border-border text-muted-foreground hover:text-foreground"
+                            } disabled:opacity-40 disabled:cursor-not-allowed`}
+                          >
+                            Discogs
+                          </button>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="manual-url" className="text-xs">Listing URL (optional)</Label>
+                          <Input
+                            id="manual-url"
+                            type="url"
+                            placeholder="https://..."
+                            value={manualUrl}
+                            onChange={(e) => setManualUrl(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="manual-price" className="text-xs">List Price ($)</Label>
+                          <Input
+                            id="manual-price"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            placeholder="0.00"
+                            value={manualPrice}
+                            onChange={(e) => setManualPrice(e.target.value)}
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            onClick={handleSaveManualListing}
+                            disabled={savingManual}
+                          >
+                            {savingManual ? <VinylSpinner size="xs" /> : "Save"}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setManualOpen(false)}
+                            disabled={savingManual}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">
+                          This just records the listing in VinylVault — it does not post anything to {manualPlatform === "ebay" ? "eBay" : "Discogs"}. Use this if you listed it yourself outside VinylVault.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+
                 {/* Check if sold */}
                 {(album.ebay_listing_id || album.discogs_listing_id) && (
                   <Button
@@ -1168,82 +1255,6 @@ export function AlbumDetailClient({
                 )}
               </div>
 
-              {/* Shipping / label section */}
-              <div className="border-t border-border p-5">
-                <div className="flex items-center gap-2 mb-3">
-                  <Package className="h-4 w-4 text-muted-foreground" />
-                  <p className="text-sm font-medium">Shipping</p>
-                </div>
-
-                {album.tracking_number ? (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Carrier</span>
-                      <span className="font-medium">{album.shipping_carrier ?? "—"}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Tracking</span>
-                      <span className="font-mono text-xs">{album.tracking_number}</span>
-                    </div>
-                    {album.buyer_address_raw && (
-                      <div className="mt-2 rounded-lg border border-border bg-muted/10 p-3">
-                        <p className="text-xs text-muted-foreground mb-1">Ship to</p>
-                        <pre className="text-xs font-sans whitespace-pre-wrap text-foreground">
-                          {album.buyer_address_raw}
-                        </pre>
-                      </div>
-                    )}
-                    <div className="flex gap-2 pt-1">
-                      {album.shipping_label_url && (
-                        <a
-                          href={album.shipping_label_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 rounded-lg bg-accent/15 px-3 py-1.5 text-xs font-medium text-accent hover:bg-accent/25 transition-colors"
-                        >
-                          <Package className="h-3 w-3" />
-                          Download label (PDF)
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {album.buyer_address_raw && (
-                      <div className="rounded-lg border border-border bg-muted/10 p-3">
-                        <p className="text-xs text-muted-foreground mb-1">Buyer address</p>
-                        <pre className="text-xs font-sans whitespace-pre-wrap text-foreground">
-                          {album.buyer_address_raw}
-                        </pre>
-                      </div>
-                    )}
-                    <p className="text-xs text-muted-foreground">
-                      No label yet.{" "}
-                      {!album.buyer_address_raw &&
-                        "Buyer address not captured — "}
-                      Configure Shippo in{" "}
-                      <a href="/settings" className="text-accent hover:underline">
-                        Settings → Shipping
-                      </a>{" "}
-                      to auto-generate labels on future sales
-                      {isOwner ? (
-                        <>
-                          , or{" "}
-                          <CreateLabelButton albumId={album.id} onCreated={(label) =>
-                            setAlbum((prev) => ({
-                              ...prev,
-                              tracking_number: label.trackingNumber,
-                              shipping_label_url: label.labelUrl,
-                              shipping_carrier: `${label.carrier} — ${label.serviceLevel}`,
-                            }))
-                          } />
-                        </>
-                      ) : null}
-                      .
-                    </p>
-                  </div>
-                )}
-              </div>
             </div>
           )}
           {/* Delete album */}

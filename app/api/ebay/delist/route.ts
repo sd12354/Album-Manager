@@ -51,8 +51,9 @@ export async function POST(request: Request) {
   const { data: ebayCreds } = await supabase.from("ebay_credentials").select("*").eq("user_id", user.id).maybeSingle();
 
   const isRealEbay = hasRealEbayCredentials(ebayCreds);
+  const isManualListing = typedAlbum.ebay_listing_id.startsWith("manual-");
 
-  if (isRealEbay && ebayCreds) {
+  if (isRealEbay && ebayCreds && !isManualListing) {
     const tokenResult = await getValidEbayToken(ebayCreds as EbayTokenCredentials);
     if (tokenResult.refreshed) {
       await supabase.from("ebay_credentials").update({

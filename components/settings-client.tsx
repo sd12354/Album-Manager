@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { EbayConnectButton } from "@/components/ebay-connect-button";
 import { DiscogsConnectButton } from "@/components/discogs-connect-button";
-import { ShippoConnectButton } from "@/components/shippo-connect-button";
 import { CollaboratorsSection } from "@/components/collaborators-section";
 import { getAppUrl } from "@/lib/site-url";
 import {
@@ -32,7 +31,6 @@ import type { AlbumCondition } from "@/types";
 interface SettingsClientProps {
   ebayConnected: boolean;
   ebayUsername?: string;
-  ebayEnvironment?: "production" | "sandbox" | "stub";
   ebayError?: string;
   discogsEnvTokenConfigured: boolean;
   discogsConnectedViaOAuth: boolean;
@@ -40,11 +38,6 @@ interface SettingsClientProps {
   discogsOAuthConfigured: boolean;
   discogsConnectedNotice?: string;
   discogsError?: string;
-  shippoConnectedViaOAuth: boolean;
-  shippoOAuthConfigured: boolean;
-  shippoAccountLabel?: string;
-  shippoConnectedNotice?: string;
-  shippoError?: string;
   userEmail: string;
   userSettings: {
     discogs_token?: string;
@@ -52,10 +45,6 @@ interface SettingsClientProps {
     email_on_sale?: boolean;
     shipping_profile?: string;
     condition_multipliers?: Partial<Record<AlbumCondition, number>>;
-    shippo_enabled?: boolean;
-    shippo_api_key?: string;
-    shippo_oauth_token?: string;
-    shippo_account_label?: string;
     seller_name?: string;
     seller_street1?: string;
     seller_street2?: string;
@@ -69,7 +58,6 @@ interface SettingsClientProps {
 export function SettingsClient({
   ebayConnected: initialConnected,
   ebayUsername,
-  ebayEnvironment,
   ebayError,
   discogsEnvTokenConfigured,
   discogsConnectedViaOAuth,
@@ -77,20 +65,12 @@ export function SettingsClient({
   discogsOAuthConfigured,
   discogsConnectedNotice,
   discogsError,
-  shippoConnectedViaOAuth,
-  shippoOAuthConfigured,
-  shippoAccountLabel,
-  shippoConnectedNotice,
-  shippoError,
   userEmail,
   userSettings,
 }: SettingsClientProps) {
   const [ebayConnected, setEbayConnected] = useState(initialConnected);
   const [discogsOAuthConnected, setDiscogsOAuthConnected] = useState(
     discogsConnectedViaOAuth
-  );
-  const [shippoOAuthConnected, setShippoOAuthConnected] = useState(
-    shippoConnectedViaOAuth
   );
   const [newEmail, setNewEmail] = useState(userEmail);
   const [changingEmail, setChangingEmail] = useState(false);
@@ -107,12 +87,10 @@ export function SettingsClient({
     userSettings.shipping_profile ?? "standard"
   );
   const [testingDiscogs, setTestingDiscogs] = useState(false);
-  const [testingShippo, setTestingShippo] = useState(false);
+  const [sendingTestEmail, setSendingTestEmail] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // Shippo + seller address state
-  const [shippoEnabled, setShippoEnabled] = useState(userSettings.shippo_enabled ?? false);
-  const [shippoKey, setShippoKey] = useState(userSettings.shippo_api_key ?? "");
+  // Seller address state
   const [sellerName, setSellerName] = useState(userSettings.seller_name ?? "");
   const [sellerStreet1, setSellerStreet1] = useState(userSettings.seller_street1 ?? "");
   const [sellerStreet2, setSellerStreet2] = useState(userSettings.seller_street2 ?? "");
@@ -130,22 +108,14 @@ export function SettingsClient({
     if (discogsError) {
       toast.error(discogsError, { duration: 8000 });
     }
-    if (shippoConnectedNotice === "connected") {
-      toast.success("Shippo account connected");
-    }
-    if (shippoError) {
-      toast.error(shippoError, { duration: 8000 });
-    }
     // Clean the query string so the toast doesn't re-fire on refresh.
     if (
       typeof window !== "undefined" &&
-      (discogsConnectedNotice || discogsError || shippoConnectedNotice || shippoError)
+      (discogsConnectedNotice || discogsError)
     ) {
       const url = new URL(window.location.href);
       url.searchParams.delete("discogs");
       url.searchParams.delete("discogs_error");
-      url.searchParams.delete("shippo");
-      url.searchParams.delete("shippo_error");
       window.history.replaceState({}, "", url.toString());
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -200,24 +170,20 @@ export function SettingsClient({
     setChangingEmail(false);
   }
 
-  async function testShippo() {
-    setTestingShippo(true);
+  async function sendTestSaleEmail() {
+    setSendingTestEmail(true);
     try {
-      const res = await fetch("/api/integrations/shippo/test", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ apiKey: shippoKey }),
-      });
-      const data = await res.json();
+      const res = await fetch("/api/notifications/test-sale", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
       if (res.ok && data.ok) {
-        toast.success("Shippo connected successfully");
+        toast.success(`Test email sent to ${data.sentTo}`);
       } else {
-        toast.error(data.error ?? "Shippo connection failed");
+        toast.error(data.error ?? "Could not send test email", { duration: 8000 });
       }
     } catch {
       toast.error("Network error");
     }
-    setTestingShippo(false);
+    setSendingTestEmail(false);
   }
 
   async function testDiscogs() {
@@ -303,13 +269,23 @@ export function SettingsClient({
 
         <AccordionItem value="ebay" className="animate-fade-in-up stagger-1">
           <AccordionTrigger className="font-display text-lg">
-            eBay Account
+            <div className="flex items-center gap-2">
+              <span>eBay Account</span>
+              {ebayConnected ? (
+                <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-emerald-400">
+                  Configured
+                </span>
+              ) : (
+                <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-amber-400">
+                  Not configured
+                </span>
+              )}
+            </div>
           </AccordionTrigger>
           <AccordionContent className="space-y-4">
             <EbayConnectButton
               connected={ebayConnected}
               username={ebayUsername}
-              environment={ebayEnvironment}
               onStatusChange={setEbayConnected}
             />
 
@@ -325,8 +301,7 @@ export function SettingsClient({
                 Separately, eBay pricing comparables (used as a fallback when
                 Discogs has no data) come from your app credentials in{" "}
                 <code className="text-accent">.env.local</code> — no user OAuth
-                required. Sandbox returns very few real listings; switch to
-                production credentials for live pricing data.
+                required.
               </p>
             </div>
 
@@ -503,12 +478,12 @@ export function SettingsClient({
           <AccordionTrigger className="font-display text-lg">
             Notifications
           </AccordionTrigger>
-          <AccordionContent>
+          <AccordionContent className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium">Email on sale</p>
                 <p className="text-xs text-muted-foreground">
-                  Get notified when an album sells on eBay
+                  Get notified when an album sells on eBay or Discogs.
                 </p>
               </div>
               <Switch
@@ -519,129 +494,40 @@ export function SettingsClient({
                 }}
               />
             </div>
+            <div className="flex items-center justify-between rounded-lg border border-border bg-muted/10 p-3">
+              <div className="pr-3">
+                <p className="text-sm font-medium">Send test sale email</p>
+                <p className="text-xs text-muted-foreground">
+                  Sends a sample sale notification to {userEmail || "your account email"} so you can verify delivery.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={sendTestSaleEmail}
+                disabled={sendingTestEmail}
+              >
+                {sendingTestEmail ? (
+                  <>
+                    <VinylSpinner size="xs" />
+                    Sending...
+                  </>
+                ) : (
+                  "Send test email"
+                )}
+              </Button>
+            </div>
           </AccordionContent>
         </AccordionItem>
 
-        <AccordionItem value="shipping" className="animate-fade-in-up stagger-5">
+        <AccordionItem value="seller-address" className="animate-fade-in-up stagger-5">
           <AccordionTrigger className="font-display text-lg">
-            <div className="flex items-center gap-2">
-              <span>Shipping</span>
-              {(shippoOAuthConnected || shippoKey || process.env.NEXT_PUBLIC_SHIPPO_CONFIGURED) ? (
-                <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-emerald-400">
-                  Configured
-                </span>
-              ) : (
-                <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-amber-400">
-                  Not configured
-                </span>
-              )}
-            </div>
+            Seller Address
           </AccordionTrigger>
           <AccordionContent className="space-y-5">
             <p className="text-sm text-muted-foreground">
-              Optionally connect{" "}
-              <a
-                href="https://goshippo.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-accent hover:underline"
-              >
-                Shippo
-              </a>{" "}
-              to auto-generate prepaid USPS Media Mail labels when a sale is detected.
-              If disabled, sales still record normally — you&apos;ll just handle shipping manually.
+              This is the address eBay listings ship from. Update it any time you move.
             </p>
-
-            {/* Enable / disable toggle */}
-            <div className="flex items-center justify-between rounded-xl border border-border bg-secondary/30 px-4 py-3">
-              <div>
-                <p className="text-sm font-medium">Auto-generate shipping labels</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  When enabled, a Shippo label is created automatically every time a sale is detected.
-                  Disable to manage shipping outside VinylVault.
-                </p>
-              </div>
-              <Switch
-                checked={shippoEnabled}
-                onCheckedChange={(checked) => {
-                  setShippoEnabled(checked);
-                  saveSettings({ shippo_enabled: checked });
-                }}
-              />
-            </div>
-
-            {/* API key + address — only shown when enabled */}
-            {shippoEnabled && (
-              <>
-
-            {/* Connect with OAuth (mirrors eBay / Discogs) */}
-            <ShippoConnectButton
-              connected={shippoOAuthConnected}
-              accountLabel={shippoAccountLabel}
-              oauthConfigured={shippoOAuthConfigured}
-              onStatusChange={setShippoOAuthConnected}
-            />
-
-            {!shippoOAuthConfigured && !shippoOAuthConnected && (
-              <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-400">
-                Shippo OAuth isn&apos;t configured on this server yet. Add{" "}
-                <code>SHIPPO_CLIENT_ID</code> and <code>SHIPPO_CLIENT_SECRET</code>{" "}
-                to enable one-click connect, or use an API key below.
-              </div>
-            )}
-
-            {/* Advanced: API key fallback */}
-            <details className="group rounded-lg border border-border bg-muted/10">
-              <summary className="cursor-pointer list-none px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
-                Advanced: use an API key instead
-              </summary>
-              <div className="space-y-3 px-3 pb-3">
-                <div className="space-y-2">
-                  <Label htmlFor="shippo_key">Shippo API Key</Label>
-                  <Input
-                    id="shippo_key"
-                    type="password"
-                    placeholder="shippo_test_... or shippo_live_..."
-                    value={shippoKey}
-                    onChange={(e) => setShippoKey(e.target.value)}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Prefer not to use OAuth? Get your key at{" "}
-                    <a
-                      href="https://app.goshippo.com/user/apikeys"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-accent hover:underline"
-                    >
-                      app.goshippo.com/user/apikeys
-                    </a>
-                    . A connected OAuth account takes precedence over this key.
-                  </p>
-                </div>
-                <div className="flex gap-3">
-                  <Button
-                    variant="outline"
-                    onClick={testShippo}
-                    disabled={testingShippo || (!shippoKey && !shippoOAuthConnected)}
-                  >
-                    {testingShippo ? (
-                      <>
-                        <VinylSpinner size="xs" />
-                        Testing...
-                      </>
-                    ) : (
-                      "Test Connection"
-                    )}
-                  </Button>
-                  <Button
-                    onClick={() => saveSettings({ shippo_api_key: shippoKey })}
-                    disabled={saving}
-                  >
-                    Save Key
-                  </Button>
-                </div>
-              </div>
-            </details>
 
             {/* Seller / ship-from address */}
             <div className="space-y-3 rounded-xl border border-border p-4">
@@ -725,9 +611,6 @@ export function SettingsClient({
                 Save Address
               </Button>
             </div>
-
-              </> // end shippoEnabled conditional
-            )}
           </AccordionContent>
         </AccordionItem>
       </Accordion>

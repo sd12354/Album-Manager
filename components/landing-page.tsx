@@ -264,7 +264,6 @@ function SettingsMockup() {
   const integrations = [
     { name: "eBay", note: "Connected as vinyl_collector_pro" },
     { name: "Discogs", note: "Connected · OAuth" },
-    { name: "Shippo", note: "Connected · OAuth" },
   ];
   return (
     <div className="rounded-xl border border-white/10 bg-[#0D0D0F] overflow-hidden shadow-2xl">
@@ -303,10 +302,8 @@ function SettingsMockup() {
         </div>
         {/* Toggle row */}
         <div className="mt-3 flex items-center justify-between rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-2.5">
-          <p className="text-[10px] text-white/70">Auto-generate shipping labels</p>
-          <span className="flex h-4 w-7 items-center rounded-full bg-accent/80 px-0.5">
-            <span className="ml-auto h-3 w-3 rounded-full bg-white" />
-          </span>
+          <p className="text-[10px] text-white/70">Seller address on file</p>
+          <span className="text-[10px] text-emerald-400">Saved</span>
         </div>
       </div>
     </div>
@@ -358,8 +355,8 @@ const features = [
   },
   {
     icon: Package,
-    title: "Auto shipping labels",
-    desc: "Shippo integration auto-generates prepaid USPS Media Mail labels the moment a sale is detected.",
+    title: "Ship on your terms",
+    desc: "Buyer address captured on every sale so you can ship manually with the carrier of your choice.",
     color: "text-purple-400 bg-purple-400/10",
   },
   {
@@ -572,8 +569,8 @@ export function LandingPage({ isLoggedIn = false }: { isLoggedIn?: boolean }) {
               },
               {
                 step: "04",
-                title: "Ship with one click",
-                desc: "Shippo generates a prepaid USPS Media Mail label the moment a sale is detected. Print and go.",
+                title: "Ship on your terms",
+                desc: "Buyer's address is captured on every sale so you can ship manually with the carrier of your choice.",
                 icon: Package,
                 color: "text-purple-400 bg-purple-400/10",
               },

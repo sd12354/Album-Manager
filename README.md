@@ -23,11 +23,11 @@ Album catalogue manager for vinyl sellers — import your inventory, auto-price 
 ### Marketplaces
 - **eBay** — OAuth connect, live `AddFixedPriceItem` listings, delist, sold sync, marketplace reconciliation when listings are removed on eBay directly
 - **Discogs** — OAuth connect, marketplace listings, delist, sold detection
-- **Cross-platform sync** — mark sold, cancel the other platform, optional Shippo label
+- **Cross-platform sync** — mark sold, cancel the other platform
 - **AI listing descriptions** — generated copy without misleading shipping-time claims
 
 ### Shipping
-- **Shippo OAuth** (or API key) — auto-create labels when an album sells, seller address in Settings
+- **Shipping** — buyer's address is captured from eBay/Discogs on sale so you can print a label with any carrier.
 
 ### Collaboration
 - **Shared collections** — invite others by email as **viewer** or **editor**
@@ -55,7 +55,7 @@ Album catalogue manager for vinyl sellers — import your inventory, auto-price 
 | Frontend | Next.js 16 (App Router), React 19, Tailwind CSS, shadcn/ui |
 | Backend | Supabase (Postgres, Auth, Storage, RLS) |
 | Deployment | Vercel |
-| APIs | Discogs, eBay (Browse + Trading), Shippo, Anthropic Claude |
+| APIs | Discogs, eBay (Browse + Trading), Anthropic Claude |
 | Tests | Vitest (`lib/csv.test.ts`, `lib/pricing.test.ts`) |
 
 ---
@@ -66,7 +66,6 @@ Album catalogue manager for vinyl sellers — import your inventory, auto-price 
 - [Supabase](https://supabase.com) project
 - (Recommended) [Discogs](https://www.discogs.com/settings/developers) OAuth app or personal token
 - (Optional) [eBay Developer](https://developer.ebay.com/) production or sandbox keyset
-- (Optional) [Shippo](https://goshippo.com) OAuth app or API key
 - (Optional) [Anthropic](https://console.anthropic.com/) API key for AI features
 
 ---
@@ -90,7 +89,7 @@ See [`.env.local.example`](.env.local.example) for the full list. Minimum for lo
 
 Recommended for pricing: `DISCOGS_CONSUMER_KEY`, `DISCOGS_CONSUMER_SECRET`, and/or `DISCOGS_PERSONAL_ACCESS_TOKEN`, `DISCOGS_USER_AGENT`.
 
-Optional: `EBAY_*`, `SHIPPO_*`, `ANTHROPIC_API_KEY`, `ANTHROPIC_VISION_MODEL`, `TOKEN_ENCRYPTION_KEY`.
+Optional: `EBAY_*`, `ANTHROPIC_API_KEY`, `ANTHROPIC_VISION_MODEL`, `TOKEN_ENCRYPTION_KEY`.
 
 ---
 
@@ -179,14 +178,9 @@ Users can also paste a personal access token as a fallback.
 1. Create a keyset at [developer.ebay.com/my/keys](https://developer.ebay.com/my/keys)
 2. Set `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET`, `EBAY_RU_NAME`, `EBAY_ENVIRONMENT`
 3. **Settings → Integrations → Connect eBay**
-4. Fill in seller address under **Shipping** for listing location fields
+4. Fill in seller address under **Seller Address** for listing location fields
 
 Leaving `EBAY_CLIENT_ID` unset enables a **stub OAuth** flow for UI testing only.
-
-### Shippo
-1. Register a Shippo OAuth app; callback `{NEXT_PUBLIC_APP_URL}/api/shippo/callback`
-2. Set `SHIPPO_CLIENT_ID` / `SHIPPO_CLIENT_SECRET` (or `SHIPPO_API_KEY`)
-3. **Settings → Integrations → Connect Shippo** and enable auto-labels
 
 ### Anthropic (AI)
 Set `ANTHROPIC_API_KEY` for AI descriptions, AI pricing, and cover-photo matching. Optional `ANTHROPIC_VISION_MODEL` (defaults to `claude-opus-4-5`).
@@ -217,10 +211,10 @@ app/
 ├── (app)/            # dashboard, albums, import, settings
 ├── about/            # marketing pages
 ├── policy/
-└── api/              # REST routes (albums, pricing, ebay, discogs, shippo,
-                      # collection, sync, notifications, shipping)
+└── api/              # REST routes (albums, pricing, ebay, discogs,
+                      # collection, sync, notifications)
 components/           # UI shell, catalogue, album detail, collaborators, etc.
-lib/                  # ebay, discogs, shippo, pricing, collections, AI, csv
+lib/                  # ebay, discogs, pricing, collections, AI, csv
 supabase/migrations/
 types/
 ```
@@ -248,8 +242,6 @@ types/
 | `/api/discogs/list` | POST | Create Discogs listing |
 | `/api/discogs/delist` | POST | Remove Discogs listing |
 | `/api/sync/check` | POST | Check sold / external delist for one album |
-| `/api/shipping/label` | POST | Create Shippo label |
-| `/api/shippo/connect` | GET | Start Shippo OAuth |
 | `/api/collection/invite` | POST | Invite collaborator |
 | `/api/collection/members` | GET | List members & invites |
 | `/api/collection/active` | GET/POST | Switch active collection |

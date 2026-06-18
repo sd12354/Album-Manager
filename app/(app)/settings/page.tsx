@@ -7,8 +7,6 @@ interface SettingsPageProps {
     ebay_error?: string;
     discogs?: string;
     discogs_error?: string;
-    shippo?: string;
-    shippo_error?: string;
   }>;
 }
 
@@ -34,16 +32,10 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
     process.env.DISCOGS_CONSUMER_KEY && process.env.DISCOGS_CONSUMER_SECRET
   );
 
-  const shippoConnectedViaOAuth = !!userSettings.shippo_oauth_token;
-  const shippoOAuthConfigured = !!(
-    process.env.SHIPPO_CLIENT_ID && process.env.SHIPPO_CLIENT_SECRET
-  );
-
   return (
     <SettingsClient
       ebayConnected={!!ebayCreds}
       ebayUsername={userSettings.ebay_username ?? "vinyl_collector_pro"}
-      ebayEnvironment={userSettings.ebay_environment}
       ebayError={params?.ebay_error}
       discogsEnvTokenConfigured={!!process.env.DISCOGS_PERSONAL_ACCESS_TOKEN}
       discogsConnectedViaOAuth={discogsConnectedViaOAuth}
@@ -51,11 +43,6 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
       discogsOAuthConfigured={discogsOAuthConfigured}
       discogsConnectedNotice={params?.discogs}
       discogsError={params?.discogs_error}
-      shippoConnectedViaOAuth={shippoConnectedViaOAuth}
-      shippoOAuthConfigured={shippoOAuthConfigured}
-      shippoAccountLabel={userSettings.shippo_account_label}
-      shippoConnectedNotice={params?.shippo}
-      shippoError={params?.shippo_error}
       userEmail={user?.email ?? ""}
       userSettings={userSettings}
     />

@@ -62,8 +62,8 @@ export default function AboutPage() {
             <p className="mt-3">
               We built VinylVault to handle the entire pipeline: import your collection in bulk,
               let AI price and describe every record from live market data, list to both platforms
-              simultaneously, auto-cancel when something sells, and generate prepaid shipping labels
-              automatically.
+              simultaneously, auto-cancel when something sells, and capture the buyer&apos;s
+              shipping address so you can ship with any carrier.
             </p>
           </section>
 
@@ -97,14 +97,14 @@ export default function AboutPage() {
                 },
                 {
                   icon: Package,
-                  title: "Auto shipping labels",
-                  desc: "Shippo generates prepaid USPS Media Mail labels the moment a sale is detected.",
+                  title: "Buyer address captured",
+                  desc: "Ship manually with any carrier — buyer's address is recorded on every sale.",
                   color: "text-purple-400 bg-purple-400/10",
                 },
                 {
                   icon: Plug,
                   title: "One-click connections",
-                  desc: "Connect eBay, Discogs, and Shippo with secure OAuth — no tokens to paste.",
+                  desc: "Connect eBay and Discogs with secure OAuth — no tokens to paste.",
                   color: "text-amber-400 bg-amber-400/10",
                 },
                 {

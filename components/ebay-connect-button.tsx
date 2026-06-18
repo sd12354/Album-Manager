@@ -7,14 +7,12 @@ import { createClient } from "@/lib/supabase/client";
 interface EbayConnectButtonProps {
   connected: boolean;
   username?: string;
-  environment?: "production" | "sandbox" | "stub" | string;
   onStatusChange?: (connected: boolean) => void;
 }
 
 export function EbayConnectButton({
   connected,
   username,
-  environment,
   onStatusChange,
 }: EbayConnectButtonProps) {
   const [loading, setLoading] = useState(false);
@@ -38,21 +36,6 @@ export function EbayConnectButton({
   }
 
   if (connected) {
-    const envBadgeClass =
-      environment === "production"
-        ? "bg-emerald-500/15 text-emerald-400"
-        : environment === "sandbox"
-          ? "bg-amber-500/15 text-amber-400"
-          : "bg-white/8 text-muted-foreground";
-    const envLabel =
-      environment === "production"
-        ? "Production"
-        : environment === "sandbox"
-          ? "Sandbox"
-          : environment === "stub"
-            ? "Stub"
-            : null;
-
     return (
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -63,13 +46,6 @@ export function EbayConnectButton({
               {username ?? "vinyl_collector_pro"}
             </span>
           </span>
-          {envLabel && (
-            <span
-              className={`rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider ${envBadgeClass}`}
-            >
-              {envLabel}
-            </span>
-          )}
         </div>
         <Button
           variant="outline"
