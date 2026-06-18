@@ -8,6 +8,8 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
 
+const IMPORT_CHUNK_SIZE = 100;
+
 function validateAlbumRows(rawAlbums: unknown): {
   rows: CSVAlbumRow[];
   errors: string[];
@@ -112,11 +114,26 @@ export async function POST(request: Request) {
     status: "unlisted" as const,
   }));
 
-  const { data, error } = await supabase.from("albums").insert(records).select();
+  const importedAlbums: unknown[] = [];
+  for (let i = 0; i < records.length; i += IMPORT_CHUNK_SIZE) {
+    const chunk = records.slice(i, i + IMPORT_CHUNK_SIZE);
+    const { data, error } = await supabase.from("albums").insert(chunk).select();
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) {
+      return NextResponse.json(
+        {
+          error: `Import failed at rows ${i + 1}-${i + chunk.length}: ${error.message}`,
+          importedCount: importedAlbums.length,
+        },
+        { status: 500 }
+      );
+    }
+
+    importedAlbums.push(...(data ?? []));
   }
 
-  return NextResponse.json({ count: data?.length ?? 0, albums: data });
+  return NextResponse.json({
+    count: importedAlbums.length,
+    albums: importedAlbums,
+  });
 }

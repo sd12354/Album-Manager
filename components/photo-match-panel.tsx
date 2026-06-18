@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -110,35 +110,48 @@ export function PhotoMatchPanel() {
   const [ownerId, setOwnerId] = useState<string>("");
   const [canEdit, setCanEdit] = useState(true);
   const [collectionLabel, setCollectionLabel] = useState<string | null>(null);
+  const [collectionLoading, setCollectionLoading] = useState(true);
+  const [collectionError, setCollectionError] = useState<string | null>(null);
 
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
     void (async () => {
-      // Resolve the active collection so photos land under the right owner.
-      let activeOwner = "";
+      setCollectionLoading(true);
+      setCollectionError(null);
       try {
         const res = await fetch("/api/collection/active");
-        if (res.ok) {
-          const { active } = await res.json();
-          if (active) {
-            activeOwner = active.ownerId as string;
-            setOwnerId(activeOwner);
-            setCanEdit(active.role === "owner" || active.role === "editor");
-            setCollectionLabel(active.isOwner ? null : (active.label as string));
-          }
+        if (!res.ok) {
+          throw new Error("Could not load your active collection.");
         }
-      } catch {
-        // Fall back to RLS-scoped query below.
-      }
+        const { active } = await res.json();
+        if (!active?.ownerId) {
+          throw new Error("No active collection is available.");
+        }
 
-      let query = supabase
-        .from("albums")
-        .select("id, artist, title")
-        .order("title", { ascending: true });
-      if (activeOwner) query = query.eq("user_id", activeOwner);
-      const { data } = await query;
-      setAlbums((data ?? []) as Pick<Album, "id" | "artist" | "title">[]);
+        const activeOwner = active.ownerId as string;
+        setOwnerId(activeOwner);
+        setCanEdit(active.role === "owner" || active.role === "editor");
+        setCollectionLabel(active.isOwner ? null : (active.label as string));
+
+        const { data, error } = await supabase
+          .from("albums")
+          .select("id, artist, title")
+          .eq("user_id", activeOwner)
+          .order("title", { ascending: true });
+        if (error) throw error;
+        setAlbums((data ?? []) as Pick<Album, "id" | "artist" | "title">[]);
+      } catch (error) {
+        setAlbums([]);
+        setCanEdit(false);
+        setCollectionError(
+          error instanceof Error
+            ? error.message
+            : "Could not load your active collection."
+        );
+      } finally {
+        setCollectionLoading(false);
+      }
     })();
   }, [supabase]);
 
@@ -420,6 +433,15 @@ export function PhotoMatchPanel() {
     );
   }
 
+  if (collectionLoading) {
+    return (
+      <div className="mx-auto mt-8 flex max-w-2xl items-center justify-center gap-3 rounded-xl border border-border bg-card px-6 py-10 text-sm text-muted-foreground">
+        <VinylSpinner size="sm" />
+        Loading active collection...
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto mt-8 max-w-4xl">
       <p className="mb-6 text-sm text-muted-foreground">
@@ -437,7 +459,14 @@ export function PhotoMatchPanel() {
         </p>
       )}
 
-      {!canEdit ? (
+      {collectionError && (
+        <div className="mb-4 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {collectionError} Refresh the page or choose a collection before
+          matching photos.
+        </div>
+      )}
+
+      {collectionError ? null : !canEdit ? (
         <div className="rounded-xl border border-border bg-card px-6 py-10 text-center text-sm text-muted-foreground">
           You have view-only access to this collection, so cover photos can&apos;t
           be attached here.

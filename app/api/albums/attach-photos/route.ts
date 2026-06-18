@@ -43,9 +43,14 @@ export async function POST(request: Request) {
 
   // Only accept URLs that point at our own storage bucket, so a tampered
   // request can't inject arbitrary external image URLs into a listing.
-  const expectedPrefix = `${
-    process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""
-  }/storage/v1/object/public/album-photos/`;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!supabaseUrl) {
+    return NextResponse.json(
+      { error: "Supabase URL is not configured on the server." },
+      { status: 500 }
+    );
+  }
+  const expectedPrefix = `${supabaseUrl}/storage/v1/object/public/album-photos/`;
 
   const valid = items.filter(
     (i) =>
