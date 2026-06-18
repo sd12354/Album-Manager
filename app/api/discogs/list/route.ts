@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import {
   createDiscogsListing,
   getDiscogsListingStatus,
-  resolveDiscogsAuth,
+  resolveUserDiscogsAuth,
   DiscogsError,
 } from "@/lib/discogs";
 import { generateListingDescription } from "@/lib/ai-pricing";
@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const discogsAuth = resolveDiscogsAuth(user.user_metadata);
+  const discogsAuth = resolveUserDiscogsAuth(user.user_metadata);
 
   if (!discogsAuth) {
     return NextResponse.json(
@@ -65,6 +65,13 @@ export async function POST(request: Request) {
   }
 
   const typedAlbum = album as Album;
+  if (typedAlbum.status === "sold") {
+    return NextResponse.json(
+      { error: "Sold albums cannot be listed." },
+      { status: 409 }
+    );
+  }
+
   if (typedAlbum.discogs_listing_id) {
     return NextResponse.json(
       { error: "Album is already listed on Discogs" },
@@ -72,8 +79,15 @@ export async function POST(request: Request) {
     );
   }
 
-  const price =
+  const rawPrice =
     listPrice ?? typedAlbum.list_price ?? typedAlbum.suggested_price ?? 9.99;
+  const price = Number(rawPrice);
+  if (!Number.isFinite(price) || price <= 0) {
+    return NextResponse.json(
+      { error: "List price must be a positive number." },
+      { status: 400 }
+    );
+  }
 
   // Resolve the Discogs release ID — first from the album column, then from
   // the pricing cache raw_data where it's stored after a price fetch.

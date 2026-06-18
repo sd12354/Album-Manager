@@ -44,11 +44,10 @@ function buildDiscogsAuthHeader(auth: DiscogsAuthInput): string {
 }
 
 /**
- * Resolve the Discogs auth for a user from their Supabase metadata, falling
- * back to the server-wide personal token. OAuth takes precedence over a
- * pasted personal token, which takes precedence over the env token.
+ * Resolve Discogs auth that belongs to a specific user. Use this for account
+ * connection status and all write/status marketplace operations.
  */
-export function resolveDiscogsAuth(
+export function resolveUserDiscogsAuth(
   userMetadata: Record<string, unknown> | null | undefined
 ): DiscogsAuth | null {
   const meta = (userMetadata ?? {}) as {
@@ -63,6 +62,19 @@ export function resolveDiscogsAuth(
     };
   }
   if (meta.discogs_token) return { token: meta.discogs_token };
+  return null;
+}
+
+/**
+ * Resolve the Discogs auth for pricing flows, falling back to the server-wide
+ * personal token. OAuth takes precedence over a pasted personal token, which
+ * takes precedence over the env token.
+ */
+export function resolveDiscogsAuth(
+  userMetadata: Record<string, unknown> | null | undefined
+): DiscogsAuth | null {
+  const userAuth = resolveUserDiscogsAuth(userMetadata);
+  if (userAuth) return userAuth;
   const envToken = process.env.DISCOGS_PERSONAL_ACCESS_TOKEN;
   if (envToken) return { token: envToken };
   return null;

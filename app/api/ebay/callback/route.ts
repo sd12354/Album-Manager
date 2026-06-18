@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { EBAY_ENVIRONMENT, EBAY_IDENTITY_URL, EBAY_TOKEN_URL } from "@/lib/ebay";
+import {
+  EBAY_ENVIRONMENT,
+  EBAY_IDENTITY_URL,
+  EBAY_TOKEN_URL,
+  hasRealEbayCredentials,
+} from "@/lib/ebay";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -64,7 +69,27 @@ export async function GET(request: Request) {
     });
   }
 
-  if (stub === "true" || !process.env.EBAY_CLIENT_ID) {
+  const stubRequested = stub === "true" || !process.env.EBAY_CLIENT_ID;
+  if (stubRequested) {
+    if (process.env.NODE_ENV === "production") {
+      return settingsRedirect(request, {
+        ebay_error: "eBay OAuth is not configured for this deployment.",
+      });
+    }
+
+    const { data: existingCreds } = await supabase
+      .from("ebay_credentials")
+      .select("*")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (hasRealEbayCredentials(existingCreds)) {
+      return settingsRedirect(request, {
+        ebay_error:
+          "A real eBay connection already exists. Disconnect it before using the local stub.",
+      });
+    }
+
     await supabase.from("ebay_credentials").upsert({
       user_id: user.id,
       access_token: "stub-access-token",

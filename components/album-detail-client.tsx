@@ -127,6 +127,17 @@ export function AlbumDetailClient({
   const autoSyncStartedRef = useRef(false);
 
   useEffect(() => {
+    setAlbum(initialAlbum);
+    setPricing(initialPricing ?? null);
+    setListPrice(
+      initialAlbum.list_price?.toString() ??
+        initialAlbum.suggested_price?.toString() ??
+        ""
+    );
+    setListingDescription(initialAlbum.listing_description ?? "");
+  }, [initialAlbum, initialPricing]);
+
+  useEffect(() => {
     if (!lightboxUrl) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setLightboxUrl(null);
@@ -134,6 +145,27 @@ export function AlbumDetailClient({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [lightboxUrl]);
+
+  function getListPriceForListing(): number | null {
+    const value = listPrice.trim()
+      ? Number(listPrice)
+      : (album.list_price ?? album.suggested_price ?? 9.99);
+    if (!Number.isFinite(value) || value <= 0) {
+      toast.error("List price must be a positive number.");
+      return null;
+    }
+    return value;
+  }
+
+  function getOptionalListPriceForSave(): number | null | undefined {
+    if (!listPrice.trim()) return null;
+    const value = Number(listPrice);
+    if (!Number.isFinite(value) || value <= 0) {
+      toast.error("List price must be a positive number.");
+      return undefined;
+    }
+    return value;
+  }
 
   function applyMarketplaceSync(
     data: {
@@ -161,12 +193,10 @@ export function AlbumDetailClient({
         status: "sold",
         sold_price: data.soldPrice ?? prev.list_price,
         sold_at: new Date().toISOString(),
-        ebay_listing_id: data.soldOn === "ebay" ? null : prev.ebay_listing_id,
-        ebay_listing_url: data.soldOn === "ebay" ? null : prev.ebay_listing_url,
-        discogs_listing_id:
-          data.soldOn === "discogs" ? null : prev.discogs_listing_id,
-        discogs_listing_url:
-          data.soldOn === "discogs" ? null : prev.discogs_listing_url,
+        ebay_listing_id: null,
+        ebay_listing_url: null,
+        discogs_listing_id: null,
+        discogs_listing_url: null,
         tracking_number: data.label?.trackingNumber ?? prev.tracking_number,
         shipping_label_url: data.label?.labelUrl ?? prev.shipping_label_url,
         shipping_carrier: data.label?.carrier
@@ -312,11 +342,13 @@ export function AlbumDetailClient({
   }
 
   async function handleListOnEbay() {
+    const price = getListPriceForListing();
+    if (price == null) return;
     setListing(true);
     const res = await fetch("/api/ebay/list", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ albumId: album.id, listPrice: parseFloat(listPrice) }),
+      body: JSON.stringify({ albumId: album.id, listPrice: price }),
     });
     if (res.ok) {
       const data = await res.json();
@@ -333,7 +365,7 @@ export function AlbumDetailClient({
           status: "listed",
           ebay_listing_id: data.listingId,
           ebay_listing_url: data.listingUrl,
-          list_price: parseFloat(listPrice),
+          list_price: price,
         }));
         toast.success("Listed on eBay");
         router.refresh();
@@ -346,11 +378,13 @@ export function AlbumDetailClient({
   }
 
   async function handleListOnDiscogs() {
+    const price = getListPriceForListing();
+    if (price == null) return;
     setListingDiscogs(true);
     const res = await fetch("/api/discogs/list", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ albumId: album.id, listPrice: parseFloat(listPrice) }),
+      body: JSON.stringify({ albumId: album.id, listPrice: price }),
     });
     if (res.ok) {
       const data = await res.json();
@@ -359,7 +393,7 @@ export function AlbumDetailClient({
         status: "listed",
         discogs_listing_id: String(data.listingId),
         discogs_listing_url: data.listingUrl,
-        list_price: parseFloat(listPrice),
+        list_price: price,
       }));
       if (data.warning) {
         toast.warning(data.warning, { duration: 12000 });
@@ -471,6 +505,8 @@ export function AlbumDetailClient({
 
   async function handleSave() {
     if (!canEdit) return;
+    const price = getOptionalListPriceForSave();
+    if (price === undefined) return;
     setSaving(true);
     const { error } = await supabase
       .from("albums")
@@ -481,7 +517,7 @@ export function AlbumDetailClient({
         condition: album.condition,
         catalog_number: album.catalog_number,
         notes: album.notes,
-        list_price: listPrice ? parseFloat(listPrice) : null,
+        list_price: price,
         listing_description: listingDescription || null,
       })
       .eq("id", album.id);

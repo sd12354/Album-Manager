@@ -88,11 +88,15 @@ export function CatalogueClient({
 
     let cancelled = false;
     (async () => {
-      const res = await fetch("/api/ebay/sync", { method: "POST" });
-      if (!res.ok || cancelled) return;
-      const data = await res.json();
-      if (!cancelled && data.changed > 0) {
-        router.refresh();
+      try {
+        const res = await fetch("/api/ebay/sync", { method: "POST" });
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        if (!cancelled && data.changed > 0) {
+          router.refresh();
+        }
+      } catch {
+        // Background reconciliation should never interrupt catalogue browsing.
       }
     })();
 
@@ -239,6 +243,11 @@ export function CatalogueClient({
   const selectedIds = table
     .getFilteredSelectedRowModel()
     .rows.map((r) => r.original.id);
+  const selectedIdsKey = selectedIds.join("|");
+
+  useEffect(() => {
+    setConfirmDelete(false);
+  }, [selectedIdsKey]);
 
   const handleBulkPrice = useCallback(async (ids = selectedIds) => {
     if (ids.length === 0) return;
@@ -319,9 +328,13 @@ export function CatalogueClient({
   }, [selectedIds, router]);
 
   useEffect(() => {
+    if (searchParams.get("action") !== "price-all") {
+      priceAllStartedRef.current = false;
+      return;
+    }
+
     if (
       !canEdit ||
-      searchParams.get("action") !== "price-all" ||
       priceAllStartedRef.current
     ) {
       return;
