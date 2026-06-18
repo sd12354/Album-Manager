@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { VinylLogo } from "@/components/vinyl-logo";
 import { CollectionSwitcher } from "@/components/collection-switcher";
+import { DiscogsMark, EbayMark } from "@/components/marketplace-icons";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import type { AccessibleCollection } from "@/types";
@@ -149,22 +150,32 @@ export function Sidebar({
       >
         {collapsed ? (
           <div className="flex flex-col items-center gap-3">
-            <span
+            <div
+              className="flex items-center gap-1.5"
               title={ebayConnected ? "eBay Connected" : "eBay Not Connected"}
-              className={cn(
-                "h-2 w-2 rounded-full",
-                ebayConnected ? "bg-green-500" : "bg-muted"
-              )}
-            />
-            <span
+            >
+              <EbayMark className="h-3 w-[26px]" />
+              <span
+                className={cn(
+                  "h-2 w-2 shrink-0 rounded-full",
+                  ebayConnected ? "bg-green-500" : "bg-muted"
+                )}
+              />
+            </div>
+            <div
+              className="flex items-center gap-1.5"
               title={
                 discogsConnected ? "Discogs Connected" : "Discogs Not Connected"
               }
-              className={cn(
-                "h-2 w-2 rounded-full",
-                discogsConnected ? "bg-green-500" : "bg-muted"
-              )}
-            />
+            >
+              <DiscogsMark className="h-3.5 w-3.5 text-muted-foreground" />
+              <span
+                className={cn(
+                  "h-2 w-2 shrink-0 rounded-full",
+                  discogsConnected ? "bg-green-500" : "bg-muted"
+                )}
+              />
+            </div>
             <button
               onClick={handleLogout}
               aria-label="Log out"
