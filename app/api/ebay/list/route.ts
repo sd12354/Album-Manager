@@ -67,6 +67,13 @@ export async function POST(request: Request) {
   }
 
   const typedAlbum = album as Album;
+  if (typedAlbum.status === "sold") {
+    return NextResponse.json(
+      { error: "Sold albums cannot be listed." },
+      { status: 409 }
+    );
+  }
+
   if (typedAlbum.ebay_listing_id) {
     return NextResponse.json(
       { error: "Album is already listed on eBay" },
@@ -74,8 +81,15 @@ export async function POST(request: Request) {
     );
   }
 
-  const price =
+  const rawPrice =
     listPrice ?? typedAlbum.list_price ?? typedAlbum.suggested_price ?? 9.99;
+  const price = Number(rawPrice);
+  if (!Number.isFinite(price) || price <= 0) {
+    return NextResponse.json(
+      { error: "List price must be a positive number." },
+      { status: 400 }
+    );
+  }
 
   // Stub only when OAuth was never configured or the stored token is the dev
   // placeholder — NOT from user_metadata.ebay_environment, which can be stale

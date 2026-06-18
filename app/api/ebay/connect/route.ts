@@ -26,8 +26,14 @@ export async function GET(request: Request) {
   const clientId = process.env.EBAY_CLIENT_ID;
   const ruName = process.env.EBAY_RU_NAME;
 
-  // Stub mode: redirect to callback directly for dev.
+  // Stub mode: redirect to callback directly for local/dev only.
   if (!clientId) {
+    if (process.env.NODE_ENV === "production") {
+      return NextResponse.json(
+        { error: "Missing EBAY_CLIENT_ID" },
+        { status: 500 }
+      );
+    }
     return NextResponse.redirect(new URL("/api/ebay/callback?stub=true", request.url));
   }
 

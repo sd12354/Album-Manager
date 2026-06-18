@@ -12,7 +12,7 @@ import {
   getDiscogsListingState,
   getDiscogsOrderForListing,
   parseDiscogsShippingAddress,
-  resolveDiscogsAuth,
+  resolveUserDiscogsAuth,
   type DiscogsAuth,
 } from "@/lib/discogs";
 import type { Album, AlbumStatus } from "@/types";
@@ -150,12 +150,10 @@ export async function checkAlbumMarketplaceState(
       buyer_address_raw:
         buyerAddressRaw ??
         (buyerAddress ? formatAddress(buyerAddress) : null),
-      ebay_listing_id: soldOn === "ebay" ? null : album.ebay_listing_id,
-      ebay_listing_url: soldOn === "ebay" ? null : album.ebay_listing_url,
-      discogs_listing_id:
-        soldOn === "discogs" ? null : album.discogs_listing_id,
-      discogs_listing_url:
-        soldOn === "discogs" ? null : album.discogs_listing_url,
+      ebay_listing_id: null,
+      ebay_listing_url: null,
+      discogs_listing_id: null,
+      discogs_listing_url: null,
     };
 
     return {
@@ -238,7 +236,7 @@ export function buildMarketplaceSyncContext(
 ): MarketplaceSyncContext {
   return {
     album,
-    discogsAuth: resolveDiscogsAuth(userMetadata),
+    discogsAuth: resolveUserDiscogsAuth(userMetadata),
     ebayCreds: ebayCreds as EbayTokenCredentials | null,
     isRealEbay: hasRealEbayCredentials(ebayCreds),
   };

@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { deleteDiscogsListing, resolveDiscogsAuth } from "@/lib/discogs";
+import {
+  deleteDiscogsListing,
+  DiscogsError,
+  resolveUserDiscogsAuth,
+} from "@/lib/discogs";
 import type { Album } from "@/types";
 
 export const runtime = "nodejs";
@@ -43,10 +47,25 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Album is not listed on Discogs" }, { status: 400 });
   }
 
-  const discogsAuth = resolveDiscogsAuth(user.user_metadata);
+  const discogsAuth = resolveUserDiscogsAuth(user.user_metadata);
 
-  if (discogsAuth) {
+  if (!discogsAuth) {
+    return NextResponse.json(
+      { error: "Discogs not connected. Reconnect your account before delisting." },
+      { status: 400 }
+    );
+  }
+
+  try {
     await deleteDiscogsListing(parseInt(typedAlbum.discogs_listing_id, 10), discogsAuth);
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Discogs delist failed";
+    const status =
+      err instanceof DiscogsError && err.status >= 400 && err.status < 600
+        ? err.status
+        : 502;
+    return NextResponse.json({ error: message }, { status });
   }
 
   // Keep as listed if still on eBay, otherwise revert to unlisted
