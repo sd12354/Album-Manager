@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Upload, Plus, DollarSign } from "lucide-react";
+import { Upload, Plus, DollarSign, ImageIcon, ImageOff } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -127,6 +127,13 @@ export default async function DashboardPage() {
   const recentActivity = allAlbums.slice(0, 10);
   const monthlySales = buildMonthlySales(allAlbums);
 
+  const withPhotos = allAlbums.filter(
+    (a) => Array.isArray(a.photo_urls) && a.photo_urls.length > 0
+  ).length;
+  const missingPhotos = totalAlbums - withPhotos;
+  const photoCoveragePct =
+    totalAlbums > 0 ? Math.round((withPhotos / totalAlbums) * 100) : 0;
+
   const unlistedValue = unsoldAlbums
     .filter((a) => a.status !== "listed")
     .reduce((s, a) => s + (a.list_price ?? a.suggested_price ?? 0), 0);
@@ -161,6 +168,40 @@ export default async function DashboardPage() {
           listedValue={listedValue}
         />
       </div>
+
+      {totalAlbums > 0 && (
+        <div className="mt-4 animate-fade-in-up stagger-3">
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <h2 className="font-display text-lg font-bold">Album Photos</h2>
+                  <p className="text-sm text-muted-foreground">
+                    {totalAlbums === 0
+                      ? "Add albums to start tracking photo coverage."
+                      : `${photoCoveragePct}% of your catalogue has cover photos.`}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-sm font-medium text-emerald-400">
+                    <ImageIcon className="h-4 w-4" />
+                    {withPhotos} with photos
+                  </span>
+                  <span className="inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-sm font-medium text-amber-400">
+                    <ImageOff className="h-4 w-4" />
+                    {missingPhotos} missing photos
+                  </span>
+                  {missingPhotos > 0 && (
+                    <Button variant="outline" size="sm" asChild>
+                      <Link href="/albums?missing=photos">View missing</Link>
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       <div className="mt-8">
         <SalesChart data={monthlySales} />
