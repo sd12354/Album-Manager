@@ -63,6 +63,9 @@ export function CatalogueClient({
   const [globalFilter, setGlobalFilter] = useState("");
   const [conditionFilter, setConditionFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [photoFilter, setPhotoFilter] = useState<string>(
+    searchParams.get("missing") === "photos" ? "missing" : "all"
+  );
   const [sortBy, setSortBy] = useState<string>("default");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [bulkLoading, setBulkLoading] = useState<null | "price" | "list" | "delete">(null);
@@ -73,6 +76,12 @@ export function CatalogueClient({
   useEffect(() => {
     if (searchParams.get("add") === "true") {
       setDrawerOpen(true);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (searchParams.get("missing") === "photos") {
+      setPhotoFilter("missing");
     }
   }, [searchParams]);
 
@@ -115,7 +124,13 @@ export function CatalogueClient({
         conditionFilter === "all" || album.condition === conditionFilter;
       const matchesStatus =
         statusFilter === "all" || album.status === statusFilter;
-      return matchesSearch && matchesCondition && matchesStatus;
+      const hasPhotos =
+        Array.isArray(album.photo_urls) && album.photo_urls.length > 0;
+      const matchesPhotos =
+        photoFilter === "all" ||
+        (photoFilter === "with" && hasPhotos) ||
+        (photoFilter === "missing" && !hasPhotos);
+      return matchesSearch && matchesCondition && matchesStatus && matchesPhotos;
     });
 
     if (sortBy === "price-desc" || sortBy === "price-asc") {
@@ -126,7 +141,7 @@ export function CatalogueClient({
     }
 
     return filtered;
-  }, [albums, globalFilter, conditionFilter, statusFilter, sortBy]);
+  }, [albums, globalFilter, conditionFilter, statusFilter, photoFilter, sortBy]);
 
   const columns = useMemo<ColumnDef<Album>[]>(
     () => [
@@ -482,6 +497,16 @@ export function CatalogueClient({
                 </SelectItem>
               )
             )}
+          </SelectContent>
+        </Select>
+        <Select value={photoFilter} onValueChange={setPhotoFilter}>
+          <SelectTrigger className="w-[140px]">
+            <SelectValue placeholder="Photos" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Photos</SelectItem>
+            <SelectItem value="with">With photos</SelectItem>
+            <SelectItem value="missing">Missing photos</SelectItem>
           </SelectContent>
         </Select>
         <Select value={sortBy} onValueChange={setSortBy}>
