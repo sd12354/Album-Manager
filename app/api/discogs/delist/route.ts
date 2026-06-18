@@ -47,25 +47,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Album is not listed on Discogs" }, { status: 400 });
   }
 
-  const discogsAuth = resolveUserDiscogsAuth(user.user_metadata);
+  const isManualListing = typedAlbum.discogs_listing_id.startsWith("manual-");
 
-  if (!discogsAuth) {
-    return NextResponse.json(
-      { error: "Discogs not connected. Reconnect your account before delisting." },
-      { status: 400 }
-    );
-  }
+  if (!isManualListing) {
+    const discogsAuth = resolveUserDiscogsAuth(user.user_metadata);
 
-  try {
-    await deleteDiscogsListing(parseInt(typedAlbum.discogs_listing_id, 10), discogsAuth);
-  } catch (err) {
-    const message =
-      err instanceof Error ? err.message : "Discogs delist failed";
-    const status =
-      err instanceof DiscogsError && err.status >= 400 && err.status < 600
-        ? err.status
-        : 502;
-    return NextResponse.json({ error: message }, { status });
+    if (!discogsAuth) {
+      return NextResponse.json(
+        { error: "Discogs not connected. Reconnect your account before delisting." },
+        { status: 400 }
+      );
+    }
+
+    try {
+      await deleteDiscogsListing(parseInt(typedAlbum.discogs_listing_id, 10), discogsAuth);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Discogs delist failed";
+      const status =
+        err instanceof DiscogsError && err.status >= 400 && err.status < 600
+          ? err.status
+          : 502;
+      return NextResponse.json({ error: message }, { status });
+    }
   }
 
   // Keep as listed if still on eBay, otherwise revert to unlisted

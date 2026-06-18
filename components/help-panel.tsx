@@ -134,8 +134,9 @@ export function HelpPanel({ open, onOpenChange }: HelpPanelProps) {
                   <p className="text-xs">
                     The record sold. When it sells on one platform, VinylVault
                     automatically cancels the listing on the other so you
-                    don&apos;t double-sell, records the sale price, and (if
-                    Shippo is set up) can generate a shipping label.
+                    don&apos;t double-sell and records the sale price. The
+                    buyer&apos;s shipping address is captured on the album so
+                    you can print a label with whatever carrier you prefer.
                   </p>
                 </div>
               </div>
@@ -336,9 +337,9 @@ export function HelpPanel({ open, onOpenChange }: HelpPanelProps) {
                   the other platform&apos;s listing.
                 </li>
                 <li>
-                  Add a Shippo API key and your seller address in Settings →
-                  Shipping to auto-generate USPS Media Mail labels (cheapest for
-                  vinyl).
+                  When a sale syncs, the buyer&apos;s shipping address is
+                  recorded on the album so you can print a label with whatever
+                  carrier you prefer.
                 </li>
                 <li>
                   <strong className="text-foreground">Delisting</strong> removes

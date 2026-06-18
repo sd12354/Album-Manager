@@ -10,12 +10,7 @@ import {
   checkAlbumMarketplaceState,
   crossCancelOtherMarketplace,
 } from "@/lib/marketplace-sync";
-import {
-  createShippingLabel,
-  resolveShippoAuth,
-  type ShippoAddress,
-} from "@/lib/shippo";
-import type { Album, UserSettings } from "@/types";
+import type { Album } from "@/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 45;
@@ -63,7 +58,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ status: typedAlbum.status, changed: false });
   }
 
-  const userMeta = (user.user_metadata ?? {}) as UserSettings;
+  // Manually-tracked listings have no marketplace API to query against.
+  const ebayIsManual = typedAlbum.ebay_listing_id?.startsWith("manual-") ?? false;
+  const discogsIsManual = typedAlbum.discogs_listing_id?.startsWith("manual-") ?? false;
+  if (
+    (!typedAlbum.ebay_listing_id || ebayIsManual) &&
+    (!typedAlbum.discogs_listing_id || discogsIsManual)
+  ) {
+    return NextResponse.json({
+      status: typedAlbum.status,
+      changed: false,
+      manualOnly: true,
+    });
+  }
 
   const { data: ebayCreds } = await supabase
     .from("ebay_credentials")
@@ -127,69 +134,11 @@ export async function POST(request: Request) {
     });
   }
 
-  // ── Auto-create shipping label after a sale ───────────────────────────────
-  let label: {
-    trackingNumber: string;
-    labelUrl: string;
-    carrier: string;
-    serviceLevel: string;
-    rate: number;
-  } | null = null;
-  let labelError: string | null = null;
-
-  const shippoEnabled = userMeta.shippo_enabled ?? false;
-  const shippoAuth = resolveShippoAuth(userMeta);
-  const sellerReady =
-    userMeta.seller_name && userMeta.seller_street1 && userMeta.seller_city;
-  const buyerAddress = outcome.buyerAddress;
-
-  if (shippoEnabled && shippoAuth && sellerReady && buyerAddress) {
-    const from: ShippoAddress = {
-      name: userMeta.seller_name!,
-      street1: userMeta.seller_street1!,
-      street2: userMeta.seller_street2,
-      city: userMeta.seller_city!,
-      state: userMeta.seller_state ?? "",
-      zip: userMeta.seller_zip ?? "",
-      country: userMeta.seller_country ?? "US",
-    };
-
-    try {
-      label = await createShippingLabel({
-        from,
-        to: buyerAddress,
-        auth: shippoAuth,
-      });
-
-      await supabase
-        .from("albums")
-        .update({
-          tracking_number: label.trackingNumber,
-          shipping_label_url: label.labelUrl,
-          shipping_carrier: `${label.carrier} — ${label.serviceLevel}`,
-          shipping_rate: label.rate,
-        })
-        .eq("id", albumId);
-    } catch (err) {
-      labelError =
-        err instanceof Error ? err.message : "Label creation failed";
-    }
-  } else if (shippoEnabled && shippoAuth && sellerReady && !buyerAddress) {
-    labelError =
-      "Buyer address unavailable — create the label manually from the album page.";
-  } else if (shippoEnabled && shippoAuth && !sellerReady) {
-    labelError = "Seller address incomplete — fill it in Settings → Shipping.";
-  } else if (shippoEnabled && !shippoAuth) {
-    labelError = "Shippo isn't connected — connect it in Settings → Shipping.";
-  }
-
   return NextResponse.json({
     status: "sold",
     soldOn: outcome.soldOn,
     soldPrice: outcome.soldPrice,
     changed: true,
-    label,
-    labelError,
     buyerAddressRaw: outcome.buyerAddressRaw,
   });
 }

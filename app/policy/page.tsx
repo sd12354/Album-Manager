@@ -58,8 +58,7 @@ export default function PolicyPage() {
           <Section title="Data we collect">
             <p><strong className="text-white">Account data:</strong> Your email address and password (hashed and stored securely via Supabase Auth).</p>
             <p><strong className="text-white">Album catalogue:</strong> Record titles, artists, conditions, pricing data, and sale records you enter into the app.</p>
-            <p><strong className="text-white">Integration credentials:</strong> eBay, Discogs, and Shippo access tokens obtained when you connect those accounts via OAuth (or, optionally, a Discogs personal access token / Shippo API key you paste yourself). These are stored securely and used solely to make API calls on your behalf.</p>
-            <p><strong className="text-white">Shipping data:</strong> Your seller address and your Shippo credentials (OAuth token or API key), stored in your account preferences. Buyer shipping addresses are retrieved from eBay/Discogs at sale time and stored only on the specific album record.</p>
+            <p><strong className="text-white">Integration credentials:</strong> eBay and Discogs access tokens obtained when you connect those accounts via OAuth (or, optionally, a Discogs personal access token you paste yourself). These are stored securely and used solely to make API calls on your behalf.</p>
             <p><strong className="text-white">Photos:</strong> Album photos you upload are stored in Supabase Storage and linked only to your account. HEIC/HEIF images are converted to JPEG in your browser before upload.</p>
           </Section>
 
@@ -73,7 +72,6 @@ export default function PolicyPage() {
                 "Generating AI pricing suggestions and listing descriptions",
                 "Matching uploaded cover photos to the correct album using AI",
                 "Creating and managing listings on eBay and Discogs on your behalf",
-                "Generating shipping labels via Shippo",
                 "Computing portfolio analytics shown in your dashboard",
               ].map((item) => (
                 <li key={item} className="flex items-start gap-2">
@@ -82,11 +80,11 @@ export default function PolicyPage() {
                 </li>
               ))}
             </ul>
-            <p className="mt-2">We do not sell your data, use it for advertising, or share it with third parties beyond the integration providers (eBay, Discogs, Shippo) you explicitly connect.</p>
+            <p className="mt-2">We do not sell your data, use it for advertising, or share it with third parties beyond the integration providers (eBay, Discogs) you explicitly connect.</p>
           </Section>
 
           <Section title="Third-party integrations">
-            <p>When you connect eBay, Discogs, or Shippo, you agree to their respective terms of service and privacy policies. VinylVault acts as an intermediary and only calls these APIs with credentials you provide.</p>
+            <p>When you connect eBay or Discogs, you agree to their respective terms of service and privacy policies. VinylVault acts as an intermediary and only calls these APIs with credentials you provide.</p>
           </Section>
 
           <Section title="AI processing">
