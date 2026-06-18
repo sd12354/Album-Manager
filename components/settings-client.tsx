@@ -333,7 +333,7 @@ export function SettingsClient({
           <AccordionTrigger className="font-display text-lg">
             <div className="flex items-center gap-2">
               <span>Discogs Integration</span>
-              {(discogsOAuthConnected || discogsToken || discogsEnvTokenConfigured) ? (
+              {(discogsOAuthConnected || discogsToken.trim().length > 0) ? (
                 <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-emerald-400">
                   Configured
                 </span>
