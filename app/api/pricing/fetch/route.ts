@@ -91,11 +91,15 @@ async function persistDiscogsReleaseId(
   releaseId?: number
 ) {
   if (!releaseId) return;
-  await supabase
+  const { error } = await supabase
     .from("albums")
     .update({ discogs_release_id: releaseId })
     .eq("id", albumId)
     .eq("user_id", ownerId);
+
+  if (error) {
+    throw new Error(`Failed to save Discogs release ID: ${error.message}`);
+  }
 }
 
 export async function POST(request: Request) {
@@ -260,14 +264,21 @@ export async function POST(request: Request) {
     });
   }
   if (cacheRows.length > 0) {
-    await supabase
+    const { error: cacheError } = await supabase
       .from("pricing_cache")
       .upsert(cacheRows, { onConflict: "album_id,source" });
+
+    if (cacheError) {
+      return NextResponse.json(
+        { error: `Failed to save pricing cache: ${cacheError.message}` },
+        { status: 500 }
+      );
+    }
   }
 
   // ===== Update album row =====
   if (pricing.suggestionSource) {
-    await supabase
+    const { error: updateError } = await supabase
       .from("albums")
       .update({
         suggested_price: pricing.suggestedPrice,
@@ -277,13 +288,32 @@ export async function POST(request: Request) {
       })
       .eq("id", albumId)
       .eq("user_id", typedAlbum.user_id);
+
+    if (updateError) {
+      return NextResponse.json(
+        { error: `Failed to save album pricing: ${updateError.message}` },
+        { status: 500 }
+      );
+    }
   } else {
-    await persistDiscogsReleaseId(
-      supabase,
-      albumId,
-      typedAlbum.user_id,
-      discogsResult?.releaseId
-    );
+    try {
+      await persistDiscogsReleaseId(
+        supabase,
+        albumId,
+        typedAlbum.user_id,
+        discogsResult?.releaseId
+      );
+    } catch (err) {
+      return NextResponse.json(
+        {
+          error:
+            err instanceof Error
+              ? err.message
+              : "Failed to save Discogs release ID",
+        },
+        { status: 500 }
+      );
+    }
   }
 
   return NextResponse.json(pricing);

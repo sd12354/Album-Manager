@@ -186,12 +186,16 @@ export async function POST(request: Request) {
         });
       }
       if (cacheRows.length > 0) {
-        await supabase
+        const { error: cacheError } = await supabase
           .from("pricing_cache")
           .upsert(cacheRows, { onConflict: "album_id,source" });
+
+        if (cacheError) {
+          throw new Error(`Failed to save pricing cache: ${cacheError.message}`);
+        }
       }
 
-      await supabase
+      const { error: updateError } = await supabase
         .from("albums")
         .update({
           suggested_price: pricing.suggestedPrice,
@@ -200,6 +204,10 @@ export async function POST(request: Request) {
           status: typedAlbum.status === "unlisted" ? "pricing" : typedAlbum.status,
         })
         .eq("id", albumId);
+
+      if (updateError) {
+        throw new Error(`Failed to save album pricing: ${updateError.message}`);
+      }
 
       results.push({
         albumId,
