@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
@@ -19,9 +19,11 @@ const PASSWORD_RULES = [
   { id: "special", label: "one special character", test: (p: string) => /[^A-Za-z0-9]/.test(p) },
 ] as const;
 
+let handledRecoveryCode: string | null = null;
+
 export default function UpdatePasswordPage() {
   const router = useRouter();
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -39,7 +41,8 @@ export default function UpdatePasswordPage() {
           ? new URLSearchParams(window.location.search).get("code")
           : null;
 
-      if (code) {
+      if (code && handledRecoveryCode !== code) {
+        handledRecoveryCode = code;
         const { error } = await supabase.auth.exchangeCodeForSession(code);
         if (typeof window !== "undefined") {
           window.history.replaceState(null, "", "/update-password");

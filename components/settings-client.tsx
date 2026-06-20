@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { EbayConnectButton } from "@/components/ebay-connect-button";
 import { DiscogsConnectButton } from "@/components/discogs-connect-button";
@@ -99,7 +99,7 @@ export function SettingsClient({
   const [sellerZip, setSellerZip] = useState(userSettings.seller_zip ?? "");
   const [sellerCountry, setSellerCountry] = useState(userSettings.seller_country ?? "US");
 
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
     if (discogsConnectedNotice === "connected") {
@@ -116,6 +116,7 @@ export function SettingsClient({
       const url = new URL(window.location.href);
       url.searchParams.delete("discogs");
       url.searchParams.delete("discogs_error");
+      url.searchParams.delete("ebay_error");
       window.history.replaceState({}, "", url.toString());
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -144,6 +145,15 @@ export function SettingsClient({
     } finally {
       setSaving(false);
     }
+  }
+
+  function saveMinimumFloor() {
+    const value = Number.parseFloat(minFloor);
+    if (!Number.isFinite(value) || value <= 0) {
+      toast.error("Minimum floor price must be a positive number.");
+      return;
+    }
+    saveSettings({ minimum_floor_price: value });
   }
 
   async function changeEmail() {
@@ -464,9 +474,7 @@ export function SettingsClient({
               )}
             </div>
             <Button
-              onClick={() =>
-                saveSettings({ minimum_floor_price: parseFloat(minFloor) })
-              }
+              onClick={saveMinimumFloor}
               disabled={saving}
             >
               Save Defaults

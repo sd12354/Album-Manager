@@ -107,9 +107,11 @@ export function AlbumDetailClient({
   }, [lightboxUrl]);
 
   function getListPriceForListing(): number | null {
-    const value = listPrice.trim()
-      ? Number(listPrice)
-      : (album.list_price ?? album.suggested_price ?? 9.99);
+    if (!listPrice.trim()) {
+      toast.error("Enter a list price before publishing this album.");
+      return null;
+    }
+    const value = Number(listPrice);
     if (!Number.isFinite(value) || value <= 0) {
       toast.error("List price must be a positive number.");
       return null;

@@ -197,16 +197,23 @@ export async function claimPendingInvites(user: User): Promise<number> {
 
   let claimed = 0;
   for (const invite of invites) {
-    const { error } = await admin.from("collection_members").upsert(
-      {
-        owner_id: invite.owner_id,
-        owner_email: invite.owner_email,
-        member_id: user.id,
-        member_email: user.email,
-        role: invite.role,
-      } as Partial<CollectionMember>,
-      { onConflict: "owner_id,member_id" }
-    );
+    const { data: existingMember } = await admin
+      .from("collection_members")
+      .select("id")
+      .eq("owner_id", invite.owner_id)
+      .eq("member_id", user.id)
+      .maybeSingle();
+
+    const { error } = existingMember
+      ? { error: null }
+      : await admin.from("collection_members").insert({
+          owner_id: invite.owner_id,
+          owner_email: invite.owner_email,
+          member_id: user.id,
+          member_email: user.email,
+          role: invite.role,
+        } as Partial<CollectionMember>);
+
     if (!error) {
       await admin
         .from("collection_invites")

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Check, ChevronsUpDown, Library, Users } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -19,6 +19,7 @@ export function CollectionSwitcher({
   collapsed = false,
 }: CollectionSwitcherProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [switching, setSwitching] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
@@ -58,7 +59,11 @@ export function CollectionSwitcher({
         return;
       }
       setOpen(false);
-      router.refresh();
+      if (pathname.startsWith("/albums/")) {
+        router.push("/albums");
+      } else {
+        router.refresh();
+      }
     } catch {
       toast.error("Network error switching collection");
     } finally {

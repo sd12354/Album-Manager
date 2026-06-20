@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { AlbumDetailClient } from "@/components/album-detail-client";
 import {
   canManage,
+  getActiveCollection,
   getOwnerConnectionStatus,
   getRoleForOwner,
 } from "@/lib/collections";
@@ -39,12 +40,19 @@ export default async function AlbumDetailPage({ params }: AlbumDetailPageProps) 
   } = await supabase.auth.getUser();
 
   const typedAlbum = album as Album;
-  const isOwner = !!user && typedAlbum.user_id === user.id;
-  const role = user ? await getRoleForOwner(user, typedAlbum.user_id) : null;
+  if (!user) {
+    notFound();
+  }
+
+  const activeCollection = await getActiveCollection(user);
+  if (typedAlbum.user_id !== activeCollection.ownerId) {
+    notFound();
+  }
+
+  const isOwner = typedAlbum.user_id === user.id;
+  const role = await getRoleForOwner(user, typedAlbum.user_id);
   const canEdit = canManage(role);
-  const ownerStatus = user
-    ? await getOwnerConnectionStatus(user, typedAlbum.user_id)
-    : { ebayConnected: false, discogsConnected: false };
+  const ownerStatus = await getOwnerConnectionStatus(user, typedAlbum.user_id);
 
   // Resolve Discogs release ID from album column (migration 004) or pricing cache
   const typedForRelease = album as Album;

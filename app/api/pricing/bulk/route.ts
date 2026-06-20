@@ -56,11 +56,16 @@ export async function POST(request: Request) {
 
   for (const albumId of albumIds) {
     try {
-      const { data: album } = await supabase
+      const { data: album, error: albumError } = await supabase
         .from("albums")
         .select("*")
         .eq("id", albumId)
         .single();
+
+      if (albumError) {
+        results.push({ albumId, status: "error", error: albumError.message });
+        continue;
+      }
 
       if (!album) {
         results.push({ albumId, status: "error", error: "Album not found" });
@@ -186,12 +191,13 @@ export async function POST(request: Request) {
         });
       }
       if (cacheRows.length > 0) {
-        await supabase
+        const { error: cacheError } = await supabase
           .from("pricing_cache")
           .upsert(cacheRows, { onConflict: "album_id,source" });
+        if (cacheError) throw new Error(cacheError.message);
       }
 
-      await supabase
+      const { error: updateError } = await supabase
         .from("albums")
         .update({
           suggested_price: pricing.suggestedPrice,
@@ -199,7 +205,9 @@ export async function POST(request: Request) {
             discogsResult?.releaseId ?? typedAlbum.discogs_release_id,
           status: typedAlbum.status === "unlisted" ? "pricing" : typedAlbum.status,
         })
-        .eq("id", albumId);
+        .eq("id", albumId)
+        .eq("user_id", typedAlbum.user_id);
+      if (updateError) throw new Error(updateError.message);
 
       results.push({
         albumId,

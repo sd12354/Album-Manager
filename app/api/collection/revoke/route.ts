@@ -27,12 +27,21 @@ export async function POST(request: Request) {
       .delete()
       .eq("owner_id", user.id)
       .eq("member_id", memberId)
-      .select("member_id");
+      .select("member_id, member_email");
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
     if (!data || data.length === 0) {
       return NextResponse.json({ error: "Collaborator not found" }, { status: 404 });
+    }
+    const memberEmail = data[0]?.member_email;
+    if (memberEmail) {
+      const admin = await createServiceClient();
+      await admin
+        .from("collection_invites")
+        .update({ status: "revoked" })
+        .eq("owner_id", user.id)
+        .ilike("email", memberEmail);
     }
     return NextResponse.json({ ok: true });
   }
