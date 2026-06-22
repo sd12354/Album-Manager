@@ -224,15 +224,20 @@ export function PhotoMatchPanel() {
     setConvertDone(0);
     let completed = 0;
 
+    // HEIC decoding is single-threaded WASM with a real memory leak in
+    // heic2any — too many in-flight conversions starve each other and the
+    // 45s cap starts tripping. Scale concurrency down for big batches.
+    const concurrency = heicRows.length > 50 ? 1 : heicRows.length > 20 ? 2 : 3;
+
     try {
-      await runWithConcurrency(heicRows, 4, async (row) => {
+      await runWithConcurrency(heicRows, concurrency, async (row) => {
         try {
           // heic2any occasionally hangs on malformed HEIC payloads (corrupted
           // EXIF, mis-extensioned files). Cap each conversion so one bad
           // photo can't strand a worker slot indefinitely.
           const jpeg = await withTimeout(
             convertHeicToJpeg(row.file),
-            45_000,
+            90_000,
             `Converting ${row.file.name}`
           );
           updateRow(row.id, {
