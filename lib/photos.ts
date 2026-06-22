@@ -91,7 +91,7 @@ async function looksLikeRealHeic(file: File): Promise<boolean> {
  */
 export async function convertHeicToJpeg(
   file: File,
-  timeoutMs = 45_000
+  totalTimeoutMs = 60_000
 ): Promise<File> {
   if (!isHeic(file)) return file;
 
@@ -99,18 +99,26 @@ export async function convertHeicToJpeg(
     throw new Error("INVALID_HEIC: file is not a valid HEIC/HEIF container");
   }
 
-  const buffer = await file.arrayBuffer();
-  const worker = new Worker(new URL("./heic-worker.ts", import.meta.url), {
-    type: "module",
-  });
-  const id = Math.random().toString(36).slice(2);
+  // The previous version only timed out the worker's *message wait* — if
+  // file.arrayBuffer(), `new Worker(...)`, the worker's dynamic import of
+  // libheif, or WASM compile ever hung, the call never returned and the
+  // runner slot was stuck forever (the symptom the user kept hitting).
+  // This outer Promise.race covers everything end-to-end and forcibly
+  // terminates whatever worker we managed to spawn.
+  // Box the worker ref so TypeScript control-flow analysis doesn't narrow
+  // it to `null` across the async IIFE boundary.
+  const workerRef: { current: Worker | null } = { current: null };
 
-  try {
+  const work = (async () => {
+    const buffer = await file.arrayBuffer();
+    const worker = new Worker(
+      new URL("./heic-worker.ts", import.meta.url),
+      { type: "module" }
+    );
+    workerRef.current = worker;
+    const id = Math.random().toString(36).slice(2);
+
     const jpegBuffer = await new Promise<ArrayBuffer>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        reject(new Error(`HEIC conversion timed out after ${timeoutMs}ms`));
-      }, timeoutMs);
-
       worker.onmessage = (
         event: MessageEvent<
           | { id: string; ok: true; buffer: ArrayBuffer }
@@ -118,15 +126,15 @@ export async function convertHeicToJpeg(
         >
       ) => {
         if (event.data.id !== id) return;
-        clearTimeout(timer);
         if (event.data.ok) resolve(event.data.buffer);
         else reject(new Error(event.data.error));
       };
       worker.onerror = (event) => {
-        clearTimeout(timer);
         reject(new Error(event.message || "HEIC worker crashed"));
       };
-
+      worker.onmessageerror = () => {
+        reject(new Error("HEIC worker sent a malformed message"));
+      };
       worker.postMessage({ id, buffer }, { transfer: [buffer] });
     });
 
@@ -135,9 +143,22 @@ export async function convertHeicToJpeg(
       type: "image/jpeg",
       lastModified: file.lastModified,
     });
+  })();
+
+  let outerTimer: ReturnType<typeof setTimeout> | undefined;
+  const outerTimeout = new Promise<never>((_, reject) => {
+    outerTimer = setTimeout(() => {
+      reject(new Error(`HEIC conversion timed out after ${totalTimeoutMs}ms`));
+    }, totalTimeoutMs);
+  });
+
+  try {
+    return await Promise.race([work, outerTimeout]);
   } finally {
-    // Frees the libheif WASM heap regardless of success, error, or timeout.
-    worker.terminate();
+    if (outerTimer !== undefined) clearTimeout(outerTimer);
+    // Always terminate the worker (frees the libheif WASM heap, including
+    // on timeout when the worker is still mid-decode).
+    if (workerRef.current) workerRef.current.terminate();
   }
 }
 
