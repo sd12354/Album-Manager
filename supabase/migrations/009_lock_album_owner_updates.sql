@@ -1,6 +1,5 @@
--- Prevent album rows from being reassigned to another collection owner.
--- Editors can update album details through RLS, but ownership is immutable
--- after insert so a compromised client cannot move records across users.
+-- Prevent collaborators from moving albums out of a shared collection by
+-- changing the owner column during an otherwise-authorized update.
 create or replace function public.prevent_album_owner_change()
 returns trigger
 language plpgsql
@@ -8,7 +7,8 @@ set search_path = public
 as $$
 begin
   if new.user_id is distinct from old.user_id then
-    raise exception 'Album owner cannot be changed';
+    raise exception 'album ownership cannot be changed'
+      using errcode = '42501';
   end if;
 
   return new;
@@ -16,7 +16,10 @@ end;
 $$;
 
 drop trigger if exists prevent_album_owner_change on public.albums;
+
 create trigger prevent_album_owner_change
-before update on public.albums
+before update of user_id on public.albums
 for each row
 execute function public.prevent_album_owner_change();
+
+revoke all on function public.prevent_album_owner_change() from public;

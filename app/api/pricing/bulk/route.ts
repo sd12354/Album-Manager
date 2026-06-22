@@ -194,7 +194,9 @@ export async function POST(request: Request) {
         const { error: cacheError } = await supabase
           .from("pricing_cache")
           .upsert(cacheRows, { onConflict: "album_id,source" });
-        if (cacheError) throw new Error(cacheError.message);
+        if (cacheError) {
+          throw new Error(`Failed to save pricing cache: ${cacheError.message}`);
+        }
       }
 
       const { error: updateError } = await supabase
@@ -207,7 +209,9 @@ export async function POST(request: Request) {
         })
         .eq("id", albumId)
         .eq("user_id", typedAlbum.user_id);
-      if (updateError) throw new Error(updateError.message);
+      if (updateError) {
+        throw new Error(`Failed to save album pricing: ${updateError.message}`);
+      }
 
       results.push({
         albumId,
