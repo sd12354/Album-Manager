@@ -7,20 +7,43 @@ import type { AlbumCondition, CSVAlbumRow } from "@/types";
  * Excel templates). Values are our canonical field names.
  */
 const HEADER_ALIASES: Record<string, string> = {
-  // Title
+  // Title — Discogs uses Title; eBay sold listings use "Item Title"; collectors use Album/LP/Record
   album_title: "title",
   album: "title",
   album_name: "title",
   title: "title",
   release_title: "title",
+  release: "title",
+  release_name: "title",
   name: "title",
+  item: "title",
+  item_title: "title",
+  item_name: "title",
+  product: "title",
+  product_title: "title",
+  record: "title",
+  record_title: "title",
+  record_name: "title",
+  lp: "title",
+  lp_title: "title",
 
-  // Artist
+  // Artist — Discogs uses Artist; eBay uses "Recording Artist"; some templates use Band
   artist: "artist",
   artists: "artist",
   band: "artist",
   performer: "artist",
+  performers: "artist",
   artist_name: "artist",
+  artist_band: "artist",
+  band_name: "artist",
+  recording_artist: "artist",
+  recording_artists: "artist",
+  artist_or_band: "artist",
+  group: "artist",
+  group_name: "artist",
+  by: "artist",
+  creator: "artist",
+  composer: "artist",
 
   // Genre
   genre: "genre",
@@ -28,38 +51,76 @@ const HEADER_ALIASES: Record<string, string> = {
   style: "genre",
   styles: "genre",
   category: "genre",
+  categories: "genre",
+  music_genre: "genre",
+  music_style: "genre",
+  music_category: "genre",
+  format_genre: "genre",
 
-  // Condition
+  // Condition — Discogs exports "Collection Media Condition"; many use Grade
   condition: "condition",
+  cond: "condition",
   grade: "condition",
+  grading: "condition",
   media_condition: "condition",
-  "collection_media_condition": "condition",
+  collection_media_condition: "condition",
+  media_grade: "condition",
   record_condition: "condition",
+  record_grade: "condition",
   vinyl_condition: "condition",
+  vinyl_grade: "condition",
   disc_condition: "condition",
+  disc_grade: "condition",
+  sleeve_condition: "condition",
+  jacket_condition: "condition",
+  overall_condition: "condition",
+  goldmine_grade: "condition",
+  state: "condition",
+  quality: "condition",
 
   // Catalog number
   catalog_number: "catalog_number",
   "catalog#": "catalog_number",
+  "cat#": "catalog_number",
   catalog: "catalog_number",
   catalog_no: "catalog_number",
   cat_no: "catalog_number",
+  cat_num: "catalog_number",
+  catalogue: "catalog_number",
   catalogue_number: "catalog_number",
+  catalogue_no: "catalog_number",
   label_catalog: "catalog_number",
+  label_catalog_number: "catalog_number",
+  label_number: "catalog_number",
   release_id: "catalog_number",
+  matrix: "catalog_number",
+  matrix_number: "catalog_number",
+  sku: "catalog_number",
 
   // Notes
   notes: "notes",
   note: "notes",
   comments: "notes",
+  comment: "notes",
   description: "notes",
+  desc: "notes",
+  remarks: "notes",
+  details: "notes",
   collection_notes: "notes",
+  private_notes: "notes",
+  seller_notes: "notes",
 
-  // Purchase price
+  // Purchase price — collectors track cost basis many ways
   purchase_price: "purchase_price",
   price_paid: "purchase_price",
+  paid_price: "purchase_price",
   cost: "purchase_price",
+  cost_basis: "purchase_price",
   paid: "purchase_price",
+  bought_for: "purchase_price",
+  acquisition_price: "purchase_price",
+  buy_price: "purchase_price",
+  amount_paid: "purchase_price",
 };
 
 const VALID_CONDITIONS: AlbumCondition[] = [
@@ -135,15 +196,150 @@ export function normalizeCondition(raw: string | undefined): AlbumCondition | nu
   return null;
 }
 
-export function normalizeHeader(header: string): string {
-  // Strip BOM that sometimes prefixes the first column header in CSVs saved
-  // from Excel/Sheets/Discogs.
-  const cleaned = header
+/** Strip BOM, lowercase, collapse to snake_case, drop punctuation. */
+function canonicalizeHeader(header: string): string {
+  return header
     .replace(/^\uFEFF/, "")
     .trim()
     .toLowerCase()
-    .replace(/\s+/g, "_");
+    .replace(/[^a-z0-9#]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+export function normalizeHeader(header: string): string {
+  const cleaned = canonicalizeHeader(header);
   return HEADER_ALIASES[cleaned] ?? cleaned;
+}
+
+/** Damerau-Levenshtein-ish distance, capped to bail early on long inputs. */
+function editDistance(a: string, b: string, cap = 3): number {
+  if (a === b) return 0;
+  if (Math.abs(a.length - b.length) > cap) return cap + 1;
+  const al = a.length;
+  const bl = b.length;
+  if (al === 0) return bl;
+  if (bl === 0) return al;
+  let prev = new Array(bl + 1);
+  let curr = new Array(bl + 1);
+  for (let j = 0; j <= bl; j++) prev[j] = j;
+  for (let i = 1; i <= al; i++) {
+    curr[0] = i;
+    let rowMin = curr[0];
+    for (let j = 1; j <= bl; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      curr[j] = Math.min(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
+      if (curr[j] < rowMin) rowMin = curr[j];
+    }
+    if (rowMin > cap) return cap + 1;
+    [prev, curr] = [curr, prev];
+  }
+  return prev[bl];
+}
+
+/** Fuzzy-match a canonicalized header against the alias table. */
+function fuzzyHeaderMatch(canonical: string): string | null {
+  if (canonical.length < 3) return null;
+  let best: { target: string; distance: number } | null = null;
+  for (const [alias, target] of Object.entries(HEADER_ALIASES)) {
+    // Generous enough to catch transposed letters ("titel" → "title") on
+    // short words without matching unrelated short strings.
+    const tolerance = alias.length <= 4 ? 1 : alias.length <= 8 ? 2 : 3;
+    const d = editDistance(canonical, alias, tolerance);
+    if (d <= tolerance && (!best || d < best.distance)) {
+      best = { target, distance: d };
+    }
+  }
+  return best?.target ?? null;
+}
+
+/**
+ * Inspect column values to infer what kind of column it is. Used as a
+ * tiebreaker when the header is unrecognized \u2014 a column where most values
+ * parse as condition grades is almost certainly the condition column even
+ * if the header is "State" or blank.
+ */
+function inferTargetFromValues(values: string[]): string | null {
+  const samples = values.map((v) => (v ?? "").trim()).filter(Boolean).slice(0, 50);
+  if (samples.length === 0) return null;
+
+  let conditionHits = 0;
+  let numericHits = 0;
+  let currencyHits = 0;
+  for (const v of samples) {
+    if (normalizeCondition(v)) conditionHits++;
+    if (/^-?\d+(\.\d+)?$/.test(v)) numericHits++;
+    if (/^[$\u00A3\u20AC\u00A5]\s?-?\d/.test(v) || /^-?\d+(\.\d{1,2})?\s?(usd|eur|gbp)$/i.test(v)) {
+      currencyHits++;
+    }
+  }
+  // Need a clear majority to commit to a guess.
+  const threshold = Math.max(2, Math.floor(samples.length * 0.6));
+  if (conditionHits >= threshold) return "condition";
+  if (currencyHits >= threshold) return "purchase_price";
+  if (numericHits >= threshold && samples.length >= 3) return "purchase_price";
+  return null;
+}
+
+/**
+ * Build a header \u2192 target mapping for a parsed CSV. Tries, in order:
+ *   1. exact alias match (HEADER_ALIASES)
+ *   2. fuzzy alias match (small edit distance, for typos)
+ *   3. content-based inference from the column's values
+ * Returns whether each header was matched and how, so the UI can flag low-
+ * confidence picks for the user to verify.
+ */
+export interface DetectionDetail {
+  target: string;
+  via: "alias" | "fuzzy" | "content" | "none";
+}
+
+export function detectColumnMapping(
+  headers: string[],
+  rawRows: Record<string, string>[]
+): { mapping: Record<string, string>; detail: Record<string, DetectionDetail> } {
+  const mapping: Record<string, string> = {};
+  const detail: Record<string, DetectionDetail> = {};
+  const usedTargets = new Set<string>();
+
+  // Pass 1 \u2014 exact alias matches.
+  headers.forEach((h) => {
+    const canonical = canonicalizeHeader(h);
+    const hit = HEADER_ALIASES[canonical];
+    if (hit && !usedTargets.has(hit)) {
+      mapping[h] = hit;
+      detail[h] = { target: hit, via: "alias" };
+      usedTargets.add(hit);
+    }
+  });
+
+  // Pass 2 \u2014 fuzzy alias matches for unmapped headers.
+  headers.forEach((h) => {
+    if (mapping[h]) return;
+    const canonical = canonicalizeHeader(h);
+    const fuzzy = fuzzyHeaderMatch(canonical);
+    if (fuzzy && !usedTargets.has(fuzzy)) {
+      mapping[h] = fuzzy;
+      detail[h] = { target: fuzzy, via: "fuzzy" };
+      usedTargets.add(fuzzy);
+    }
+  });
+
+  // Pass 3 \u2014 content inference for what's still unmapped (and a target slot is open).
+  headers.forEach((h) => {
+    if (mapping[h]) return;
+    const values = rawRows.map((row) => row[h] ?? "");
+    const inferred = inferTargetFromValues(values);
+    if (inferred && !usedTargets.has(inferred)) {
+      mapping[h] = inferred;
+      detail[h] = { target: inferred, via: "content" };
+      usedTargets.add(inferred);
+    } else {
+      mapping[h] = "skip";
+      detail[h] = { target: "skip", via: "none" };
+    }
+  });
+
+  return { mapping, detail };
 }
 
 export const TARGET_FIELDS = [
@@ -164,6 +360,11 @@ export interface ParsedCSVResult {
   rawRows: Record<string, string>[];
   headers: string[];
   detectedMapping: Record<string, string>;
+  /**
+   * How each column was matched — "alias" is exact, "fuzzy" caught a typo,
+   * "content" came from value-based inference, "none" means unmapped (skip).
+   */
+  detectionDetail: Record<string, DetectionDetail>;
   errors: string[];
   /** True when we detected the file has no header row and synthesized columns. */
   headerless: boolean;
@@ -235,18 +436,8 @@ function parseWithHeaderRow(file: File): Promise<ParsedCSVResult> {
         const headers = results.meta.fields ?? [];
         const rawRows = results.data ?? [];
 
-        const detectedMapping: Record<string, string> = {};
-        const usedTargets = new Set<string>();
-        headers.forEach((h) => {
-          const normalized = normalizeHeader(h);
-          const matchedTarget = TARGET_FIELDS.find((f) => f.key === normalized);
-          if (matchedTarget && !usedTargets.has(matchedTarget.key)) {
-            detectedMapping[h] = matchedTarget.key;
-            usedTargets.add(matchedTarget.key);
-          } else {
-            detectedMapping[h] = "skip";
-          }
-        });
+        const { mapping: detectedMapping, detail: detectionDetail } =
+          detectColumnMapping(headers, rawRows);
 
         const { rows, errors } = deriveRows(rawRows, detectedMapping);
         resolve({
@@ -254,6 +445,7 @@ function parseWithHeaderRow(file: File): Promise<ParsedCSVResult> {
           rawRows,
           headers,
           detectedMapping,
+          detectionDetail,
           errors,
           headerless: false,
         });
@@ -264,6 +456,7 @@ function parseWithHeaderRow(file: File): Promise<ParsedCSVResult> {
           rawRows: [],
           headers: [],
           detectedMapping: {},
+          detectionDetail: {},
           errors: [error.message],
           headerless: false,
         });
@@ -285,6 +478,7 @@ function parseWithoutHeaderRow(file: File): Promise<ParsedCSVResult> {
             rawRows: [],
             headers: [],
             detectedMapping: {},
+            detectionDetail: {},
             errors: ["CSV is empty"],
             headerless: true,
           });
@@ -308,8 +502,11 @@ function parseWithoutHeaderRow(file: File): Promise<ParsedCSVResult> {
         });
 
         const detectedMapping: Record<string, string> = {};
+        const detectionDetail: Record<string, DetectionDetail> = {};
         headers.forEach((h, i) => {
-          detectedMapping[h] = HEADERLESS_DEFAULT_ORDER[i] ?? "skip";
+          const target = HEADERLESS_DEFAULT_ORDER[i] ?? "skip";
+          detectedMapping[h] = target;
+          detectionDetail[h] = { target, via: target === "skip" ? "none" : "alias" };
         });
 
         const { rows, errors } = deriveRows(rawRows, detectedMapping, {
@@ -320,6 +517,7 @@ function parseWithoutHeaderRow(file: File): Promise<ParsedCSVResult> {
           rawRows,
           headers,
           detectedMapping,
+          detectionDetail,
           errors,
           headerless: true,
         });
@@ -330,6 +528,7 @@ function parseWithoutHeaderRow(file: File): Promise<ParsedCSVResult> {
           rawRows: [],
           headers: [],
           detectedMapping: {},
+          detectionDetail: {},
           errors: [error.message],
           headerless: true,
         });
