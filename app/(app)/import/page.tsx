@@ -60,6 +60,9 @@ export default function ImportPage() {
   const [rawRows, setRawRows] = useState<Record<string, string>[]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
   const [columnMapping, setColumnMapping] = useState<Record<string, string>>({});
+  const [detectionDetail, setDetectionDetail] = useState<
+    Record<string, { target: string; via: "alias" | "fuzzy" | "content" | "none" }>
+  >({});
   const [parseError, setParseError] = useState<string | null>(null);
   const [headerless, setHeaderless] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -120,6 +123,7 @@ export default function ImportPage() {
     setHeaders(result.headers);
     setRawRows(result.rawRows);
     setColumnMapping(result.detectedMapping);
+    setDetectionDetail(result.detectionDetail);
     setHeaderless(result.headerless);
     if (result.errors.length > 0 && result.rawRows.length === 0) {
       setParseError(result.errors[0]);
@@ -132,6 +136,7 @@ export default function ImportPage() {
     const result = await parseAlbumCSV(file, { hasHeaderRow });
     setHeaders(result.headers);
     setRawRows(result.rawRows);
+    setDetectionDetail(result.detectionDetail);
     setColumnMapping(result.detectedMapping);
     setHeaderless(result.headerless);
   }
@@ -389,7 +394,19 @@ export default function ImportPage() {
                       return (
                         <div key={h} className="grid grid-cols-[1fr_auto_220px] items-center gap-3">
                           <div className="min-w-0">
-                            <p className="truncate text-sm font-medium">{h}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="truncate text-sm font-medium">{h}</p>
+                              {detectionDetail[h]?.via === "fuzzy" && value !== "skip" && (
+                                <span className="shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-amber-400" title="Header matched by fuzzy similarity — please confirm">
+                                  guessed
+                                </span>
+                              )}
+                              {detectionDetail[h]?.via === "content" && value !== "skip" && (
+                                <span className="shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-amber-400" title="Mapping inferred from column values — please confirm">
+                                  inferred
+                                </span>
+                              )}
+                            </div>
                             {sample && <p className="truncate text-xs text-muted-foreground">e.g. {sample}</p>}
                           </div>
                           <span className="text-xs text-muted-foreground">→</span>
