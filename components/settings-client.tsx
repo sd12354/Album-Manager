@@ -108,14 +108,18 @@ export function SettingsClient({
     if (discogsError) {
       toast.error(discogsError, { duration: 8000 });
     }
+    if (ebayError) {
+      toast.error(ebayError, { duration: 8000 });
+    }
     // Clean the query string so the toast doesn't re-fire on refresh.
     if (
       typeof window !== "undefined" &&
-      (discogsConnectedNotice || discogsError)
+      (discogsConnectedNotice || discogsError || ebayError)
     ) {
       const url = new URL(window.location.href);
       url.searchParams.delete("discogs");
       url.searchParams.delete("discogs_error");
+      url.searchParams.delete("ebay_error");
       window.history.replaceState({}, "", url.toString());
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -144,6 +148,16 @@ export function SettingsClient({
     } finally {
       setSaving(false);
     }
+  }
+
+  function savePricingDefaults() {
+    const floorPrice = Number.parseFloat(minFloor);
+    if (!Number.isFinite(floorPrice) || floorPrice < 0) {
+      toast.error("Minimum floor price must be a valid non-negative number.");
+      return;
+    }
+
+    void saveSettings({ minimum_floor_price: floorPrice });
   }
 
   async function changeEmail() {
@@ -464,9 +478,7 @@ export function SettingsClient({
               )}
             </div>
             <Button
-              onClick={() =>
-                saveSettings({ minimum_floor_price: parseFloat(minFloor) })
-              }
+              onClick={savePricingDefaults}
               disabled={saving}
             >
               Save Defaults

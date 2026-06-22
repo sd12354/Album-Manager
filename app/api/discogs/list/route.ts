@@ -175,7 +175,7 @@ export async function POST(request: Request) {
         ? `Listing created but status is "${status.status}" — visit discogs.com/sell/manage to complete your seller setup and make it public.`
         : undefined;
 
-    await supabase
+    const { error: updateError } = await supabase
       .from("albums")
       .update({
         status: "listed",
@@ -185,6 +185,25 @@ export async function POST(request: Request) {
         list_price: price,
       })
       .eq("id", albumId);
+
+    if (updateError) {
+      console.error("[discogs]", {
+        scope: "discogs",
+        event: "list_persist_failed",
+        albumId,
+        listingId,
+        message: updateError.message,
+      });
+      return NextResponse.json(
+        {
+          error:
+            "Discogs listing was created, but VinylVault could not save the listing state. Avoid retrying until the listing is reconciled.",
+          listingId,
+          listingUrl,
+        },
+        { status: 500 }
+      );
+    }
 
     console.log("[discogs]", {
       scope: "discogs",

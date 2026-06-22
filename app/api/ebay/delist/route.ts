@@ -26,8 +26,17 @@ export async function POST(request: Request) {
   const { albumId } = body;
   if (!albumId) return NextResponse.json({ error: "albumId required" }, { status: 400 });
 
-  const { data: album } = await supabase.from("albums").select("*").eq("id", albumId).single();
-  if (!album) return NextResponse.json({ error: "Album not found" }, { status: 404 });
+  const { data: album, error: albumError } = await supabase
+    .from("albums")
+    .select("*")
+    .eq("id", albumId)
+    .single();
+  if (albumError || !album) {
+    return NextResponse.json(
+      { error: albumError?.message ?? "Album not found" },
+      { status: albumError?.code === "PGRST116" ? 404 : 500 }
+    );
+  }
 
   if ((album as Album).user_id !== user.id) {
     return NextResponse.json(
@@ -68,11 +77,28 @@ export async function POST(request: Request) {
   // Determine new status — if still listed on Discogs, keep as listed
   const newStatus = typedAlbum.discogs_listing_id ? "listed" : "unlisted";
 
-  await supabase.from("albums").update({
+  const { error: updateError } = await supabase.from("albums").update({
     ebay_listing_id: null,
     ebay_listing_url: null,
     status: newStatus,
   }).eq("id", albumId);
+
+  if (updateError) {
+    console.error("[ebay]", {
+      scope: "ebay",
+      event: "delist_persist_failed",
+      albumId,
+      listingId: typedAlbum.ebay_listing_id,
+      message: updateError.message,
+    });
+    return NextResponse.json(
+      {
+        error:
+          "eBay listing was ended, but VinylVault could not save the updated album state. Please refresh before retrying.",
+      },
+      { status: 500 }
+    );
+  }
 
   return NextResponse.json({ ok: true, stub: !isRealEbay });
 }
