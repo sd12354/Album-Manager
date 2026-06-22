@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { sendCollectionInviteEmail, emailConfigured } from "@/lib/email";
+import { getAppUrl } from "@/lib/site-url";
 import type { CollectionRole } from "@/types";
 
 export const runtime = "nodejs";
@@ -73,7 +75,20 @@ export async function POST(request: Request) {
       .update({ status: "accepted", accepted_at: new Date().toISOString() })
       .eq("owner_id", user.id)
       .ilike("email", email);
-    return NextResponse.json({ ok: true, status: "added" });
+
+    // Best-effort email — never fails the invite.
+    let emailSent = false;
+    if (emailConfigured() && user.email) {
+      const result = await sendCollectionInviteEmail({
+        to: email,
+        ownerEmail: user.email,
+        role,
+        immediate: true,
+        signupUrl: getAppUrl(),
+      });
+      emailSent = result.ok;
+    }
+    return NextResponse.json({ ok: true, status: "added", emailSent });
   }
 
   // Otherwise record a pending invite, claimed when they first sign in.
@@ -91,5 +106,19 @@ export async function POST(request: Request) {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
-  return NextResponse.json({ ok: true, status: "invited" });
+
+  // Best-effort email — without this, the invitee may never know they were invited.
+  let emailSent = false;
+  if (emailConfigured() && user.email) {
+    const result = await sendCollectionInviteEmail({
+      to: email,
+      ownerEmail: user.email,
+      role,
+      immediate: false,
+      signupUrl: `${getAppUrl()}/signup`,
+    });
+    emailSent = result.ok;
+  }
+
+  return NextResponse.json({ ok: true, status: "invited", emailSent });
 }

@@ -85,11 +85,16 @@ export function CollaboratorsSection() {
         toast.error(data.error ?? "Could not send invite");
         return;
       }
-      toast.success(
+      const baseMessage =
         data.status === "added"
           ? `${trimmed} now has access`
-          : `Invite recorded — ${trimmed} gets access when they sign in`
-      );
+          : `Invite recorded — ${trimmed} gets access when they sign in`;
+      const suffix = data.emailSent
+        ? " · email sent"
+        : data.status === "invited"
+          ? " · share the link with them, email isn't configured"
+          : "";
+      toast.success(baseMessage + suffix, { duration: 6000 });
       setEmail("");
       setRole("viewer");
       await load();
