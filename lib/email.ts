@@ -1,15 +1,13 @@
-import { Resend } from "resend";
-
-let cached: Resend | null = null;
-
-function client(): Resend | null {
-  if (!process.env.RESEND_API_KEY) return null;
-  if (!cached) cached = new Resend(process.env.RESEND_API_KEY);
-  return cached;
-}
+/**
+ * Email send stubs. No transactional provider is wired up yet — these
+ * functions exist so the UI (test email button, future invite emails)
+ * compiles and degrades gracefully. When a provider is added, plug it
+ * into sendSaleEmail() and emailConfigured() and the surrounding code
+ * keeps working unchanged.
+ */
 
 export function emailConfigured(): boolean {
-  return !!process.env.RESEND_API_KEY;
+  return false;
 }
 
 interface SaleEmailInput {
@@ -24,55 +22,12 @@ interface SaleEmailInput {
   test?: boolean;
 }
 
-export async function sendSaleEmail(input: SaleEmailInput) {
-  const resend = client();
-  if (!resend) {
-    return { ok: false as const, error: "RESEND_API_KEY is not configured." };
-  }
-
-  const from = process.env.RESEND_FROM_EMAIL ?? "VinylVault <onboarding@resend.dev>";
-  const subjectPrefix = input.test ? "[TEST] " : "";
-  const subject = `${subjectPrefix}Sold on ${input.platform}: ${input.albumTitle}`;
-
-  const priceFmt = `$${input.soldPrice.toFixed(2)}`;
-  const lines = [
-    `<h2 style="margin:0 0 12px;font-family:system-ui,sans-serif">${input.test ? "Test sale notification" : "An album sold"}</h2>`,
-    `<p style="margin:0 0 8px;font-family:system-ui,sans-serif"><strong>${escapeHtml(input.albumTitle)}</strong> &mdash; ${escapeHtml(input.albumArtist)}</p>`,
-    `<p style="margin:0 0 8px;font-family:system-ui,sans-serif">Platform: ${input.platform}</p>`,
-    `<p style="margin:0 0 8px;font-family:system-ui,sans-serif">Sold price: <strong>${priceFmt}</strong></p>`,
-    input.buyerName ? `<p style="margin:0 0 8px;font-family:system-ui,sans-serif">Buyer: ${escapeHtml(input.buyerName)}</p>` : "",
-    input.listingUrl && isSafeHttpUrl(input.listingUrl)
-      ? `<p style="margin:0 0 8px;font-family:system-ui,sans-serif"><a href="${escapeHtml(input.listingUrl)}">View original listing</a></p>`
-      : "",
-    input.test ? `<p style="margin:16px 0 0;font-family:system-ui,sans-serif;color:#888;font-size:12px">This is a test email triggered from Settings → Notifications.</p>` : "",
-  ].filter(Boolean);
-
-  const { error } = await resend.emails.send({
-    from,
-    to: input.to,
-    subject,
-    html: lines.join(""),
-  });
-
-  if (error) {
-    return { ok: false as const, error: error.message ?? "Resend error" };
-  }
-  return { ok: true as const };
-}
-
-function isSafeHttpUrl(s: string): boolean {
-  try {
-    const u = new URL(s);
-    return u.protocol === "http:" || u.protocol === "https:";
-  } catch {
-    return false;
-  }
-}
-
-function escapeHtml(s: string) {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+export async function sendSaleEmail(
+  _input: SaleEmailInput
+): Promise<{ ok: false; error: string }> {
+  return {
+    ok: false,
+    error:
+      "Email delivery isn't set up on this server yet. Configure a transactional email provider in lib/email.ts to enable.",
+  };
 }
