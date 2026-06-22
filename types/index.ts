@@ -151,7 +151,6 @@ export interface UserSettings {
   discogs_username?: string;
   minimum_floor_price?: number;
   condition_multipliers?: Partial<Record<AlbumCondition, number>>;
-  email_on_sale?: boolean;
   shipping_profile?: string;
   ebay_username?: string;
   ebay_environment?: "production" | "sandbox" | "stub";

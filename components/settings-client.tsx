@@ -22,7 +22,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { VinylSpinner } from "@/components/vinyl-spinner";
 import { createClient } from "@/lib/supabase/client";
 import { CONDITION_MULTIPLIERS } from "@/lib/pricing";
@@ -42,7 +41,6 @@ interface SettingsClientProps {
   userSettings: {
     discogs_token?: string;
     minimum_floor_price?: number;
-    email_on_sale?: boolean;
     shipping_profile?: string;
     condition_multipliers?: Partial<Record<AlbumCondition, number>>;
     seller_name?: string;
@@ -79,9 +77,6 @@ export function SettingsClient({
   );
   const [minFloor, setMinFloor] = useState(
     userSettings.minimum_floor_price?.toString() ?? "3.00"
-  );
-  const [emailOnSale, setEmailOnSale] = useState(
-    userSettings.email_on_sale ?? false
   );
   const [shippingProfile, setShippingProfile] = useState(
     userSettings.shipping_profile ?? "standard"
@@ -330,7 +325,7 @@ export function SettingsClient({
           <AccordionTrigger className="font-display text-lg">
             <div className="flex items-center gap-2">
               <span>Discogs Integration</span>
-              {(discogsOAuthConnected || discogsToken || discogsEnvTokenConfigured) ? (
+              {(discogsOAuthConnected || discogsToken.trim().length > 0) ? (
                 <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-emerald-400">
                   Configured
                 </span>
@@ -466,29 +461,6 @@ export function SettingsClient({
             >
               Save Defaults
             </Button>
-          </AccordionContent>
-        </AccordionItem>
-
-        <AccordionItem value="notifications" className="animate-fade-in-up stagger-4">
-          <AccordionTrigger className="font-display text-lg">
-            Notifications
-          </AccordionTrigger>
-          <AccordionContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium">Email on sale</p>
-                <p className="text-xs text-muted-foreground">
-                  Get notified when an album sells on eBay or Discogs.
-                </p>
-              </div>
-              <Switch
-                checked={emailOnSale}
-                onCheckedChange={(checked) => {
-                  setEmailOnSale(checked);
-                  saveSettings({ email_on_sale: checked });
-                }}
-              />
-            </div>
           </AccordionContent>
         </AccordionItem>
 
