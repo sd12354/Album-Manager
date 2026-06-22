@@ -48,7 +48,7 @@ export function isHeic(file: File): boolean {
 /**
  * Sniff the first 12 bytes for a valid HEIC/HEIF container. Catches files
  * that are misnamed `.heic` (e.g. someone renamed a corrupted download) or
- * have truncated headers — heic2any hangs forever on those, so we bail
+ * have truncated headers — libheif can hang on those, so we bail
  * before it ever sees the file.
  */
 async function looksLikeRealHeic(file: File): Promise<boolean> {
@@ -78,34 +78,67 @@ async function looksLikeRealHeic(file: File): Promise<boolean> {
 }
 
 /**
- * Convert a HEIC/HEIF file to a JPEG File in the browser. Non-HEIC files are
- * returned unchanged. `heic2any` is browser-only (it uses canvas/WASM), so it
- * is imported dynamically to keep it out of any server bundle.
+ * Convert a HEIC/HEIF file to a JPEG File. Decoding happens in an isolated
+ * Web Worker so libheif's WASM heap never accumulates in the main thread —
+ * `worker.terminate()` in the finally block guarantees every byte is
+ * released, including on timeout. That's the fix for the "one bad file
+ * makes the rest time out" cascade: a hung worker dies cleanly instead of
+ * holding the main-thread WASM hostage.
  *
- * Files that fail the magic-byte sniff throw immediately with a labelled
- * error — heic2any has no internal validation and will hang for minutes on
- * malformed input.
+ * The pre-flight magic-byte sniff rejects malformed input before it ever
+ * reaches libheif, which has no internal validation and can hang on
+ * truncated or mis-extensioned files.
  */
-export async function convertHeicToJpeg(file: File): Promise<File> {
+export async function convertHeicToJpeg(
+  file: File,
+  timeoutMs = 45_000
+): Promise<File> {
   if (!isHeic(file)) return file;
 
   if (!(await looksLikeRealHeic(file))) {
     throw new Error("INVALID_HEIC: file is not a valid HEIC/HEIF container");
   }
 
-  const { default: heic2any } = await import("heic2any");
-  const converted = await heic2any({
-    blob: file,
-    toType: "image/jpeg",
-    quality: 0.92,
+  const buffer = await file.arrayBuffer();
+  const worker = new Worker(new URL("./heic-worker.ts", import.meta.url), {
+    type: "module",
   });
-  const blob = Array.isArray(converted) ? converted[0] : converted;
+  const id = Math.random().toString(36).slice(2);
 
-  const newName = `${file.name.replace(/\.(heic|heif)$/i, "")}.jpg`;
-  return new File([blob], newName, {
-    type: "image/jpeg",
-    lastModified: file.lastModified,
-  });
+  try {
+    const jpegBuffer = await new Promise<ArrayBuffer>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(new Error(`HEIC conversion timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+
+      worker.onmessage = (
+        event: MessageEvent<
+          | { id: string; ok: true; buffer: ArrayBuffer }
+          | { id: string; ok: false; error: string }
+        >
+      ) => {
+        if (event.data.id !== id) return;
+        clearTimeout(timer);
+        if (event.data.ok) resolve(event.data.buffer);
+        else reject(new Error(event.data.error));
+      };
+      worker.onerror = (event) => {
+        clearTimeout(timer);
+        reject(new Error(event.message || "HEIC worker crashed"));
+      };
+
+      worker.postMessage({ id, buffer }, { transfer: [buffer] });
+    });
+
+    const newName = `${file.name.replace(/\.(heic|heif)$/i, "")}.jpg`;
+    return new File([jpegBuffer], newName, {
+      type: "image/jpeg",
+      lastModified: file.lastModified,
+    });
+  } finally {
+    // Frees the libheif WASM heap regardless of success, error, or timeout.
+    worker.terminate();
+  }
 }
 
 // eBay Picture Service requirements & recommendations (sandbox + production).

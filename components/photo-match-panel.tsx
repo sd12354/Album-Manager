@@ -237,42 +237,18 @@ export function PhotoMatchPanel() {
     setConvertDone(0);
     let completed = 0;
 
-    // HEIC decoding is single-threaded WASM with a real memory leak in
-    // heic2any — too many in-flight conversions starve each other and the
-    // cap starts tripping. Stay strictly sequential past 20 files.
-    const concurrency = heicRows.length > 20 ? 1 : heicRows.length > 5 ? 2 : 3;
-
-    // Circuit breaker. heic2any has no way to terminate a stuck WASM call,
-    // so once a conversion times out, the next ones tend to fail too as
-    // the zombie keeps eating memory. After two consecutive timeouts we
-    // stop, mark the rest as skipped, and surface a clear recovery message.
-    let consecutiveTimeouts = 0;
-    let circuitBroken = false;
-    const TIMEOUT_MS = 45_000;
-    const CIRCUIT_THRESHOLD = 2;
+    // Each conversion runs in its own Web Worker that is terminated
+    // immediately after — there's no shared WASM heap in the main thread to
+    // corrupt, so a hung or malformed file can't bleed into the next one.
+    // Concurrency can be modest again now that memory is bounded.
+    const concurrency = heicRows.length > 50 ? 2 : heicRows.length > 10 ? 3 : 4;
 
     try {
       await runWithConcurrency(heicRows, concurrency, async (row) => {
-        if (circuitBroken) {
-          updateRow(row.id, {
-            status: "error",
-            error:
-              "Skipped — too many timeouts. Reload the page and try a smaller batch, or convert to JPEG first.",
-            converting: false,
-          });
-          completed += 1;
-          setConvertDone(completed);
-          return;
-        }
-
         try {
-          const jpeg = await withTimeout(
-            convertHeicToJpeg(row.file),
-            TIMEOUT_MS,
-            `Converting ${row.file.name}`
-          );
-          // Conversion succeeded — reset the streak.
-          consecutiveTimeouts = 0;
+          // Built-in timeout inside convertHeicToJpeg will terminate() the
+          // worker on timeout, freeing the libheif heap cleanly.
+          const jpeg = await convertHeicToJpeg(row.file);
           // Revoke any stale preview URL we created earlier so 100-photo
           // batches don't leak ~100MB of unreleased Object URLs.
           if (row.previewUrl) URL.revokeObjectURL(row.previewUrl);
@@ -284,23 +260,14 @@ export function PhotoMatchPanel() {
         } catch (err) {
           let message: string;
           if (err instanceof Error && err.message.startsWith("INVALID_HEIC")) {
-            // Pre-flight magic-byte sniff caught this — heic2any never ran,
-            // so it doesn't count against the timeout streak.
             message = "Not a valid HEIC file. Re-export from your Photos app and try again.";
           } else if (err instanceof Error && err.message.includes("timed out")) {
-            consecutiveTimeouts += 1;
             message = "Conversion timed out — try re-exporting this photo as JPEG.";
-            if (consecutiveTimeouts >= CIRCUIT_THRESHOLD) {
-              circuitBroken = true;
-              toast.error(
-                "HEIC conversion keeps timing out. The remaining photos will be skipped — reload the page and try a smaller batch, or convert your photos to JPEG first.",
-                { duration: 12000 }
-              );
-            }
           } else {
-            // Real conversion error (not a timeout) — also resets streak.
-            consecutiveTimeouts = 0;
-            message = "Couldn't convert this HEIC/HEIF photo to JPEG.";
+            message =
+              err instanceof Error && err.message
+                ? `Couldn't convert: ${err.message}`
+                : "Couldn't convert this HEIC/HEIF photo to JPEG.";
           }
           updateRow(row.id, {
             status: "error",
