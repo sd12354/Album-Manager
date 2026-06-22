@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { SalesChart, type SalesPoint } from "@/components/sales-chart";
 import { AnimatedStats } from "@/components/animated-stats";
 import { AnimatedCollectionValue } from "@/components/animated-collection-value";
+import { WhatsNewCard } from "@/components/whats-new-card";
 import { formatRelativeTime, getActivityDescription } from "@/lib/utils";
 import { getActiveCollection } from "@/lib/collections";
 import { summarizeCollectionValue } from "@/lib/collection-value";
@@ -205,6 +206,10 @@ export default async function DashboardPage() {
 
       <div className="mt-8">
         <SalesChart data={monthlySales} />
+      </div>
+
+      <div className="mt-8 animate-fade-in-up stagger-5">
+        <WhatsNewCard />
       </div>
 
       <div className="mt-8 animate-fade-in-up stagger-5">
