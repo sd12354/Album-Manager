@@ -49,10 +49,34 @@ async function runWithConcurrency<T>(
     while (true) {
       const index = cursor++;
       if (index >= items.length) break;
-      await worker(items[index], index);
+      // Swallow worker failures so one bad item can't kill the runner and
+      // strand the remaining queue. The worker is expected to surface its
+      // own per-item errors via the UI (e.g. row.status = "error").
+      try {
+        await worker(items[index], index);
+      } catch {
+        // Already reported by the worker — keep the pool moving.
+      }
     }
   });
   await Promise.all(runners);
+}
+
+/** Reject a hung conversion so the queue keeps moving. */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      }
+    );
+  });
 }
 
 interface IdentifiedCover {
@@ -200,27 +224,55 @@ export function PhotoMatchPanel() {
     setConvertDone(0);
     let completed = 0;
 
-    await runWithConcurrency(heicRows, 4, async (row) => {
-      try {
-        const jpeg = await convertHeicToJpeg(row.file);
-        updateRow(row.id, {
-          file: jpeg,
-          previewUrl: URL.createObjectURL(jpeg),
-          converting: false,
-        });
-      } catch {
-        updateRow(row.id, {
-          status: "error",
-          error: "Couldn't convert this HEIC/HEIF photo to JPEG.",
-          converting: false,
-        });
-      } finally {
-        completed += 1;
-        setConvertDone(completed);
-      }
-    });
-
-    setConverting(false);
+    try {
+      await runWithConcurrency(heicRows, 4, async (row) => {
+        try {
+          // heic2any occasionally hangs on malformed HEIC payloads (corrupted
+          // EXIF, mis-extensioned files). Cap each conversion so one bad
+          // photo can't strand a worker slot indefinitely.
+          const jpeg = await withTimeout(
+            convertHeicToJpeg(row.file),
+            45_000,
+            `Converting ${row.file.name}`
+          );
+          updateRow(row.id, {
+            file: jpeg,
+            previewUrl: URL.createObjectURL(jpeg),
+            converting: false,
+          });
+        } catch (err) {
+          const message =
+            err instanceof Error && err.message.includes("timed out")
+              ? "Conversion timed out — try re-exporting this photo as JPEG."
+              : "Couldn't convert this HEIC/HEIF photo to JPEG.";
+          updateRow(row.id, {
+            status: "error",
+            error: message,
+            converting: false,
+          });
+        } finally {
+          completed += 1;
+          setConvertDone(completed);
+        }
+      });
+    } finally {
+      // Always clear the global converting flag, even if the pool itself
+      // explodes for some reason — and force any row that's still flagged
+      // as converting into an error state so the UI never gets stuck.
+      setRows((prev) =>
+        prev.map((r) =>
+          r.converting
+            ? {
+                ...r,
+                converting: false,
+                status: "error",
+                error: r.error ?? "Conversion failed unexpectedly.",
+              }
+            : r
+        )
+      );
+      setConverting(false);
+    }
   }, []);
 
   function removeRow(id: string) {
