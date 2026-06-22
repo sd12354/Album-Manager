@@ -243,12 +243,31 @@ export function PhotoMatchPanel() {
     // Concurrency can be modest again now that memory is bounded.
     const concurrency = heicRows.length > 50 ? 2 : heicRows.length > 10 ? 3 : 4;
 
+    // Safety net: if 3 conversions in a row time out, the worker bundle is
+    // likely broken on this deploy (or the user's browser can't run
+    // OffscreenCanvas-in-worker). Bail the rest with a clear message
+    // instead of waiting 60s × N for every photo.
+    let consecutiveTimeouts = 0;
+    let circuitBroken = false;
+    const CIRCUIT_THRESHOLD = 3;
+
     try {
       await runWithConcurrency(heicRows, concurrency, async (row) => {
+        if (circuitBroken) {
+          updateRow(row.id, {
+            status: "error",
+            error:
+              "Skipped — HEIC conversion isn't working in this browser. Try reloading, or convert your photos to JPEG before importing.",
+            converting: false,
+          });
+          completed += 1;
+          setConvertDone(completed);
+          return;
+        }
+
         try {
-          // Built-in timeout inside convertHeicToJpeg will terminate() the
-          // worker on timeout, freeing the libheif heap cleanly.
           const jpeg = await convertHeicToJpeg(row.file);
+          consecutiveTimeouts = 0; // reset on any success
           // Revoke any stale preview URL we created earlier so 100-photo
           // batches don't leak ~100MB of unreleased Object URLs.
           if (row.previewUrl) URL.revokeObjectURL(row.previewUrl);
@@ -260,10 +279,21 @@ export function PhotoMatchPanel() {
         } catch (err) {
           let message: string;
           if (err instanceof Error && err.message.startsWith("INVALID_HEIC")) {
+            // Magic-byte rejection — never touched the worker, no streak.
             message = "Not a valid HEIC file. Re-export from your Photos app and try again.";
           } else if (err instanceof Error && err.message.includes("timed out")) {
+            consecutiveTimeouts += 1;
             message = "Conversion timed out — try re-exporting this photo as JPEG.";
+            if (consecutiveTimeouts >= CIRCUIT_THRESHOLD) {
+              circuitBroken = true;
+              toast.error(
+                "HEIC conversion keeps timing out — the remaining photos will be skipped. Try reloading, or convert your photos to JPEG before importing.",
+                { duration: 12000 }
+              );
+            }
           } else {
+            // Real conversion error — reset streak, it's not a timeout cascade.
+            consecutiveTimeouts = 0;
             message =
               err instanceof Error && err.message
                 ? `Couldn't convert: ${err.message}`
