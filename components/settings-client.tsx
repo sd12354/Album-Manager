@@ -22,7 +22,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { VinylSpinner } from "@/components/vinyl-spinner";
 import { createClient } from "@/lib/supabase/client";
 import { CONDITION_MULTIPLIERS } from "@/lib/pricing";
@@ -42,7 +41,6 @@ interface SettingsClientProps {
   userSettings: {
     discogs_token?: string;
     minimum_floor_price?: number;
-    email_on_sale?: boolean;
     shipping_profile?: string;
     condition_multipliers?: Partial<Record<AlbumCondition, number>>;
     seller_name?: string;
@@ -80,14 +78,10 @@ export function SettingsClient({
   const [minFloor, setMinFloor] = useState(
     userSettings.minimum_floor_price?.toString() ?? "3.00"
   );
-  const [emailOnSale, setEmailOnSale] = useState(
-    userSettings.email_on_sale ?? false
-  );
   const [shippingProfile, setShippingProfile] = useState(
     userSettings.shipping_profile ?? "standard"
   );
   const [testingDiscogs, setTestingDiscogs] = useState(false);
-  const [sendingTestEmail, setSendingTestEmail] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // Seller address state
@@ -182,22 +176,6 @@ export function SettingsClient({
       );
     }
     setChangingEmail(false);
-  }
-
-  async function sendTestSaleEmail() {
-    setSendingTestEmail(true);
-    try {
-      const res = await fetch("/api/notifications/test-sale", { method: "POST" });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok && data.ok) {
-        toast.success(`Test email sent to ${data.sentTo}`);
-      } else {
-        toast.error(data.error ?? "Could not send test email", { duration: 8000 });
-      }
-    } catch {
-      toast.error("Network error");
-    }
-    setSendingTestEmail(false);
   }
 
   async function testDiscogs() {
@@ -483,52 +461,6 @@ export function SettingsClient({
             >
               Save Defaults
             </Button>
-          </AccordionContent>
-        </AccordionItem>
-
-        <AccordionItem value="notifications" className="animate-fade-in-up stagger-4">
-          <AccordionTrigger className="font-display text-lg">
-            Notifications
-          </AccordionTrigger>
-          <AccordionContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium">Email on sale</p>
-                <p className="text-xs text-muted-foreground">
-                  Get notified when an album sells on eBay or Discogs.
-                </p>
-              </div>
-              <Switch
-                checked={emailOnSale}
-                onCheckedChange={(checked) => {
-                  setEmailOnSale(checked);
-                  saveSettings({ email_on_sale: checked });
-                }}
-              />
-            </div>
-            <div className="flex items-center justify-between rounded-lg border border-border bg-muted/10 p-3">
-              <div className="pr-3">
-                <p className="text-sm font-medium">Send test sale email</p>
-                <p className="text-xs text-muted-foreground">
-                  Sends a sample sale notification to {userEmail || "your account email"} so you can verify delivery.
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={sendTestSaleEmail}
-                disabled={sendingTestEmail}
-              >
-                {sendingTestEmail ? (
-                  <>
-                    <VinylSpinner size="xs" />
-                    Sending...
-                  </>
-                ) : (
-                  "Send test email"
-                )}
-              </Button>
-            </div>
           </AccordionContent>
         </AccordionItem>
 
