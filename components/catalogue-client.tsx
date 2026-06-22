@@ -63,6 +63,7 @@ export function CatalogueClient({
   const [globalFilter, setGlobalFilter] = useState("");
   const [conditionFilter, setConditionFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [priceFilter, setPriceFilter] = useState<string>("all");
   const [photoFilter, setPhotoFilter] = useState<string>(
     searchParams.get("missing") === "photos" ? "missing" : "all"
   );
@@ -130,7 +131,19 @@ export function CatalogueClient({
         photoFilter === "all" ||
         (photoFilter === "with" && hasPhotos) ||
         (photoFilter === "missing" && !hasPhotos);
-      return matchesSearch && matchesCondition && matchesStatus && matchesPhotos;
+      const hasPrice =
+        (album.list_price ?? album.suggested_price ?? 0) > 0;
+      const matchesPrice =
+        priceFilter === "all" ||
+        (priceFilter === "priced" && hasPrice) ||
+        (priceFilter === "unpriced" && !hasPrice);
+      return (
+        matchesSearch &&
+        matchesCondition &&
+        matchesStatus &&
+        matchesPhotos &&
+        matchesPrice
+      );
     });
 
     if (sortBy === "price-desc" || sortBy === "price-asc") {
@@ -141,7 +154,7 @@ export function CatalogueClient({
     }
 
     return filtered;
-  }, [albums, globalFilter, conditionFilter, statusFilter, photoFilter, sortBy]);
+  }, [albums, globalFilter, conditionFilter, statusFilter, photoFilter, priceFilter, sortBy]);
 
   const columns = useMemo<ColumnDef<Album>[]>(
     () => [
@@ -286,51 +299,78 @@ export function CatalogueClient({
       status: "ok" | "cached" | "no_data" | "error";
       source?: string;
     }> = [];
-    let failed = false;
+    let failedBatches = 0;
+    let firstBatchError: string | null = null;
 
     try {
       for (let i = 0; i < chunks.length; i++) {
-        const res = await fetch("/api/pricing/bulk", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ albumIds: chunks[i] }),
-        });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          toast.error(err.error ?? `Batch ${i + 1} failed`);
-          failed = true;
-          break;
+        try {
+          const res = await fetch("/api/pricing/bulk", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ albumIds: chunks[i] }),
+          });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            failedBatches += 1;
+            if (!firstBatchError) {
+              firstBatchError = err.error ?? `Batch ${i + 1} failed (HTTP ${res.status})`;
+            }
+            // Keep going — a single bad batch (timeout, rate limit, bad row)
+            // shouldn't abandon the rest of the selection.
+            continue;
+          }
+          const { results } = (await res.json()) as { results: typeof allResults };
+          allResults.push(...results);
+        } catch (batchErr) {
+          failedBatches += 1;
+          if (!firstBatchError) {
+            firstBatchError =
+              batchErr instanceof Error ? batchErr.message : "Network error";
+          }
         }
-        const { results } = (await res.json()) as { results: typeof allResults };
-        allResults.push(...results);
         if (chunks.length > 1) {
-          toast.info(`Batch ${i + 1}/${chunks.length} done`);
+          toast.info(`Batch ${i + 1}/${chunks.length} done`, { duration: 1500 });
         }
       }
 
-      if (!failed) {
-        const ok = allResults.filter((r) => r.status === "ok").length;
-        const cached = allResults.filter((r) => r.status === "cached").length;
-        const noData = allResults.filter((r) => r.status === "no_data").length;
-        const errors = allResults.filter((r) => r.status === "error").length;
-        const ebayCount = allResults.filter(
-          (r) => r.status === "ok" && r.source === "ebay-active"
-        ).length;
-        const parts: string[] = [];
-        if (ok) {
-          parts.push(
-            ebayCount > 0
-              ? `${ok} priced (${ebayCount} via eBay fallback)`
-              : `${ok} priced`
-          );
-        }
-        if (cached) parts.push(`${cached} cached`);
-        if (noData) parts.push(`${noData} no match`);
-        if (errors) parts.push(`${errors} failed`);
-        toast.success(parts.length > 0 ? parts.join(" · ") : "No albums needed pricing");
-        setRowSelection({});
-        router.refresh();
+      const ok = allResults.filter((r) => r.status === "ok").length;
+      const cached = allResults.filter((r) => r.status === "cached").length;
+      const noData = allResults.filter((r) => r.status === "no_data").length;
+      const errors = allResults.filter((r) => r.status === "error").length;
+      const ebayCount = allResults.filter(
+        (r) => r.status === "ok" && r.source === "ebay-active"
+      ).length;
+      const accountedFor = ok + cached + noData + errors;
+      const trulySkipped = Math.max(0, ids.length - accountedFor);
+
+      const parts: string[] = [];
+      if (ok) {
+        parts.push(
+          ebayCount > 0
+            ? `${ok} priced (${ebayCount} via eBay fallback)`
+            : `${ok} priced`
+        );
       }
+      if (cached) parts.push(`${cached} cached`);
+      if (noData) parts.push(`${noData} no match`);
+      if (errors) parts.push(`${errors} failed`);
+      if (trulySkipped > 0) parts.push(`${trulySkipped} not attempted`);
+
+      if (failedBatches > 0) {
+        const summary = parts.length > 0 ? parts.join(" · ") : "no albums priced";
+        toast.error(
+          `${failedBatches} of ${chunks.length} batches failed — ${summary}. ${firstBatchError ?? ""}`.trim(),
+          { duration: 10000 }
+        );
+      } else if (parts.length > 0) {
+        toast.success(parts.join(" · "));
+      } else {
+        toast.info("No albums needed pricing");
+      }
+
+      setRowSelection({});
+      router.refresh();
     } catch (err) {
       toast.error(
         err instanceof Error
@@ -507,6 +547,16 @@ export function CatalogueClient({
             <SelectItem value="all">Photos</SelectItem>
             <SelectItem value="with">With photos</SelectItem>
             <SelectItem value="missing">Missing photos</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={priceFilter} onValueChange={setPriceFilter}>
+          <SelectTrigger className="w-[140px]">
+            <SelectValue placeholder="Pricing" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Pricing</SelectItem>
+            <SelectItem value="priced">Priced</SelectItem>
+            <SelectItem value="unpriced">Not priced</SelectItem>
           </SelectContent>
         </Select>
         <Select value={sortBy} onValueChange={setSortBy}>
