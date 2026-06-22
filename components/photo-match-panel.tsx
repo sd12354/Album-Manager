@@ -188,6 +188,19 @@ export function PhotoMatchPanel() {
     return () => window.removeEventListener("keydown", onKey);
   }, [lightboxUrl]);
 
+  // Free every blob URL when the panel unmounts so navigating away from a
+  // 100-photo session doesn't strand the browser holding ~100 Object URLs.
+  useEffect(() => {
+    return () => {
+      setRows((prev) => {
+        for (const row of prev) {
+          if (row.previewUrl) URL.revokeObjectURL(row.previewUrl);
+        }
+        return prev;
+      });
+    };
+  }, []);
+
   const addFiles = useCallback(async (fileList: FileList | null) => {
     if (!fileList) return;
     const files = Array.from(fileList);
@@ -240,6 +253,9 @@ export function PhotoMatchPanel() {
             90_000,
             `Converting ${row.file.name}`
           );
+          // Revoke any stale preview URL we created earlier so 100-photo
+          // batches don't leak ~100MB of unreleased Object URLs.
+          if (row.previewUrl) URL.revokeObjectURL(row.previewUrl);
           updateRow(row.id, {
             file: jpeg,
             previewUrl: URL.createObjectURL(jpeg),
@@ -308,29 +324,86 @@ export function PhotoMatchPanel() {
     setAnalyzing(true);
     setAnalyzeProgress(0);
     let completed = 0;
+    let rateLimitedToastShown = false;
 
-    // Bounded concurrency keeps a 100-photo batch from firing 100 simultaneous
-    // AI requests (which would hit rate limits) while still being much faster
-    // than going one-at-a-time.
-    await runWithConcurrency(pending, 4, async (row) => {
+    // Each photo triggers up to 3 Anthropic Vision calls server-side
+    // (OCR + visual compare across Discogs candidates). 4 concurrent → 12
+    // in-flight which blows past most rate limits on 100+ batches. Scale
+    // down for big batches.
+    const analyzeConcurrency =
+      pending.length > 50 ? 2 : pending.length > 20 ? 3 : 4;
+
+    await runWithConcurrency(pending, analyzeConcurrency, async (row) => {
       updateRow(row.id, { status: "analyzing", error: undefined });
 
-      const formData = new FormData();
-      formData.append("file", row.file);
+      // Up to 3 attempts with exponential backoff so transient 429s and
+      // 5xxs don't dump a whole row into an error state. Real failures
+      // (4xx other than 429, fatal network errors) abort early.
+      const MAX_ATTEMPTS = 3;
+      let lastError = "Analysis failed";
 
       try {
-        const res = await fetch("/api/albums/match-photo", {
-          method: "POST",
-          body: formData,
-        });
-        const data = await res.json();
+        for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+          // Rebuild FormData each attempt — File is fine to re-read.
+          const formData = new FormData();
+          formData.append("file", row.file);
 
-        if (!res.ok) {
-          updateRow(row.id, {
-            status: "error",
-            error: data.error ?? "Analysis failed",
-          });
-        } else {
+          let res: Response;
+          try {
+            res = await withTimeout(
+              fetch("/api/albums/match-photo", {
+                method: "POST",
+                body: formData,
+              }),
+              60_000,
+              `Analyzing ${row.file.name}`
+            );
+          } catch (err) {
+            lastError =
+              err instanceof Error && err.message.includes("timed out")
+                ? "Analysis timed out"
+                : "Network error during analysis";
+            if (attempt < MAX_ATTEMPTS) {
+              await new Promise((r) => setTimeout(r, 1000 * 2 ** (attempt - 1)));
+              continue;
+            }
+            break;
+          }
+
+          // Retry on 429 (rate limit) and 5xx; bail on other 4xxs.
+          if (res.status === 429 || res.status >= 500) {
+            if (res.status === 429 && !rateLimitedToastShown) {
+              rateLimitedToastShown = true;
+              toast.warning(
+                "Hit the AI rate limit — slowing down and retrying.",
+                { duration: 5000 }
+              );
+            }
+            lastError =
+              res.status === 429 ? "Rate limited — retrying" : `Server ${res.status}`;
+            if (attempt < MAX_ATTEMPTS) {
+              const backoff = 1000 * 2 ** (attempt - 1);
+              await new Promise((r) => setTimeout(r, backoff));
+              continue;
+            }
+            updateRow(row.id, {
+              status: "error",
+              error: res.status === 429
+                ? "AI rate limit — try again in a minute."
+                : lastError,
+            });
+            return;
+          }
+
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            updateRow(row.id, {
+              status: "error",
+              error: data.error ?? "Analysis failed",
+            });
+            return;
+          }
+
           const match = data.match as AlbumMatchCandidate | null;
           updateRow(row.id, {
             status: "done",
@@ -341,12 +414,11 @@ export function PhotoMatchPanel() {
             selectedAlbumId: match?.albumId ?? null,
             include: match?.confidence === "high" || match?.confidence === "medium",
           });
+          return;
         }
-      } catch {
-        updateRow(row.id, {
-          status: "error",
-          error: "Network error during analysis",
-        });
+
+        // All attempts exhausted — surface whatever the last error was.
+        updateRow(row.id, { status: "error", error: lastError });
       } finally {
         completed += 1;
         setAnalyzeProgress(Math.round((completed / pending.length) * 100));
@@ -354,7 +426,15 @@ export function PhotoMatchPanel() {
     });
 
     setAnalyzing(false);
-    toast.success("Cover analysis complete — review matches below");
+    const errs = rows.filter((r) => r.status === "error").length;
+    if (errs > 0) {
+      toast.warning(
+        `Analysis done — ${errs} photo${errs === 1 ? "" : "s"} had errors, review below.`,
+        { duration: 6000 }
+      );
+    } else {
+      toast.success("Cover analysis complete — review matches below");
+    }
   }
 
   async function attachPhotos() {
@@ -386,7 +466,12 @@ export function PhotoMatchPanel() {
     let failed = 0;
     let completed = 0;
 
-    await runWithConcurrency(toAttach, 4, async (row) => {
+    // Same scaling story as the analyze step — 4 parallel multi-MB uploads
+    // on a flaky connection saturate the link and trigger timeouts.
+    const attachConcurrency =
+      toAttach.length > 50 ? 2 : toAttach.length > 20 ? 3 : 4;
+
+    await runWithConcurrency(toAttach, attachConcurrency, async (row) => {
       try {
         const safeName = sanitizeFilename(row.file.name || "cover.jpg");
         const rand = Math.random().toString(36).slice(2, 8);
@@ -395,16 +480,24 @@ export function PhotoMatchPanel() {
         const folderOwner = ownerId || user.id;
         const path = `${folderOwner}/${row.selectedAlbumId}/${Date.now()}-${rand}-${safeName}`;
 
-        const { error: uploadError } = await supabase.storage
-          .from("album-photos")
-          .upload(path, row.file, {
-            contentType: row.file.type || "image/jpeg",
-            upsert: false,
-            cacheControl: "31536000",
-          });
+        const { error: uploadError } = await withTimeout(
+          supabase.storage
+            .from("album-photos")
+            .upload(path, row.file, {
+              contentType: row.file.type || "image/jpeg",
+              upsert: false,
+              cacheControl: "31536000",
+            }),
+          60_000,
+          `Uploading ${row.file.name}`
+        );
 
         if (uploadError) {
           failed += 1;
+          updateRow(row.id, {
+            status: "error",
+            error: `Upload failed: ${uploadError.message}`,
+          });
           return;
         }
 
@@ -416,8 +509,15 @@ export function PhotoMatchPanel() {
           albumId: row.selectedAlbumId!,
           url: getOriginalPublicUrl(urlData.publicUrl),
         });
-      } catch {
+      } catch (err) {
         failed += 1;
+        const message =
+          err instanceof Error && err.message.includes("timed out")
+            ? "Upload timed out — check your connection."
+            : err instanceof Error
+              ? `Upload failed: ${err.message}`
+              : "Upload failed";
+        updateRow(row.id, { status: "error", error: message });
       } finally {
         completed += 1;
         setAttachProgress(Math.round((completed / toAttach.length) * 100));
