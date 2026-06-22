@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { EbayConnectButton } from "@/components/ebay-connect-button";
 import { DiscogsConnectButton } from "@/components/discogs-connect-button";
@@ -99,7 +99,7 @@ export function SettingsClient({
   const [sellerZip, setSellerZip] = useState(userSettings.seller_zip ?? "");
   const [sellerCountry, setSellerCountry] = useState(userSettings.seller_country ?? "US");
 
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
     if (discogsConnectedNotice === "connected") {

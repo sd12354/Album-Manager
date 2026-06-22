@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -74,6 +74,7 @@ export default function ImportPage() {
   const [jsonProgress, setJsonProgress] = useState(0);
   const [jsonResult, setJsonResult] = useState<{ count: number; skipped: number } | null>(null);
   const jsonInputRef = useRef<HTMLInputElement>(null);
+  const [canEditCollection, setCanEditCollection] = useState<boolean | null>(null);
 
   // ── CSV derived ────────────────────────────────────────────────────────────
   const { rows, errors, invalidCount } = useMemo(
@@ -88,6 +89,26 @@ export default function ImportPage() {
     [columnMapping]
   );
   const missingRequired = REQUIRED_TARGETS.filter((t) => !mappedTargets.has(t));
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadActiveCollection() {
+      try {
+        const res = await fetch("/api/collection/active");
+        const data = await res.json().catch(() => ({}));
+        if (!cancelled) {
+          setCanEditCollection(res.ok && data.active?.role !== "viewer");
+        }
+      } catch {
+        if (!cancelled) setCanEditCollection(false);
+      }
+    }
+
+    void loadActiveCollection();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // ── CSV handlers ───────────────────────────────────────────────────────────
   async function handleFileSelect(selectedFile: File) {
@@ -232,8 +253,28 @@ export default function ImportPage() {
     <div className="animate-fade-in">
       <h1 className="font-display text-3xl font-bold">Import</h1>
 
+      {canEditCollection === false && (
+        <div className="mt-6 max-w-2xl rounded-xl border border-amber-500/20 bg-amber-500/5 p-5 text-sm text-amber-100">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+            <div>
+              <p className="font-medium text-foreground">View-only collection</p>
+              <p className="mt-1 text-muted-foreground">
+                You can browse this collection, but only the owner or an editor can import albums or attach cover photos.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {canEditCollection === null && (
+        <div className="flex justify-center py-8">
+          <VinylSpinner label="Checking collection access..." />
+        </div>
+      )}
+
       {/* Mode tabs */}
-      <div className="mt-6 flex gap-1 rounded-xl border border-border bg-card p-1 w-fit">
+      {canEditCollection && <div className="mt-6 flex gap-1 rounded-xl border border-border bg-card p-1 w-fit">
         <button
           onClick={() => setMode("csv")}
           className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
@@ -266,10 +307,10 @@ export default function ImportPage() {
           <ImageIcon className="h-4 w-4" />
           Cover Photos
         </button>
-      </div>
+      </div>}
 
       {/* ── CSV mode ────────────────────────────────────────────────────────── */}
-      {mode === "csv" && (
+      {canEditCollection && mode === "csv" && (
         <>
           <div className="mx-auto mt-8 flex max-w-md items-center justify-center">
             {STEPS.map((label, i) => (
@@ -472,10 +513,10 @@ export default function ImportPage() {
       )}
 
       {/* ── Cover photo matching ──────────────────────────────────────────── */}
-      {mode === "photos" && <PhotoMatchPanel />}
+      {canEditCollection && mode === "photos" && <PhotoMatchPanel />}
 
       {/* ── JSON / Box Files mode ─────────────────────────────────────────── */}
-      {mode === "json" && (
+      {canEditCollection && mode === "json" && (
         <div className="mx-auto mt-8 max-w-3xl">
           {!jsonResult ? (
             <>

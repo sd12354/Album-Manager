@@ -19,6 +19,8 @@ const PASSWORD_RULES = [
   { id: "special", label: "one special character", test: (p: string) => /[^A-Za-z0-9]/.test(p) },
 ] as const;
 
+let handledRecoveryCode: string | null = null;
+
 export default function UpdatePasswordPage() {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -39,7 +41,8 @@ export default function UpdatePasswordPage() {
           ? new URLSearchParams(window.location.search).get("code")
           : null;
 
-      if (code) {
+      if (code && handledRecoveryCode !== code) {
+        handledRecoveryCode = code;
         const { error } = await supabase.auth.exchangeCodeForSession(code);
         if (typeof window !== "undefined") {
           window.history.replaceState(null, "", "/update-password");

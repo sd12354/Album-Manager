@@ -68,6 +68,11 @@ export async function POST(request: Request) {
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
+    await admin
+      .from("collection_invites")
+      .update({ status: "accepted", accepted_at: new Date().toISOString() })
+      .eq("owner_id", user.id)
+      .ilike("email", email);
     return NextResponse.json({ ok: true, status: "added" });
   }
 
