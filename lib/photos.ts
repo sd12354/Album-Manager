@@ -46,12 +46,52 @@ export function isHeic(file: File): boolean {
 }
 
 /**
+ * Sniff the first 12 bytes for a valid HEIC/HEIF container. Catches files
+ * that are misnamed `.heic` (e.g. someone renamed a corrupted download) or
+ * have truncated headers — heic2any hangs forever on those, so we bail
+ * before it ever sees the file.
+ */
+async function looksLikeRealHeic(file: File): Promise<boolean> {
+  try {
+    const head = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+    if (head.length < 12) return false;
+    // Bytes 4-7 must be ASCII "ftyp".
+    if (
+      head[4] !== 0x66 ||
+      head[5] !== 0x74 ||
+      head[6] !== 0x79 ||
+      head[7] !== 0x70
+    ) {
+      return false;
+    }
+    // Bytes 8-11 are the brand; accept all standard HEIC/HEIF brands.
+    const brand = String.fromCharCode(head[8], head[9], head[10], head[11]);
+    const validBrands = new Set([
+      "heic", "heix", "hevc", "hevx",
+      "heim", "heis", "hevm", "hevs",
+      "mif1", "msf1", "avif", // avif rare but tolerated
+    ]);
+    return validBrands.has(brand);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Convert a HEIC/HEIF file to a JPEG File in the browser. Non-HEIC files are
  * returned unchanged. `heic2any` is browser-only (it uses canvas/WASM), so it
  * is imported dynamically to keep it out of any server bundle.
+ *
+ * Files that fail the magic-byte sniff throw immediately with a labelled
+ * error — heic2any has no internal validation and will hang for minutes on
+ * malformed input.
  */
 export async function convertHeicToJpeg(file: File): Promise<File> {
   if (!isHeic(file)) return file;
+
+  if (!(await looksLikeRealHeic(file))) {
+    throw new Error("INVALID_HEIC: file is not a valid HEIC/HEIF container");
+  }
 
   const { default: heic2any } = await import("heic2any");
   const converted = await heic2any({
