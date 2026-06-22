@@ -87,7 +87,6 @@ export function SettingsClient({
     userSettings.shipping_profile ?? "standard"
   );
   const [testingDiscogs, setTestingDiscogs] = useState(false);
-  const [sendingTestEmail, setSendingTestEmail] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // Seller address state
@@ -182,22 +181,6 @@ export function SettingsClient({
       );
     }
     setChangingEmail(false);
-  }
-
-  async function sendTestSaleEmail() {
-    setSendingTestEmail(true);
-    try {
-      const res = await fetch("/api/notifications/test-sale", { method: "POST" });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok && data.ok) {
-        toast.success(`Test email sent to ${data.sentTo}`);
-      } else {
-        toast.error(data.error ?? "Could not send test email", { duration: 8000 });
-      }
-    } catch {
-      toast.error("Network error");
-    }
-    setSendingTestEmail(false);
   }
 
   async function testDiscogs() {
@@ -505,29 +488,6 @@ export function SettingsClient({
                   saveSettings({ email_on_sale: checked });
                 }}
               />
-            </div>
-            <div className="flex items-center justify-between rounded-lg border border-border bg-muted/10 p-3">
-              <div className="pr-3">
-                <p className="text-sm font-medium">Send test sale email</p>
-                <p className="text-xs text-muted-foreground">
-                  Sends a sample sale notification to {userEmail || "your account email"} so you can verify delivery.
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={sendTestSaleEmail}
-                disabled={sendingTestEmail}
-              >
-                {sendingTestEmail ? (
-                  <>
-                    <VinylSpinner size="xs" />
-                    Sending...
-                  </>
-                ) : (
-                  "Send test email"
-                )}
-              </Button>
             </div>
           </AccordionContent>
         </AccordionItem>
