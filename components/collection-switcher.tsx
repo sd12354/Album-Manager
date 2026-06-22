@@ -109,7 +109,7 @@ export function CollectionSwitcher({
       {open && (
         <div
           className={cn(
-            "absolute z-50 mt-1 max-h-72 overflow-y-auto rounded-lg border border-border bg-popover p-1 shadow-xl animate-fade-in",
+            "absolute z-[60] mt-1 max-h-72 overflow-y-auto rounded-lg border border-border bg-background p-1 shadow-2xl animate-fade-in",
             collapsed ? "left-12 top-0 w-56" : "left-0 right-0"
           )}
         >
