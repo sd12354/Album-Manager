@@ -98,7 +98,7 @@ export async function POST(request: Request) {
 
   if (isStub) {
     const fakeItemId = `STUB-${Date.now()}`;
-    await supabase
+    const { error: updateError } = await supabase
       .from("albums")
       .update({
         status: "listed",
@@ -107,6 +107,19 @@ export async function POST(request: Request) {
         list_price: price,
       })
       .eq("id", albumId);
+
+    if (updateError) {
+      console.error("[ebay]", {
+        scope: "ebay",
+        event: "stub_list_persist_failed",
+        albumId,
+        message: updateError.message,
+      });
+      return NextResponse.json(
+        { error: "Stub listing could not be saved. Please try again." },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({
       stub: true,
@@ -175,7 +188,7 @@ export async function POST(request: Request) {
       aiDescription
     );
 
-    await supabase
+    const { error: updateError } = await supabase
       .from("albums")
       .update({
         status: "listed",
@@ -184,6 +197,25 @@ export async function POST(request: Request) {
         list_price: price,
       })
       .eq("id", albumId);
+
+    if (updateError) {
+      console.error("[ebay]", {
+        scope: "ebay",
+        event: "list_persist_failed",
+        albumId,
+        itemId,
+        message: updateError.message,
+      });
+      return NextResponse.json(
+        {
+          error:
+            "eBay listing was created, but VinylVault could not save the listing state. Avoid retrying until the listing is reconciled.",
+          listingId: itemId,
+          listingUrl,
+        },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({ listingId: itemId, listingUrl });
   } catch (err) {
