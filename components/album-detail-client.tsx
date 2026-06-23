@@ -84,6 +84,7 @@ export function AlbumDetailClient({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [deletingPhotoUrl, setDeletingPhotoUrl] = useState<string | null>(null);
   const autoSyncStartedRef = useRef(false);
 
   useEffect(() => {
@@ -623,6 +624,50 @@ export function AlbumDetailClient({
     setUploading(false);
   }
 
+  async function handleDeletePhoto(url: string) {
+    if (!canEdit) return;
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm("Delete this cover photo? This can't be undone.")
+    ) {
+      return;
+    }
+
+    setDeletingPhotoUrl(url);
+    try {
+      const existing = album.photo_urls ?? [];
+      const next = existing.filter((u) => u !== url);
+
+      // Update the album row first — that's the source of truth the UI
+      // reads from. Storage cleanup is best-effort below.
+      const { error: updateError } = await supabase
+        .from("albums")
+        .update({ photo_urls: next })
+        .eq("id", album.id);
+      if (updateError) {
+        toast.error(`Couldn't remove the photo: ${updateError.message}`);
+        return;
+      }
+      setAlbum((prev) => ({ ...prev, photo_urls: next }));
+
+      // Delete the underlying file from storage too so we don't accumulate
+      // orphans. URL shape: .../storage/v1/object/public/album-photos/{path}
+      try {
+        const match = url.match(/\/object\/public\/album-photos\/(.+)$/);
+        if (match) {
+          const storagePath = decodeURIComponent(match[1]);
+          await supabase.storage.from("album-photos").remove([storagePath]);
+        }
+      } catch {
+        // Non-fatal — the URL is already gone from the album row.
+      }
+
+      toast.success("Photo deleted");
+    } finally {
+      setDeletingPhotoUrl(null);
+    }
+  }
+
   const multiplier = CONDITION_MULTIPLIERS[album.condition];
   const profit =
     album.sold_price && album.purchase_price
@@ -668,16 +713,39 @@ export function AlbumDetailClient({
             <Label className="mb-3 block">Photos</Label>
             <div className="grid grid-cols-4 gap-2">
               {(album.photo_urls ?? []).map((url, i) => (
-                <button
+                <div
                   key={i}
-                  type="button"
-                  onClick={() => setLightboxUrl(url)}
-                  title="Click to expand"
-                  className="group relative aspect-square cursor-zoom-in overflow-hidden rounded-lg border border-border bg-input bg-cover bg-center transition-transform hover:scale-[1.02]"
+                  className="group relative aspect-square overflow-hidden rounded-lg border border-border bg-input bg-cover bg-center"
                   style={{ backgroundImage: `url(${url})` }}
                 >
-                  <span className="absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/20" />
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => setLightboxUrl(url)}
+                    title="Click to expand"
+                    className="absolute inset-0 cursor-zoom-in transition-transform hover:scale-[1.02]"
+                  >
+                    <span className="absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/20" />
+                  </button>
+                  {canEdit && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void handleDeletePhoto(url);
+                      }}
+                      disabled={deletingPhotoUrl === url}
+                      title="Delete this photo"
+                      aria-label="Delete this photo"
+                      className="absolute right-1 top-1 z-10 flex h-6 w-6 items-center justify-center rounded-md bg-black/60 text-white opacity-0 transition-opacity hover:bg-red-500/80 focus:opacity-100 group-hover:opacity-100 disabled:cursor-wait disabled:opacity-100"
+                    >
+                      {deletingPhotoUrl === url ? (
+                        <VinylSpinner size="xs" />
+                      ) : (
+                        <X className="h-3.5 w-3.5" />
+                      )}
+                    </button>
+                  )}
+                </div>
               ))}
               {canEdit && (album.photo_urls ?? []).length < EBAY_MAX_PHOTOS && (
                 <label className="flex aspect-square cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-border transition-colors hover:border-accent/50">
