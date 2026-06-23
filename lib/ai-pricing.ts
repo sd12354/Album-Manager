@@ -185,16 +185,12 @@ export async function getAIPricingSuggestion(
       ? `\nRule-based suggested price (median × condition multiplier): $${input.currentSuggestedPrice.toFixed(2)}`
       : "";
 
-  const prompt = `You are an expert vinyl record market analyst with deep knowledge of collector demand, pressing rarity, and pricing dynamics on Discogs and eBay.
+  // Static system prompt is identical across every call — cache it with
+  // ephemeral cache_control so the bulk button charges 10% of normal input
+  // cost on the role/instructions portion after the first call.
+  const systemPrompt = `You are an expert vinyl record market analyst with deep knowledge of collector demand, pressing rarity, and pricing dynamics on Discogs and eBay.
 
-Analyse the album below and the market data, then recommend the optimal selling price. Consider: artist collectability, pressing rarity, genre demand trends, condition premium/discount vs. market, and whether the market is oversupplied or tight.
-
-ALBUM
-${albumDetails}
-
-MARKET DATA
-${marketLines.length > 0 ? marketLines.join("\n") : "No market data available — use genre knowledge only."}
-${currentPrice}
+Analyse each album and its market data, then recommend the optimal selling price. Consider: artist collectability, pressing rarity, genre demand trends, condition premium/discount vs. market, and whether the market is oversupplied or tight.
 
 Respond with ONLY a valid JSON object — no markdown, no explanation outside the JSON:
 {
@@ -205,11 +201,25 @@ Respond with ONLY a valid JSON object — no markdown, no explanation outside th
   "confidence": "<one of: low | medium | high>"
 }`;
 
+  const userPrompt = `ALBUM
+${albumDetails}
+
+MARKET DATA
+${marketLines.length > 0 ? marketLines.join("\n") : "No market data available — use genre knowledge only."}
+${currentPrice}`;
+
   const client = getClient();
   const message = await client.messages.create({
-    model: "claude-opus-4-5",
-    max_tokens: 512,
-    messages: [{ role: "user", content: prompt }],
+    model: "claude-sonnet-4-6",
+    max_tokens: 256,
+    system: [
+      {
+        type: "text",
+        text: systemPrompt,
+        cache_control: { type: "ephemeral" },
+      },
+    ],
+    messages: [{ role: "user", content: userPrompt }],
   });
 
   const text =

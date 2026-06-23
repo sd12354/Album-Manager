@@ -69,7 +69,7 @@ export function CatalogueClient({
   );
   const [sortBy, setSortBy] = useState<string>("default");
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [bulkLoading, setBulkLoading] = useState<null | "price" | "list" | "delete">(null);
+  const [bulkLoading, setBulkLoading] = useState<null | "price" | "ai-price" | "list" | "delete">(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const priceAllStartedRef = useRef(false);
   const marketplaceSyncStartedRef = useRef(false);
@@ -384,6 +384,113 @@ export function CatalogueClient({
     }
   }, [selectedIds, router]);
 
+  // AI bulk pricing — chunks the selection into 5-album batches because each
+  // call hits Claude Sonnet (2–4s per album). Total ≤60s per request keeps
+  // us under the Vercel function ceiling with headroom.
+  const handleBulkAIPrice = useCallback(async (ids = selectedIds) => {
+    if (ids.length === 0) return;
+
+    // Rough cost guard so a stray click can't drop $20+ in one shot. Sonnet
+    // at ~$0.004 per album → 100 albums ≈ $0.40. Confirm above 100.
+    if (ids.length > 100) {
+      const estimate = (ids.length * 0.004).toFixed(2);
+      if (
+        typeof window !== "undefined" &&
+        !window.confirm(
+          `AI-price ${ids.length} albums? Estimated Claude API cost: ~$${estimate}. Continue?`
+        )
+      ) {
+        return;
+      }
+    }
+
+    setBulkLoading("ai-price");
+    const CHUNK_SIZE = 5;
+    const chunks: string[][] = [];
+    for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
+      chunks.push(ids.slice(i, i + CHUNK_SIZE));
+    }
+
+    toast.info(
+      `AI-pricing ${ids.length} albums via Claude${
+        chunks.length > 1 ? ` (in ${chunks.length} batches)` : ""
+      }…`
+    );
+
+    const allResults: Array<{ status: "ok" | "skipped" | "error" }> = [];
+    let failedBatches = 0;
+    let firstBatchError: string | null = null;
+
+    try {
+      for (let i = 0; i < chunks.length; i++) {
+        try {
+          const res = await fetch("/api/pricing/ai-bulk", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ albumIds: chunks[i] }),
+          });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            failedBatches += 1;
+            if (!firstBatchError) {
+              firstBatchError =
+                err.error ?? `Batch ${i + 1} failed (HTTP ${res.status})`;
+            }
+            continue;
+          }
+          const { results } = (await res.json()) as {
+            results: typeof allResults;
+          };
+          allResults.push(...results);
+        } catch (batchErr) {
+          failedBatches += 1;
+          if (!firstBatchError) {
+            firstBatchError =
+              batchErr instanceof Error ? batchErr.message : "Network error";
+          }
+        }
+        if (chunks.length > 1) {
+          toast.info(`Batch ${i + 1}/${chunks.length} done`, { duration: 1500 });
+        }
+      }
+
+      const ok = allResults.filter((r) => r.status === "ok").length;
+      const skipped = allResults.filter((r) => r.status === "skipped").length;
+      const errors = allResults.filter((r) => r.status === "error").length;
+      const accountedFor = ok + skipped + errors;
+      const trulySkipped = Math.max(0, ids.length - accountedFor);
+
+      const parts: string[] = [];
+      if (ok) parts.push(`${ok} AI-priced`);
+      if (skipped) parts.push(`${skipped} skipped`);
+      if (errors) parts.push(`${errors} failed`);
+      if (trulySkipped > 0) parts.push(`${trulySkipped} not attempted`);
+
+      if (failedBatches > 0) {
+        const summary = parts.length > 0 ? parts.join(" · ") : "no albums priced";
+        toast.error(
+          `${failedBatches} of ${chunks.length} batches failed — ${summary}. ${firstBatchError ?? ""}`.trim(),
+          { duration: 10000 }
+        );
+      } else if (parts.length > 0) {
+        toast.success(parts.join(" · "));
+      } else {
+        toast.info("No albums AI-priced");
+      }
+
+      setRowSelection({});
+      router.refresh();
+    } catch (err) {
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "AI pricing request failed. Try again in a moment."
+      );
+    } finally {
+      setBulkLoading(null);
+    }
+  }, [selectedIds, router]);
+
   useEffect(() => {
     if (searchParams.get("action") !== "price-all") {
       priceAllStartedRef.current = false;
@@ -589,6 +696,22 @@ export function CatalogueClient({
               </>
             ) : (
               "Auto-Price Selected"
+            )}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => handleBulkAIPrice()}
+            disabled={!!bulkLoading}
+            title="Uses Claude AI for nuanced pricing. ~$0.004 per album (Sonnet)."
+          >
+            {bulkLoading === "ai-price" ? (
+              <>
+                <VinylSpinner size="xs" />
+                AI pricing...
+              </>
+            ) : (
+              "AI-Price Selected"
             )}
           </Button>
           {isOwner && (
