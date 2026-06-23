@@ -18,6 +18,71 @@ export const maxDuration = 60;
 export const dynamic = "force-dynamic";
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+interface CachedPricingRow {
+  source: string;
+  median_price: number | null;
+  lowest_price: number | null;
+  raw_data: Record<string, unknown> | null;
+}
+
+/**
+ * Rebuild a PricingResult from cached rows so we can apply the existing
+ * suggestion to an album row whose suggested_price was lost without
+ * re-hitting Discogs/eBay.
+ */
+function reconstructPricingFromCache(
+  rows: CachedPricingRow[],
+  condition: AlbumCondition
+): PricingResult {
+  const discogsRow = rows.find((r) => r.source === "discogs");
+  const ebayRow = rows.find((r) => r.source === "ebay");
+
+  const discogsResult =
+    discogsRow && typeof discogsRow.raw_data === "object" && discogsRow.raw_data
+      ? {
+          releaseId:
+            (discogsRow.raw_data.releaseId as number | undefined) ?? undefined,
+          releaseTitle: discogsRow.raw_data.releaseTitle as string | undefined,
+          releaseYear: discogsRow.raw_data.releaseYear as string | undefined,
+          median: discogsRow.median_price ?? undefined,
+          lowest: discogsRow.lowest_price ?? undefined,
+          numForSale: undefined as number | undefined,
+          priceForCondition:
+            (discogsRow.raw_data.priceForCondition as number | undefined) ??
+            undefined,
+          allConditionPrices:
+            (discogsRow.raw_data.allConditionPrices as
+              | Record<string, number>
+              | undefined) ?? undefined,
+          matchedVia: undefined as string | undefined,
+        }
+      : null;
+
+  const ebayResult =
+    ebayRow && typeof ebayRow.raw_data === "object" && ebayRow.raw_data
+      ? {
+          median: ebayRow.median_price ?? undefined,
+          lowest: ebayRow.lowest_price ?? undefined,
+          highest:
+            (ebayRow.raw_data.highest as number | undefined) ?? undefined,
+          comparables:
+            (ebayRow.raw_data.comparables as number[] | undefined) ?? [],
+          sampleListings:
+            (ebayRow.raw_data.sampleListings as
+              | Array<{ price: number; title: string; url: string }>
+              | undefined) ?? [],
+          count:
+            (ebayRow.raw_data.comparables as number[] | undefined)?.length ?? 0,
+        }
+      : null;
+
+  return buildCombinedPricing(
+    discogsResult?.releaseId ? discogsResult : null,
+    ebayResult && ebayResult.count > 0 ? ebayResult : null,
+    condition
+  );
+}
 const MAX_BULK = 3;
 
 export async function POST(request: Request) {
@@ -88,26 +153,60 @@ export async function POST(request: Request) {
         discogsAuthByOwner.set(typedAlbum.user_id, discogsAuth);
       }
 
-      // Cache check
+      // Cache check. We need the actual price data here, not just the source,
+      // because the album row may have lost its suggested_price (manual edit,
+      // CSV re-import overwrite, etc.) since the cache was written. Returning
+      // "cached" without reapplying the price was the bug behind users
+      // selecting albums to price and seeing nothing happen.
       if (!force) {
         const { data: cached } = await supabase
           .from("pricing_cache")
-          .select("source, fetched_at")
+          .select("source, fetched_at, median_price, lowest_price, raw_data")
           .eq("album_id", albumId)
           .order("fetched_at", { ascending: false });
-        const fresh = (cached ?? []).find(
+        const freshRows = (cached ?? []).filter(
           (r) =>
             r.fetched_at &&
             Date.now() - new Date(r.fetched_at).getTime() < CACHE_TTL_MS
         );
-        if (fresh) {
-          results.push({
-            albumId,
-            status: "cached",
-            source:
-              fresh.source === "ebay" ? "ebay-active" : "discogs-condition",
-          });
-          continue;
+        if (freshRows.length > 0) {
+          const cachedPricing = reconstructPricingFromCache(
+            freshRows,
+            typedAlbum.condition as AlbumCondition
+          );
+          if (
+            cachedPricing.suggestionSource &&
+            cachedPricing.suggestedPrice > 0
+          ) {
+            // Backfill the album row if its suggested_price was lost.
+            const needsUpdate =
+              (typedAlbum.suggested_price ?? 0) <= 0 ||
+              typedAlbum.suggested_price !== cachedPricing.suggestedPrice;
+            if (needsUpdate) {
+              await supabase
+                .from("albums")
+                .update({
+                  suggested_price: cachedPricing.suggestedPrice,
+                  discogs_release_id:
+                    cachedPricing.discogsReleaseId ??
+                    typedAlbum.discogs_release_id,
+                  status:
+                    typedAlbum.status === "unlisted"
+                      ? "pricing"
+                      : typedAlbum.status,
+                })
+                .eq("id", albumId)
+                .eq("user_id", typedAlbum.user_id);
+            }
+            results.push({
+              albumId,
+              status: "cached",
+              source: cachedPricing.suggestionSource,
+            });
+            continue;
+          }
+          // Cache rows exist but contain no usable pricing — fall through to
+          // re-fetch instead of returning a misleading "cached" status.
         }
       }
 
