@@ -14,13 +14,7 @@ import { toast } from "sonner";
 import { VinylSpinner } from "@/components/vinyl-spinner";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableAlbumPicker } from "@/components/searchable-album-picker";
 import {
   ACCEPT_ATTRIBUTE,
   convertHeicToJpeg,
@@ -825,41 +819,34 @@ export function PhotoMatchPanel() {
                           Attach to
                         </label>
 
-                        <Select
-                          value={row.selectedAlbumId ?? ""}
-                          onValueChange={(albumId) =>
+                        <SearchableAlbumPicker
+                          className="max-w-xs"
+                          value={row.selectedAlbumId}
+                          onChange={(albumId) =>
                             updateRow(row.id, {
                               selectedAlbumId: albumId,
                               include: true,
                             })
                           }
-                        >
-                          <SelectTrigger className="h-8 max-w-xs text-xs">
-                            <SelectValue placeholder="Pick album…" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {(row.alternatives ?? []).map((alt) => (
-                              <SelectItem key={alt.albumId} value={alt.albumId}>
-                                {alt.artist} — {alt.title}
-                                {alt.confidence !== "none" && (
-                                  <> ({Math.round(alt.score * 100)}%)</>
-                                )}
-                              </SelectItem>
-                            ))}
-                            {albums
-                              .filter(
-                                (a) =>
-                                  !(row.alternatives ?? []).some(
-                                    (alt) => alt.albumId === a.id
-                                  )
-                              )
-                              .map((a) => (
-                                <SelectItem key={a.id} value={a.id}>
-                                  {a.artist} — {a.title}
-                                </SelectItem>
-                              ))}
-                          </SelectContent>
-                        </Select>
+                          suggested={(row.alternatives ?? [])
+                            .map((alt) => ({
+                              id: alt.albumId,
+                              artist: alt.artist,
+                              title: alt.title,
+                              hint:
+                                alt.confidence !== "none"
+                                  ? `${Math.round(alt.score * 100)}%`
+                                  : undefined,
+                            }))
+                            .filter((s) =>
+                              albums.some((a) => a.id === s.id)
+                            )}
+                          options={albums.map((a) => ({
+                            id: a.id,
+                            artist: a.artist,
+                            title: a.title,
+                          }))}
+                        />
 
                         {row.match && (
                           <span
