@@ -64,6 +64,7 @@ export function CatalogueClient({
   const [conditionFilter, setConditionFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [priceFilter, setPriceFilter] = useState<string>("all");
+  const [duplicateFilter, setDuplicateFilter] = useState<string>("all");
   const [photoFilter, setPhotoFilter] = useState<string>(
     searchParams.get("missing") === "photos" ? "missing" : "all"
   );
@@ -115,6 +116,28 @@ export function CatalogueClient({
     };
   }, [isOwner, albums, router]);
 
+  // Group albums by a normalized (artist|title) key so duplicates can be
+  // surfaced. We pick the natural-language definition: same artist + same
+  // title (case- and whitespace-insensitive). Catalog # is intentionally
+  // ignored — repeated catalog numbers are how reissues are flagged, and
+  // we don't want to hide them.
+  const duplicateIds = useMemo(() => {
+    const buckets = new Map<string, string[]>();
+    for (const album of albums) {
+      const key = `${album.artist.trim().toLowerCase()}|${album.title.trim().toLowerCase()}`;
+      if (!key.includes("|") || key === "|") continue; // missing artist/title
+      const list = buckets.get(key) ?? [];
+      list.push(album.id);
+      buckets.set(key, list);
+    }
+    const dupIds = new Set<string>();
+    for (const list of buckets.values()) {
+      if (list.length > 1) for (const id of list) dupIds.add(id);
+    }
+    return dupIds;
+  }, [albums]);
+  const duplicateCount = duplicateIds.size;
+
   const filteredData = useMemo(() => {
     const filtered = albums.filter((album) => {
       const matchesSearch =
@@ -137,12 +160,18 @@ export function CatalogueClient({
         priceFilter === "all" ||
         (priceFilter === "priced" && hasPrice) ||
         (priceFilter === "unpriced" && !hasPrice);
+      const isDuplicate = duplicateIds.has(album.id);
+      const matchesDuplicate =
+        duplicateFilter === "all" ||
+        (duplicateFilter === "duplicates" && isDuplicate) ||
+        (duplicateFilter === "uniques" && !isDuplicate);
       return (
         matchesSearch &&
         matchesCondition &&
         matchesStatus &&
         matchesPhotos &&
-        matchesPrice
+        matchesPrice &&
+        matchesDuplicate
       );
     });
 
@@ -151,10 +180,18 @@ export function CatalogueClient({
         album.list_price ?? album.suggested_price ?? 0;
       const dir = sortBy === "price-desc" ? -1 : 1;
       filtered.sort((a, b) => (priceOf(a) - priceOf(b)) * dir);
+    } else if (duplicateFilter === "duplicates") {
+      // When viewing duplicates, sort by artist/title so identical copies
+      // sit next to each other for easy comparison and deletion.
+      filtered.sort((a, b) => {
+        const k = a.artist.trim().toLowerCase().localeCompare(b.artist.trim().toLowerCase());
+        if (k !== 0) return k;
+        return a.title.trim().toLowerCase().localeCompare(b.title.trim().toLowerCase());
+      });
     }
 
     return filtered;
-  }, [albums, globalFilter, conditionFilter, statusFilter, photoFilter, priceFilter, sortBy]);
+  }, [albums, globalFilter, conditionFilter, statusFilter, photoFilter, priceFilter, duplicateFilter, duplicateIds, sortBy]);
 
   const columns = useMemo<ColumnDef<Album>[]>(
     () => [
@@ -666,6 +703,19 @@ export function CatalogueClient({
             <SelectItem value="all">Pricing</SelectItem>
             <SelectItem value="priced">Priced</SelectItem>
             <SelectItem value="unpriced">Not priced</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={duplicateFilter} onValueChange={setDuplicateFilter}>
+          <SelectTrigger className="w-[160px]">
+            <SelectValue placeholder="Duplicates" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">
+              Duplicates
+              {duplicateCount > 0 ? ` (${duplicateCount})` : ""}
+            </SelectItem>
+            <SelectItem value="duplicates">Only duplicates</SelectItem>
+            <SelectItem value="uniques">Only uniques</SelectItem>
           </SelectContent>
         </Select>
         <Select value={sortBy} onValueChange={setSortBy}>

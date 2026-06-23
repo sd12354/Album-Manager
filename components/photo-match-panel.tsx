@@ -826,23 +826,27 @@ export function PhotoMatchPanel() {
                   {row.status === "error" && (
                     <p className="text-xs text-red-400">{row.error}</p>
                   )}
-                  {row.status === "done" && row.identified && (
+                  {(row.status === "done" || row.status === "error") && (
                     <>
-                      <p className="text-xs text-muted-foreground">
-                        Detected:{" "}
-                        <span className="text-foreground">
-                          {row.identified.artist} — {row.identified.title}
-                        </span>
-                        {row.identified.catalogNumber && (
-                          <> · Cat# {row.identified.catalogNumber}</>
-                        )}
-                      </p>
+                      {row.status === "done" && row.identified && (
+                        <>
+                          <p className="text-xs text-muted-foreground">
+                            Detected:{" "}
+                            <span className="text-foreground">
+                              {row.identified.artist} — {row.identified.title}
+                            </span>
+                            {row.identified.catalogNumber && (
+                              <> · Cat# {row.identified.catalogNumber}</>
+                            )}
+                          </p>
 
-                      {row.confirmedVia === "discogs-cover" && (
-                        <p className="flex items-center gap-1 text-[11px] text-accent">
-                          <CheckCircle2 className="h-3 w-3" />
-                          Confirmed by matching the cover art to Discogs
-                        </p>
+                          {row.confirmedVia === "discogs-cover" && (
+                            <p className="flex items-center gap-1 text-[11px] text-accent">
+                              <CheckCircle2 className="h-3 w-3" />
+                              Confirmed by matching the cover art to Discogs
+                            </p>
+                          )}
+                        </>
                       )}
 
                       <div className="flex flex-wrap items-center gap-2">
@@ -887,7 +891,7 @@ export function PhotoMatchPanel() {
                           }))}
                         />
 
-                        {row.match && (
+                        {row.status === "done" && row.match && (
                           <span
                             className={cn(
                               "rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide",
@@ -897,9 +901,14 @@ export function PhotoMatchPanel() {
                             {row.match.confidence} match
                           </span>
                         )}
-                        {!row.match && (
+                        {row.status === "done" && !row.match && (
                           <span className="text-[10px] text-amber-400">
                             No auto-match — pick manually
+                          </span>
+                        )}
+                        {row.status === "error" && (
+                          <span className="text-[10px] text-amber-400">
+                            AI couldn&apos;t read this cover — pick the album manually
                           </span>
                         )}
                       </div>
