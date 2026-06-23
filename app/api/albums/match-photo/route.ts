@@ -15,6 +15,7 @@ import {
   searchDiscogsCandidates,
 } from "@/lib/discogs";
 import { ACCEPTED_MIME_TYPES } from "@/lib/photos";
+import { fetchAllPages } from "@/lib/paginate";
 import type { Album } from "@/types";
 
 export const runtime = "nodejs";
@@ -100,23 +101,28 @@ export async function POST(request: Request) {
     );
   }
 
-  // Explicit .range() overrides Supabase's 1000-row default so AI matching
-  // can see every album in catalogues over 1000.
-  const { data: albums, error: albumsError } = await supabase
-    .from("albums")
-    .select("id, artist, title, catalog_number, photo_urls")
-    .eq("user_id", ctx.ownerId)
-    .order("title", { ascending: true })
-    .range(0, 49999);
-
-  if (albumsError) {
-    return NextResponse.json({ error: albumsError.message }, { status: 500 });
-  }
-
-  const allCatalogue = (albums ?? []) as Pick<
+  // Paginate so the project-level db-max-rows cap can't truncate the
+  // candidate set on large catalogues.
+  type CandidateRow = Pick<
     Album,
     "id" | "artist" | "title" | "catalog_number" | "photo_urls"
-  >[];
+  >;
+  let allCatalogue: CandidateRow[];
+  try {
+    allCatalogue = await fetchAllPages<CandidateRow>((from, to) =>
+      supabase
+        .from("albums")
+        .select("id, artist, title, catalog_number, photo_urls")
+        .eq("user_id", ctx.ownerId)
+        .order("title", { ascending: true })
+        .range(from, to)
+    );
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Failed to load catalogue" },
+      { status: 500 }
+    );
+  }
   const catalogue = missingPhotosOnly
     ? allCatalogue.filter(
         (a) => !Array.isArray(a.photo_urls) || a.photo_urls.length === 0

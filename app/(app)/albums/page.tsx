@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { CatalogueClient } from "@/components/catalogue-client";
 import { VinylSpinner } from "@/components/vinyl-spinner";
 import { canManage, getActiveCollection } from "@/lib/collections";
+import { fetchAllPages } from "@/lib/paginate";
 import type { Album } from "@/types";
 
 export default async function AlbumsPage() {
@@ -16,15 +17,16 @@ export default async function AlbumsPage() {
   const canEdit = canManage(active?.role ?? "owner");
 
   // Scope to the active collection's owner so own + shared albums don't mix.
-  // Explicit .range() overrides Supabase's default 1000-row cap that was
-  // silently truncating large catalogues (e.g. 1100 albums imported, only
-  // first 1000 displayed).
-  const { data: albums } = await supabase
-    .from("albums")
-    .select("*")
-    .eq("user_id", ownerId)
-    .order("title", { ascending: true })
-    .range(0, 49999);
+  // Paginate so the project-level db-max-rows cap (Supabase default 1000)
+  // can't silently truncate a large catalogue.
+  const albums = await fetchAllPages<Album>((from, to) =>
+    supabase
+      .from("albums")
+      .select("*")
+      .eq("user_id", ownerId)
+      .order("title", { ascending: true })
+      .range(from, to)
+  ).catch(() => [] as Album[]);
 
   return (
     <Suspense
@@ -35,7 +37,7 @@ export default async function AlbumsPage() {
       }
     >
       <CatalogueClient
-        albums={(albums ?? []) as Album[]}
+        albums={albums}
         canEdit={canEdit}
         isOwner={active?.isOwner ?? true}
         ownerId={ownerId}

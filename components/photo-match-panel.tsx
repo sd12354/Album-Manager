@@ -23,6 +23,7 @@ import {
   sanitizeFilename,
 } from "@/lib/photos";
 import { createClient } from "@/lib/supabase/client";
+import { fetchAllPages } from "@/lib/paginate";
 import type { AlbumMatchCandidate } from "@/lib/album-matching";
 import type { Album } from "@/types";
 import { cn } from "@/lib/utils";
@@ -153,21 +154,18 @@ export function PhotoMatchPanel() {
         setCanEdit(active.role === "owner" || active.role === "editor");
         setCollectionLabel(active.isOwner ? null : (active.label as string));
 
-        // Explicit .range() overrides Supabase's 1000-row default so the
-        // matcher / picker can see every album in catalogues over 1000.
-        const { data, error } = await supabase
-          .from("albums")
-          .select("id, artist, title, photo_urls")
-          .eq("user_id", activeOwner)
-          .order("title", { ascending: true })
-          .range(0, 49999);
-        if (error) throw error;
-        setAlbums(
-          (data ?? []) as Pick<
-            Album,
-            "id" | "artist" | "title" | "photo_urls"
-          >[]
+        // Paginate so the project-level db-max-rows cap can't truncate
+        // the picker / matcher candidate set on large catalogues.
+        type PickerRow = Pick<Album, "id" | "artist" | "title" | "photo_urls">;
+        const rows = await fetchAllPages<PickerRow>((from, to) =>
+          supabase
+            .from("albums")
+            .select("id, artist, title, photo_urls")
+            .eq("user_id", activeOwner)
+            .order("title", { ascending: true })
+            .range(from, to)
         );
+        setAlbums(rows);
       } catch (error) {
         setAlbums([]);
         setCanEdit(false);
