@@ -296,7 +296,7 @@ export function CatalogueClient({
     );
 
     const allResults: Array<{
-      status: "ok" | "cached" | "no_data" | "error";
+      status: "ok" | "cached" | "no_data" | "no_pricing" | "error";
       source?: string;
     }> = [];
     let failedBatches = 0;
@@ -337,11 +337,12 @@ export function CatalogueClient({
       const ok = allResults.filter((r) => r.status === "ok").length;
       const cached = allResults.filter((r) => r.status === "cached").length;
       const noData = allResults.filter((r) => r.status === "no_data").length;
+      const noPricing = allResults.filter((r) => r.status === "no_pricing").length;
       const errors = allResults.filter((r) => r.status === "error").length;
       const ebayCount = allResults.filter(
         (r) => r.status === "ok" && r.source === "ebay-active"
       ).length;
-      const accountedFor = ok + cached + noData + errors;
+      const accountedFor = ok + cached + noData + noPricing + errors;
       const trulySkipped = Math.max(0, ids.length - accountedFor);
 
       const parts: string[] = [];
@@ -353,7 +354,8 @@ export function CatalogueClient({
         );
       }
       if (cached) parts.push(`${cached} cached`);
-      if (noData) parts.push(`${noData} no match`);
+      if (noData) parts.push(`${noData} not found`);
+      if (noPricing) parts.push(`${noPricing} found but no pricing data`);
       if (errors) parts.push(`${errors} failed`);
       if (trulySkipped > 0) parts.push(`${trulySkipped} not attempted`);
 
