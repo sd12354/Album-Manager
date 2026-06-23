@@ -247,13 +247,15 @@ export async function POST(request: Request) {
         // otherwise, and the second one falsely implies the search is
         // broken. Discogs sets a releaseId when it found a release.
         const releaseFoundButNoPricing = !!discogsResult?.releaseId;
+        const notice = releaseFoundButNoPricing
+          ? `${discogsResult?.error ?? "Discogs had no pricing"}. eBay fallback also returned no results${ebayResult?.error ? `: ${ebayResult.error}` : ""}.`
+          : (discogsResult?.error ??
+              ebayResult?.error ??
+              "No pricing data from Discogs or eBay.");
         results.push({
           albumId,
           status: releaseFoundButNoPricing ? "no_pricing" : "no_data",
-          notice:
-            discogsResult?.error ??
-            ebayResult?.error ??
-            "No pricing data from Discogs or eBay.",
+          notice,
         });
         continue;
       }

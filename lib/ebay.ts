@@ -645,6 +645,11 @@ function filterOutliers(prices: number[]): number[] {
  * Search eBay Browse API for active vinyl listings. Returns aggregate price
  * stats useful as pricing comparables. Requires sandbox or production app
  * credentials — sandbox returns very few/no real results.
+ *
+ * Tries progressively broader queries until at least one valid listing is
+ * found: precise → without genre subcategory → without any category. This
+ * is the fallback path used when Discogs has no marketplace data, so we
+ * want to maximize the chance of producing *something* useful.
  */
 export async function searchEbayActiveListings(
   artist: string,
@@ -655,7 +660,8 @@ export async function searchEbayActiveListings(
   } = {}
 ): Promise<EbayPriceResult> {
   const limit = options.limit ?? 25;
-  const categoryId = getCategoryForGenre(options.genre);
+  const genreCategory = getCategoryForGenre(options.genre);
+  const VINYL_PARENT_CATEGORY = 176985; // top-level Music > Records
 
   let token: string;
   try {
@@ -669,45 +675,79 @@ export async function searchEbayActiveListings(
     };
   }
 
-  const query = `${artist} ${title} vinyl`.replace(/\s+/g, " ").trim();
-  const params = new URLSearchParams({
-    q: query,
-    category_ids: String(categoryId),
-    limit: String(limit),
-    filter: "buyingOptions:{FIXED_PRICE}",
-  });
+  const baseQuery = `${artist} ${title}`.replace(/\s+/g, " ").trim();
+  // Exclude obvious merch (the Records category catches most of it, but the
+  // odd t-shirt or poster sneaks in).
+  const merchKeyword =
+    /\b(poster|t-?shirt|shirt|mug|sticker|patch|hat|cap|hoodie|book|cd|cassette|tape|dvd)\b/i;
 
-  const res = await fetch(`${EBAY_BROWSE_URL}/item_summary/search?${params}`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
-      Accept: "application/json",
-    },
-    cache: "no-store",
-  });
-
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    return {
-      count: 0,
-      comparables: [],
-      sampleListings: [],
-      error: `eBay Browse API ${res.status}: ${body.slice(0, 200)}`,
-    };
+  async function runQuery(
+    query: string,
+    categoryId: number | null
+  ): Promise<EbayBrowseResponse["itemSummaries"]> {
+    const params = new URLSearchParams({
+      q: query,
+      limit: String(limit),
+      filter: "buyingOptions:{FIXED_PRICE}",
+    });
+    if (categoryId) params.set("category_ids", String(categoryId));
+    const res = await fetch(
+      `${EBAY_BROWSE_URL}/item_summary/search?${params}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
+          Accept: "application/json",
+        },
+        cache: "no-store",
+      }
+    );
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`eBay Browse API ${res.status}: ${body.slice(0, 200)}`);
+    }
+    const data = (await res.json()) as EbayBrowseResponse;
+    return data.itemSummaries ?? [];
   }
 
-  const data = (await res.json()) as EbayBrowseResponse;
-  const items = data.itemSummaries ?? [];
+  function filterValid(
+    items: EbayBrowseResponse["itemSummaries"]
+  ): NonNullable<EbayBrowseResponse["itemSummaries"]> {
+    return (items ?? []).filter((item) => {
+      if (!item.price?.value) return false;
+      if (item.price.currency !== "USD") return false;
+      if (!item.title) return false;
+      // Don't require "vinyl" in title — most listings just say
+      // "Artist - Album". Reject obvious non-vinyl formats instead.
+      return !merchKeyword.test(item.title);
+    });
+  }
 
-  // Filter items: must have a USD price, must mention vinyl/LP/album/record in
-  // title (cuts out merch, posters, framed art, etc.).
-  const vinylKeyword = /\b(vinyl|lp|album|record|33\s?(?:1\/3|rpm)|45\s?rpm)\b/i;
-  const validItems = items.filter((item) => {
-    if (!item.price?.value) return false;
-    if (item.price.currency !== "USD") return false;
-    if (!item.title) return false;
-    return vinylKeyword.test(item.title);
-  });
+  let validItems: NonNullable<EbayBrowseResponse["itemSummaries"]> = [];
+  let lastError: string | undefined;
+
+  // Stage 1: precise — genre subcategory if we have one, else parent.
+  // Stage 2: broaden to the parent Records category.
+  // Stage 3: drop category entirely (catches mis-categorized vinyl listings).
+  const stages: Array<{ q: string; cat: number | null; label: string }> = [
+    { q: baseQuery, cat: genreCategory, label: "genre category" },
+    { q: baseQuery, cat: VINYL_PARENT_CATEGORY, label: "records category" },
+    { q: baseQuery, cat: null, label: "no category filter" },
+  ];
+
+  for (const stage of stages) {
+    try {
+      const items = await runQuery(stage.q, stage.cat);
+      const valid = filterValid(items);
+      if (valid.length > 0) {
+        validItems = valid;
+        break;
+      }
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
+      // Don't abort — try the next, broader stage.
+    }
+  }
 
   const rawPrices = validItems
     .map((item) => parseFloat(item.price!.value))
@@ -719,9 +759,7 @@ export async function searchEbayActiveListings(
       comparables: [],
       sampleListings: [],
       error:
-        items.length > 0
-          ? "eBay returned listings but none looked like vinyl pressings."
-          : `No eBay vinyl listings found for "${query}".`,
+        lastError ?? `No eBay listings found for "${baseQuery}" (tried records category + open search).`,
     };
   }
 
