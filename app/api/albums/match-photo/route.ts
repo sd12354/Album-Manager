@@ -81,7 +81,23 @@ export async function POST(request: Request) {
     const message =
       err instanceof Error ? err.message : "Could not read cover photo";
     console.error("[match-photo]", { event: "identify_failed", message });
-    return NextResponse.json({ error: message }, { status: 422 });
+    // Propagate Anthropic's status when we can detect it, so the client's
+    // retry-on-429/5xx logic kicks in for transient upstream blips. The
+    // Anthropic SDK puts the upstream HTTP status on the thrown error.
+    const upstreamStatus =
+      err && typeof err === "object" && "status" in err
+        ? Number((err as { status?: unknown }).status)
+        : NaN;
+    const passthroughStatus =
+      upstreamStatus === 429
+        ? 429
+        : upstreamStatus >= 500 && upstreamStatus < 600
+          ? 502
+          : 422;
+    return NextResponse.json(
+      { error: message, upstream: Number.isFinite(upstreamStatus) ? upstreamStatus : undefined },
+      { status: passthroughStatus }
+    );
   }
 
   const { data: albums, error: albumsError } = await supabase
