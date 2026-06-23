@@ -70,6 +70,9 @@ export async function POST(request: Request) {
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
+  // Default: skip albums that already have a cover photo so we don't
+  // re-match them. Client can opt out (e.g. to replace an existing cover).
+  const missingPhotosOnly = formData.get("missingPhotosOnly") !== "false";
 
   let identified;
   try {
@@ -83,7 +86,7 @@ export async function POST(request: Request) {
 
   const { data: albums, error: albumsError } = await supabase
     .from("albums")
-    .select("id, artist, title, catalog_number")
+    .select("id, artist, title, catalog_number, photo_urls")
     .eq("user_id", ctx.ownerId)
     .order("title", { ascending: true });
 
@@ -91,10 +94,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: albumsError.message }, { status: 500 });
   }
 
-  const catalogue = (albums ?? []) as Pick<
+  const allCatalogue = (albums ?? []) as Pick<
     Album,
-    "id" | "artist" | "title" | "catalog_number"
+    "id" | "artist" | "title" | "catalog_number" | "photo_urls"
   >[];
+  const catalogue = missingPhotosOnly
+    ? allCatalogue.filter(
+        (a) => !Array.isArray(a.photo_urls) || a.photo_urls.length === 0
+      )
+    : allCatalogue;
 
   // Fast path: match the OCR reading against the catalogue first.
   let matchResult = findBestAlbumMatch(identified, catalogue);

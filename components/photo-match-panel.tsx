@@ -111,9 +111,10 @@ function confidenceBadge(confidence?: string) {
 export function PhotoMatchPanel() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [rows, setRows] = useState<PhotoMatchRow[]>([]);
-  const [albums, setAlbums] = useState<Pick<Album, "id" | "artist" | "title">[]>(
-    []
-  );
+  const [albums, setAlbums] = useState<
+    Pick<Album, "id" | "artist" | "title" | "photo_urls">[]
+  >([]);
+  const [excludeMatched, setExcludeMatched] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzeProgress, setAnalyzeProgress] = useState(0);
   const [attaching, setAttaching] = useState(false);
@@ -154,11 +155,16 @@ export function PhotoMatchPanel() {
 
         const { data, error } = await supabase
           .from("albums")
-          .select("id, artist, title")
+          .select("id, artist, title, photo_urls")
           .eq("user_id", activeOwner)
           .order("title", { ascending: true });
         if (error) throw error;
-        setAlbums((data ?? []) as Pick<Album, "id" | "artist" | "title">[]);
+        setAlbums(
+          (data ?? []) as Pick<
+            Album,
+            "id" | "artist" | "title" | "photo_urls"
+          >[]
+        );
       } catch (error) {
         setAlbums([]);
         setCanEdit(false);
@@ -374,6 +380,7 @@ export function PhotoMatchPanel() {
           // Rebuild FormData each attempt — File is fine to re-read.
           const formData = new FormData();
           formData.append("file", row.file);
+          formData.append("missingPhotosOnly", excludeMatched ? "true" : "false");
 
           let res: Response;
           try {
@@ -580,6 +587,20 @@ export function PhotoMatchPanel() {
     setAttaching(false);
   }
 
+  // When the "only missing photos" toggle is on, hide already-covered
+  // albums from the manual picker so the user can't accidentally re-match
+  // a photo to an album that already has a cover.
+  const pickerAlbums = useMemo(
+    () =>
+      excludeMatched
+        ? albums.filter(
+            (a) => !Array.isArray(a.photo_urls) || a.photo_urls.length === 0
+          )
+        : albums,
+    [albums, excludeMatched]
+  );
+  const skippedCoveredCount = albums.length - pickerAlbums.length;
+
   const readyCount = rows.filter((r) => r.status === "done").length;
   const selectedCount = rows.filter((r) => r.include && r.selectedAlbumId).length;
   const unmatchedCount = rows.filter(
@@ -683,6 +704,23 @@ export function PhotoMatchPanel() {
 
       {rows.length > 0 && (
         <>
+          <label className="mt-4 flex w-fit cursor-pointer items-center gap-2 rounded-lg border border-border bg-muted/10 px-3 py-2 text-xs">
+            <input
+              type="checkbox"
+              checked={excludeMatched}
+              onChange={(e) => setExcludeMatched(e.target.checked)}
+              className="h-3.5 w-3.5 accent-[#8b7fe8]"
+            />
+            <span>
+              Only match albums missing a cover photo
+              {excludeMatched && skippedCoveredCount > 0 && (
+                <span className="ml-2 text-muted-foreground">
+                  ({skippedCoveredCount} album{skippedCoveredCount === 1 ? "" : "s"} hidden)
+                </span>
+              )}
+            </span>
+          </label>
+
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <Button
               onClick={analyzePhotos}
@@ -839,9 +877,9 @@ export function PhotoMatchPanel() {
                                   : undefined,
                             }))
                             .filter((s) =>
-                              albums.some((a) => a.id === s.id)
+                              pickerAlbums.some((a) => a.id === s.id)
                             )}
-                          options={albums.map((a) => ({
+                          options={pickerAlbums.map((a) => ({
                             id: a.id,
                             artist: a.artist,
                             title: a.title,
