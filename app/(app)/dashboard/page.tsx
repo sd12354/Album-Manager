@@ -132,8 +132,15 @@ export default async function DashboardPage() {
     (a) => Array.isArray(a.photo_urls) && a.photo_urls.length > 0
   ).length;
   const missingPhotos = totalAlbums - withPhotos;
+  // Never round up to 100% while any album is still missing a photo (e.g.
+  // 336/337 = 99.7% used to display "100%" which contradicted the
+  // "1 missing photos" badge next to it).
   const photoCoveragePct =
-    totalAlbums > 0 ? Math.round((withPhotos / totalAlbums) * 100) : 0;
+    totalAlbums === 0
+      ? 0
+      : missingPhotos === 0
+        ? 100
+        : Math.min(99, Math.floor((withPhotos / totalAlbums) * 100));
 
   const unlistedValue = unsoldAlbums
     .filter((a) => a.status !== "listed")
@@ -186,11 +193,11 @@ export default async function DashboardPage() {
                 <div className="flex flex-wrap items-center gap-3">
                   <span className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-sm font-medium text-emerald-400">
                     <ImageIcon className="h-4 w-4" />
-                    {withPhotos} with photos
+                    {withPhotos} with photo{withPhotos === 1 ? "" : "s"}
                   </span>
                   <span className="inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-sm font-medium text-amber-400">
                     <ImageOff className="h-4 w-4" />
-                    {missingPhotos} missing photos
+                    {missingPhotos} missing photo{missingPhotos === 1 ? "" : "s"}
                   </span>
                   {missingPhotos > 0 && (
                     <Button variant="outline" size="sm" asChild>
