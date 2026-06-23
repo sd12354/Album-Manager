@@ -85,6 +85,9 @@ export function CatalogueClient({
     if (searchParams.get("missing") === "photos") return "missing";
     return searchParams.get("photos") ?? "all";
   });
+  const [genreFilter, setGenreFilter] = useState<string>(
+    () => searchParams.get("genre") ?? "all"
+  );
   const [sortBy, setSortBy] = useState<string>(
     () => searchParams.get("sort") ?? "default"
   );
@@ -118,6 +121,7 @@ export function CatalogueClient({
     set("pricing", priceFilter, "all");
     set("dupes", duplicateFilter, "all");
     set("photos", photoFilter, "all");
+    set("genre", genreFilter, "all");
     set("sort", sortBy, "default");
     // Drop the legacy alias once the new param is in place.
     params.delete("missing");
@@ -134,6 +138,7 @@ export function CatalogueClient({
     priceFilter,
     duplicateFilter,
     photoFilter,
+    genreFilter,
     sortBy,
     pathname,
     router,
@@ -191,6 +196,25 @@ export function CatalogueClient({
   }, [albums]);
   const duplicateCount = duplicateIds.size;
 
+  // Build the genre dropdown options from whatever's in the catalogue.
+  // Counts include albums with no genre via a synthetic "__none__" bucket.
+  const genreOptions = useMemo(() => {
+    const counts = new Map<string, number>();
+    let noneCount = 0;
+    for (const a of albums) {
+      const g = (a.genre ?? "").trim();
+      if (!g) {
+        noneCount += 1;
+        continue;
+      }
+      counts.set(g, (counts.get(g) ?? 0) + 1);
+    }
+    const sorted = Array.from(counts.entries()).sort((a, b) =>
+      a[0].localeCompare(b[0])
+    );
+    return { sorted, noneCount };
+  }, [albums]);
+
   const filteredData = useMemo(() => {
     const filtered = albums.filter((album) => {
       const matchesSearch =
@@ -218,13 +242,20 @@ export function CatalogueClient({
         duplicateFilter === "all" ||
         (duplicateFilter === "duplicates" && isDuplicate) ||
         (duplicateFilter === "uniques" && !isDuplicate);
+      const matchesGenre =
+        genreFilter === "all" ||
+        (genreFilter === "__none__"
+          ? !album.genre || !album.genre.trim()
+          : (album.genre ?? "").trim().toLowerCase() ===
+            genreFilter.toLowerCase());
       return (
         matchesSearch &&
         matchesCondition &&
         matchesStatus &&
         matchesPhotos &&
         matchesPrice &&
-        matchesDuplicate
+        matchesDuplicate &&
+        matchesGenre
       );
     });
 
@@ -244,7 +275,7 @@ export function CatalogueClient({
     }
 
     return filtered;
-  }, [albums, globalFilter, conditionFilter, statusFilter, photoFilter, priceFilter, duplicateFilter, duplicateIds, sortBy]);
+  }, [albums, globalFilter, conditionFilter, statusFilter, photoFilter, priceFilter, duplicateFilter, duplicateIds, genreFilter, sortBy]);
 
   const columns = useMemo<ColumnDef<Album>[]>(
     () => [
@@ -723,6 +754,26 @@ export function CatalogueClient({
             )}
           </SelectContent>
         </Select>
+        {(genreOptions.sorted.length > 0 || genreOptions.noneCount > 0) && (
+          <Select value={genreFilter} onValueChange={setGenreFilter}>
+            <SelectTrigger className="w-[160px]">
+              <SelectValue placeholder="Genre" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Genre</SelectItem>
+              {genreOptions.sorted.map(([g, count]) => (
+                <SelectItem key={g} value={g}>
+                  {g} ({count})
+                </SelectItem>
+              ))}
+              {genreOptions.noneCount > 0 && (
+                <SelectItem value="__none__">
+                  No genre ({genreOptions.noneCount})
+                </SelectItem>
+              )}
+            </SelectContent>
+          </Select>
+        )}
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-[130px]">
             <SelectValue placeholder="Status" />
