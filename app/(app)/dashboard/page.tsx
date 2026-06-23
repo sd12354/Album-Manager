@@ -84,11 +84,14 @@ export default async function DashboardPage() {
   const active = user ? await getActiveCollection(user) : null;
   const ownerId = active?.ownerId ?? user?.id ?? "";
 
+  // Explicit .range() overrides Supabase's default 1000-row cap so the
+  // dashboard counts/value/photo-coverage tiles reflect the whole catalogue.
   const { data: albums } = await supabase
     .from("albums")
     .select("*")
     .eq("user_id", ownerId)
-    .order("updated_at", { ascending: false });
+    .order("updated_at", { ascending: false })
+    .range(0, 49999);
 
   const allAlbums = (albums ?? []) as Album[];
   const totalAlbums = allAlbums.length;

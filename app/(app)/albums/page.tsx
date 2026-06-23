@@ -16,11 +16,15 @@ export default async function AlbumsPage() {
   const canEdit = canManage(active?.role ?? "owner");
 
   // Scope to the active collection's owner so own + shared albums don't mix.
+  // Explicit .range() overrides Supabase's default 1000-row cap that was
+  // silently truncating large catalogues (e.g. 1100 albums imported, only
+  // first 1000 displayed).
   const { data: albums } = await supabase
     .from("albums")
     .select("*")
     .eq("user_id", ownerId)
-    .order("title", { ascending: true });
+    .order("title", { ascending: true })
+    .range(0, 49999);
 
   return (
     <Suspense

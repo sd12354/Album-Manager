@@ -153,11 +153,14 @@ export function PhotoMatchPanel() {
         setCanEdit(active.role === "owner" || active.role === "editor");
         setCollectionLabel(active.isOwner ? null : (active.label as string));
 
+        // Explicit .range() overrides Supabase's 1000-row default so the
+        // matcher / picker can see every album in catalogues over 1000.
         const { data, error } = await supabase
           .from("albums")
           .select("id, artist, title, photo_urls")
           .eq("user_id", activeOwner)
-          .order("title", { ascending: true });
+          .order("title", { ascending: true })
+          .range(0, 49999);
         if (error) throw error;
         setAlbums(
           (data ?? []) as Pick<
