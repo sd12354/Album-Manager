@@ -113,7 +113,7 @@ export async function POST(request: Request) {
 
   type BulkResult =
     | { albumId: string; status: "ok" | "cached"; source: NonNullable<PricingResult["suggestionSource"]> }
-    | { albumId: string; status: "no_data"; notice: string }
+    | { albumId: string; status: "no_data" | "no_pricing"; notice: string }
     | { albumId: string; status: "error"; error: string };
 
   const results: BulkResult[] = [];
@@ -242,9 +242,14 @@ export async function POST(request: Request) {
       );
 
       if (!pricing.suggestionSource) {
+        // Differentiate "release was found but no marketplace data" from
+        // "no release found at all" — they look identical to the user
+        // otherwise, and the second one falsely implies the search is
+        // broken. Discogs sets a releaseId when it found a release.
+        const releaseFoundButNoPricing = !!discogsResult?.releaseId;
         results.push({
           albumId,
-          status: "no_data",
+          status: releaseFoundButNoPricing ? "no_pricing" : "no_data",
           notice:
             discogsResult?.error ??
             ebayResult?.error ??

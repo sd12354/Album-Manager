@@ -279,6 +279,18 @@ function normalizeCatalog(catno: string): string[] {
 }
 
 /**
+ * Strip combining diacritical marks so "Björk" → "Bjork", "Café Tacuba" →
+ * "Cafe Tacuba". Discogs's search is reasonably tolerant of this on its own,
+ * but enough catalogues spell artists/titles differently from how Discogs
+ * normalizes them that adding an ASCII variant materially raises the hit
+ * rate. This was responsible for a large chunk of the "but I can see it on
+ * Discogs!" complaints.
+ */
+function stripDiacritics(s: string): string {
+  return s.normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+
+/**
  * Generate artist-name variants. Discogs sometimes credits an album as just
  * "Hollywood Flames" even if the cover says "The Hollywood Flames".
  */
@@ -293,6 +305,11 @@ function artistVariants(artist: string): string[] {
   if (featStripped) variants.add(featStripped);
   const ampSplit = base.split(/\s*[&,]\s*/)[0].trim();
   if (ampSplit) variants.add(ampSplit);
+  // ASCII variants of everything we've collected so far.
+  for (const v of Array.from(variants)) {
+    const ascii = stripDiacritics(v);
+    if (ascii && ascii !== v) variants.add(ascii);
+  }
   return Array.from(variants).filter(Boolean);
 }
 
@@ -310,6 +327,16 @@ function titleVariants(title: string): string[] {
     .trim();
   if (noParens) variants.add(noParens);
   if (/^the\s+/i.test(base)) variants.add(base.replace(/^the\s+/i, "").trim());
+  // Strip trailing edition suffixes Discogs typically drops from the title.
+  const noSuffix = noParens
+    .replace(/\s+(deluxe|expanded|remastered|anniversary|edition|reissue)$/i, "")
+    .trim();
+  if (noSuffix && noSuffix !== noParens) variants.add(noSuffix);
+  // ASCII variants of everything so far.
+  for (const v of Array.from(variants)) {
+    const ascii = stripDiacritics(v);
+    if (ascii && ascii !== v) variants.add(ascii);
+  }
   return Array.from(variants).filter(Boolean);
 }
 
@@ -387,8 +414,16 @@ function buildAttempts(
   for (const t of titles) {
     push(`q="${t}" + Vinyl`, { q: t, format: "Vinyl" });
   }
+  // Last-ditch: title-only with no format filter. The Vinyl filter excludes
+  // some pressings tagged purely as "LP, Album", so this catches the long
+  // tail of obscure releases.
+  for (const t of titles) {
+    push(`q="${t}" (no filter)`, { q: t });
+  }
 
-  // Dedupe by full param signature, cap at 12 so we don't blow rate limits.
+  // Dedupe by full param signature, cap at 16 so we don't blow rate limits.
+  // (60 req/min, 1.1s gap, 3 albums per batch → ~58s in the worst case,
+  // still under the 60s function ceiling.)
   const seen = new Set<string>();
   return attempts
     .filter((a) => {
@@ -397,7 +432,7 @@ function buildAttempts(
       seen.add(sig);
       return true;
     })
-    .slice(0, 12);
+    .slice(0, 16);
 }
 
 /**
@@ -664,6 +699,17 @@ export async function fetchDiscogsPricing(
     }
   }
 
+  // The release was found, but Discogs has no marketplace data (no recent
+  // sales, no active listings, blocked from sale, etc.). That's *not* the
+  // same as "no match" — we surface it as a distinct error so the bulk
+  // route can show "release found but no marketplace pricing" instead of
+  // misleading "not found".
+  const hasAnyPriceData =
+    priceForCondition != null ||
+    median != null ||
+    (stats?.lowest_price?.value ?? 0) > 0 ||
+    (stats?.num_for_sale ?? 0) > 0;
+
   return {
     releaseId,
     releaseTitle: match.title,
@@ -679,6 +725,9 @@ export async function fetchDiscogsPricing(
         ? Math.round(priceForCondition * 100) / 100
         : undefined,
     allConditionPrices,
+    error: hasAnyPriceData
+      ? undefined
+      : `Found Discogs release "${match.title ?? "?"}" (#${releaseId}) but no marketplace pricing — no recent sales or active listings.`,
   };
 }
 
