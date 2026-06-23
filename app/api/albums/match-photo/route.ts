@@ -100,11 +100,14 @@ export async function POST(request: Request) {
     );
   }
 
+  // Explicit .range() overrides Supabase's 1000-row default so AI matching
+  // can see every album in catalogues over 1000.
   const { data: albums, error: albumsError } = await supabase
     .from("albums")
     .select("id, artist, title, catalog_number, photo_urls")
     .eq("user_id", ctx.ownerId)
-    .order("title", { ascending: true });
+    .order("title", { ascending: true })
+    .range(0, 49999);
 
   if (albumsError) {
     return NextResponse.json({ error: albumsError.message }, { status: 500 });
