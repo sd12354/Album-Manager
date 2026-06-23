@@ -587,19 +587,16 @@ export function PhotoMatchPanel() {
     setAttaching(false);
   }
 
-  // When the "only missing photos" toggle is on, hide already-covered
-  // albums from the manual picker so the user can't accidentally re-match
-  // a photo to an album that already has a cover.
-  const pickerAlbums = useMemo(
-    () =>
-      excludeMatched
-        ? albums.filter(
-            (a) => !Array.isArray(a.photo_urls) || a.photo_urls.length === 0
-          )
-        : albums,
-    [albums, excludeMatched]
-  );
-  const skippedCoveredCount = albums.length - pickerAlbums.length;
+  // The manual picker always shows every album so users can attach extra
+  // photos (back cover, vinyl shot, label, etc.) to albums that already
+  // have a cover, without having to flip the "only missing" toggle. The
+  // toggle only narrows what the AI matcher considers as candidates.
+  const pickerAlbums = albums;
+  const skippedCoveredCount = excludeMatched
+    ? albums.filter(
+        (a) => Array.isArray(a.photo_urls) && a.photo_urls.length > 0
+      ).length
+    : 0;
 
   const readyCount = rows.filter((r) => r.status === "done").length;
   const selectedCount = rows.filter((r) => r.include && r.selectedAlbumId).length;
@@ -712,12 +709,15 @@ export function PhotoMatchPanel() {
               className="h-3.5 w-3.5 accent-[#8b7fe8]"
             />
             <span>
-              Only match albums missing a cover photo
+              AI: only match albums missing a cover photo
               {excludeMatched && skippedCoveredCount > 0 && (
                 <span className="ml-2 text-muted-foreground">
-                  ({skippedCoveredCount} album{skippedCoveredCount === 1 ? "" : "s"} hidden)
+                  ({skippedCoveredCount} already covered, excluded from AI)
                 </span>
               )}
+              <span className="ml-2 text-muted-foreground">
+                — manual picker always shows all albums
+              </span>
             </span>
           </label>
 
@@ -867,15 +867,31 @@ export function PhotoMatchPanel() {
                             })
                           }
                           suggested={(row.alternatives ?? [])
-                            .map((alt) => ({
-                              id: alt.albumId,
-                              artist: alt.artist,
-                              title: alt.title,
-                              hint:
-                                alt.confidence !== "none"
-                                  ? `${Math.round(alt.score * 100)}%`
-                                  : undefined,
-                            }))
+                            .map((alt) => {
+                              const album = pickerAlbums.find(
+                                (a) => a.id === alt.albumId
+                              );
+                              const photoCount =
+                                Array.isArray(album?.photo_urls)
+                                  ? album!.photo_urls!.length
+                                  : 0;
+                              const parts: string[] = [];
+                              if (alt.confidence !== "none") {
+                                parts.push(`${Math.round(alt.score * 100)}%`);
+                              }
+                              if (photoCount > 0) {
+                                parts.push(
+                                  `${photoCount} photo${photoCount === 1 ? "" : "s"}`
+                                );
+                              }
+                              return {
+                                id: alt.albumId,
+                                artist: alt.artist,
+                                title: alt.title,
+                                hint:
+                                  parts.length > 0 ? `· ${parts.join(" · ")}` : undefined,
+                              };
+                            })
                             .filter((s) =>
                               pickerAlbums.some((a) => a.id === s.id)
                             )}
@@ -883,6 +899,10 @@ export function PhotoMatchPanel() {
                             id: a.id,
                             artist: a.artist,
                             title: a.title,
+                            hint:
+                              Array.isArray(a.photo_urls) && a.photo_urls.length > 0
+                                ? `· ${a.photo_urls.length} photo${a.photo_urls.length === 1 ? "" : "s"}`
+                                : undefined,
                           }))}
                         />
 
