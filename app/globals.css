@@ -119,11 +119,15 @@
 .animate-fade-in-up  { animation: fade-in-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; }
 .animate-fade-in     { animation: fade-in 0.3s ease-out both; }
 .animate-shimmer     {
-  background: linear-gradient(
+  /* Theme-aware shimmer: uses foreground colour with low alpha so the
+     skeleton is visible in BOTH light and dark mode. The previous
+     white-on-white gradient was invisible against a near-white background. */
+  background-color: hsl(var(--muted));
+  background-image: linear-gradient(
     90deg,
-    rgba(255,255,255,0.02) 0%,
-    rgba(255,255,255,0.06) 50%,
-    rgba(255,255,255,0.02) 100%
+    hsl(var(--foreground) / 0) 0%,
+    hsl(var(--foreground) / 0.08) 50%,
+    hsl(var(--foreground) / 0) 100%
   );
   background-size: 1000px 100%;
   animation: shimmer 2s infinite linear;

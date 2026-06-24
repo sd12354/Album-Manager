@@ -9,12 +9,14 @@ import {
   Check,
   Disc2,
   DollarSign,
+  ImageIcon,
   Package,
   Settings,
   ShoppingBag,
   Sparkles,
   TrendingUp,
   Upload,
+  Users,
 } from "lucide-react";
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -338,37 +340,37 @@ const features = [
   {
     icon: Sparkles,
     title: "AI pricing & descriptions",
-    desc: "Claude analyses Discogs and eBay data alongside artist collectability and genre demand to suggest the optimal price and write a conversion-optimised listing description.",
+    desc: "Claude weighs Discogs and eBay market data alongside artist collectability and genre demand to suggest the optimal price. Bulk AI pricing on Sonnet runs ~$0.004/album — about $4 for 1,000 records.",
     color: "text-accent bg-accent/10",
+  },
+  {
+    icon: ImageIcon,
+    title: "AI cover-photo matching",
+    desc: "Drop in 100+ cover photos from any device. Claude reads each cover and matches it to the right album in your catalogue. Manual picker fallback when the AI can't read a shot.",
+    color: "text-pink-400 bg-pink-400/10",
   },
   {
     icon: DollarSign,
     title: "Live market pricing",
-    desc: "Pulls live Discogs grade-specific prices and eBay active listings as hard data the AI builds on. Every recommendation is market-anchored.",
+    desc: "Discogs grade-specific prices with eBay actives as a fallback. Cached 24h per album so re-pricing 1,000 records is fast and rate-limit-safe.",
     color: "text-yellow-400 bg-yellow-400/10",
   },
   {
     icon: ShoppingBag,
     title: "Dual-platform listing",
-    desc: "List on eBay and Discogs simultaneously with one click. When one sells, the other is automatically delisted.",
+    desc: "List on eBay and Discogs with one click. When one sells, the other is auto-delisted. Already listed something yourself? Track it manually so it still shows up in your dashboard.",
     color: "text-blue-400 bg-blue-400/10",
-  },
-  {
-    icon: Package,
-    title: "Ship on your terms",
-    desc: "Buyer address captured on every sale so you can ship manually with the carrier of your choice.",
-    color: "text-purple-400 bg-purple-400/10",
   },
   {
     icon: Upload,
     title: "Smart bulk import",
-    desc: "Import from CSV or pre-analysed JSON box files. Pricing is pre-loaded — no extra fetch needed.",
+    desc: "CSV with fuzzy column matching that recognises Discogs/eBay/GoldMine exports out of the box, or pre-analysed Box JSON with pricing baked in. Scales cleanly past 1,000 albums.",
     color: "text-green-400 bg-green-400/10",
   },
   {
-    icon: TrendingUp,
-    title: "Portfolio analytics",
-    desc: "Track total collection value, revenue by month, and profit vs. purchase price across your catalogue.",
+    icon: Users,
+    title: "Share & analyse",
+    desc: "Invite collaborators (viewer or editor) to help manage a collection. Dashboard tracks total value, monthly sales, and photo-coverage. Export the whole catalogue to CSV or JSON anytime.",
     color: "text-orange-400 bg-orange-400/10",
   },
 ];
@@ -540,7 +542,7 @@ export function LandingPage({ isLoggedIn = false }: { isLoggedIn?: boolean }) {
       <section className="relative px-6 pb-28 md:px-12">
         <div className="mx-auto max-w-3xl">
           <h2 className="font-display text-3xl font-bold text-center mb-12 md:text-4xl">
-            From box to sold in 4 steps
+            From box to sold in 5 steps
           </h2>
           <div className="relative space-y-4">
             {/* Connecting line behind the icon badges */}
@@ -549,28 +551,35 @@ export function LandingPage({ isLoggedIn = false }: { isLoggedIn?: boolean }) {
               {
                 step: "01",
                 title: "Import your collection",
-                desc: "Drop in a CSV or your pre-analysed box JSON files. Pricing is auto-loaded — no manual entry required.",
+                desc: "Drop in a CSV (auto-detects columns) or pre-analysed Box JSON files with pricing baked in. Scales cleanly past 1,000 albums.",
                 icon: Upload,
                 color: "text-green-400 bg-green-400/10",
               },
               {
                 step: "02",
-                title: "AI prices & describes every record",
-                desc: "Claude analyses live Discogs & eBay data alongside artist collectability to suggest the optimal price and writes a sales-optimised listing description.",
+                title: "Attach cover photos in bulk",
+                desc: "Drop 100+ cover photos at once — AI reads each one and matches it to the right album. Manual picker fallback when the cover is unreadable.",
+                icon: ImageIcon,
+                color: "text-pink-400 bg-pink-400/10",
+              },
+              {
+                step: "03",
+                title: "Price every record",
+                desc: "One-click Auto-Price pulls live Discogs grade-specific data with eBay actives as fallback. Need nuance? AI-Price runs Claude over every record for ~$0.004 each.",
                 icon: Sparkles,
                 color: "text-accent bg-accent/10",
               },
               {
-                step: "03",
+                step: "04",
                 title: "List on eBay & Discogs",
-                desc: "Push listings to one or both platforms with the AI description pre-filled. Cross-cancellation is automatic when something sells.",
+                desc: "Push listings to one or both platforms with AI-generated descriptions. Cross-cancellation is automatic when something sells.",
                 icon: ShoppingBag,
                 color: "text-blue-400 bg-blue-400/10",
               },
               {
-                step: "04",
+                step: "05",
                 title: "Ship on your terms",
-                desc: "Buyer's address is captured on every sale so you can ship manually with the carrier of your choice.",
+                desc: "Buyer's address is captured on every sale so you can ship manually with the carrier of your choice. Already shipped or listed outside VinylVault? Track it manually.",
                 icon: Package,
                 color: "text-purple-400 bg-purple-400/10",
               },
