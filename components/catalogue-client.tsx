@@ -10,7 +10,7 @@ import {
   type ColumnDef,
   type RowSelectionState,
 } from "@tanstack/react-table";
-import { Disc2, Eye, Plus, Search, Trash2, Users } from "lucide-react";
+import { ArrowUpDown, Disc2, Eye, Plus, Search, SlidersHorizontal, Trash2, Users, X as XIcon } from "lucide-react";
 import { VinylSpinner } from "@/components/vinyl-spinner";
 import { toast } from "sonner";
 import { AddAlbumDrawer } from "@/components/add-album-drawer";
@@ -35,7 +35,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { formatCurrency } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 import type { Album, AlbumCondition, AlbumStatus } from "@/types";
 
 interface CatalogueClientProps {
@@ -231,6 +231,40 @@ export function CatalogueClient({
     return dupIds;
   }, [albums]);
   const duplicateCount = duplicateIds.size;
+
+  // Track which filters are currently non-default so we can light them up
+  // in the toolbar and surface a one-click "Reset" affordance.
+  const activeFilters: Array<{ key: string; reset: () => void }> = [];
+  if (conditionFilter !== "all")
+    activeFilters.push({ key: "condition", reset: () => setConditionFilter("all") });
+  if (genreFilter !== "all")
+    activeFilters.push({ key: "genre", reset: () => setGenreFilter("all") });
+  if (statusFilter !== "all")
+    activeFilters.push({ key: "status", reset: () => setStatusFilter("all") });
+  if (photoFilter !== "all")
+    activeFilters.push({ key: "photos", reset: () => setPhotoFilter("all") });
+  if (priceFilter !== "all")
+    activeFilters.push({ key: "pricing", reset: () => setPriceFilter("all") });
+  if (duplicateFilter !== "all")
+    activeFilters.push({ key: "dupes", reset: () => setDuplicateFilter("all") });
+  const activeFilterCount = activeFilters.length;
+
+  function resetAllFilters() {
+    setGlobalFilter("");
+    setConditionFilter("all");
+    setGenreFilter("all");
+    setStatusFilter("all");
+    setPhotoFilter("all");
+    setPriceFilter("all");
+    setDuplicateFilter("all");
+  }
+
+  // Tailwind class applied to a SelectTrigger when its filter is "active"
+  // (non-default), so users can scan the toolbar and tell at a glance what's
+  // filtering the view.
+  const activeTrigger =
+    "border-accent/50 bg-accent/5 text-foreground ring-1 ring-accent/20";
+  const idleTrigger = "border-border";
 
   // Build the genre dropdown options from whatever's in the catalogue.
   // Counts include albums with no genre via a synthetic "__none__" bucket.
@@ -765,109 +799,189 @@ export function CatalogueClient({
         )}
       </div>
 
-      <div className="mt-6 flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search albums..."
-            value={globalFilter}
-            onChange={(e) => setGlobalFilter(e.target.value)}
-            className="pl-9"
-          />
-        </div>
-        <Select value={conditionFilter} onValueChange={setConditionFilter}>
-          <SelectTrigger className="w-[140px]">
-            <SelectValue placeholder="Condition" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Condition</SelectItem>
-            {(["Mint", "Great", "Good", "Fair", "Poor"] as AlbumCondition[]).map(
-              (c) => (
-                <SelectItem key={c} value={c}>
-                  {c}
-                </SelectItem>
-              )
+      {/* Toolbar: search + sort on top, filters below.
+          Splitting into two rows gives the search bar room to breathe and
+          stops the screen-wide pile of 8 equal-weight pills that read as
+          disorienting noise. Active filters get an accent border so you
+          can scan the row and tell what's narrowing the view. */}
+      <div className="mt-6 space-y-3">
+        {/* Row 1 — search + sort + reset */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative flex-1 min-w-[260px]">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search by title or artist…"
+              value={globalFilter}
+              onChange={(e) => setGlobalFilter(e.target.value)}
+              className="h-10 pl-9 pr-9"
+            />
+            {globalFilter && (
+              <button
+                type="button"
+                onClick={() => setGlobalFilter("")}
+                aria-label="Clear search"
+                title="Clear search"
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+              >
+                <XIcon className="h-3.5 w-3.5" />
+              </button>
             )}
-          </SelectContent>
-        </Select>
-        {(genreOptions.sorted.length > 0 || genreOptions.noneCount > 0) && (
-          <Select value={genreFilter} onValueChange={setGenreFilter}>
-            <SelectTrigger className="w-[160px]">
-              <SelectValue placeholder="Genre" />
+          </div>
+          <Select value={sortBy} onValueChange={setSortBy}>
+            <SelectTrigger className="h-10 w-[200px] gap-2">
+              <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />
+              <SelectValue placeholder="Sort by" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Genre</SelectItem>
-              {genreOptions.sorted.map(([g, count]) => (
-                <SelectItem key={g} value={g}>
-                  {g} ({count})
-                </SelectItem>
-              ))}
-              {genreOptions.noneCount > 0 && (
-                <SelectItem value="__none__">
-                  No genre ({genreOptions.noneCount})
-                </SelectItem>
+              <SelectItem value="default">Default order</SelectItem>
+              <SelectItem value="price-desc">Price: high to low</SelectItem>
+              <SelectItem value="price-asc">Price: low to high</SelectItem>
+            </SelectContent>
+          </Select>
+          {(activeFilterCount > 0 || globalFilter) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={resetAllFilters}
+              className="h-10 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <XIcon className="h-3.5 w-3.5" />
+              Reset filters
+              {activeFilterCount + (globalFilter ? 1 : 0) > 0 && (
+                <span className="rounded-full bg-muted/60 px-1.5 py-0.5 text-[10px] font-medium">
+                  {activeFilterCount + (globalFilter ? 1 : 0)}
+                </span>
+              )}
+            </Button>
+          )}
+        </div>
+
+        {/* Row 2 — filters (label + dropdowns) */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="flex items-center gap-1.5 pr-1 text-xs font-medium text-muted-foreground">
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+            Filter by
+          </span>
+
+          <Select value={conditionFilter} onValueChange={setConditionFilter}>
+            <SelectTrigger
+              className={cn(
+                "h-9 w-[140px] text-xs transition-colors",
+                conditionFilter !== "all" ? activeTrigger : idleTrigger
+              )}
+            >
+              <SelectValue placeholder="Condition" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All conditions</SelectItem>
+              {(["Mint", "Great", "Good", "Fair", "Poor"] as AlbumCondition[]).map(
+                (c) => (
+                  <SelectItem key={c} value={c}>
+                    {c}
+                  </SelectItem>
+                )
               )}
             </SelectContent>
           </Select>
-        )}
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[130px]">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Status</SelectItem>
-            {(["unlisted", "pricing", "listed", "sold"] as AlbumStatus[]).map(
-              (s) => (
-                <SelectItem key={s} value={s}>
-                  {s.charAt(0).toUpperCase() + s.slice(1)}
-                </SelectItem>
-              )
-            )}
-          </SelectContent>
-        </Select>
-        <Select value={photoFilter} onValueChange={setPhotoFilter}>
-          <SelectTrigger className="w-[140px]">
-            <SelectValue placeholder="Photos" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Photos</SelectItem>
-            <SelectItem value="with">With photos</SelectItem>
-            <SelectItem value="missing">Missing photos</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={priceFilter} onValueChange={setPriceFilter}>
-          <SelectTrigger className="w-[140px]">
-            <SelectValue placeholder="Pricing" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Pricing</SelectItem>
-            <SelectItem value="priced">Priced</SelectItem>
-            <SelectItem value="unpriced">Not priced</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={duplicateFilter} onValueChange={setDuplicateFilter}>
-          <SelectTrigger className="w-[160px]">
-            <SelectValue placeholder="Duplicates" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">
-              Duplicates
-              {duplicateCount > 0 ? ` (${duplicateCount})` : ""}
-            </SelectItem>
-            <SelectItem value="duplicates">Only duplicates</SelectItem>
-            <SelectItem value="uniques">Only uniques</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={sortBy} onValueChange={setSortBy}>
-          <SelectTrigger className="w-[170px]">
-            <SelectValue placeholder="Sort by" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="default">Sort: Default</SelectItem>
-            <SelectItem value="price-desc">Price: High to Low</SelectItem>
-            <SelectItem value="price-asc">Price: Low to High</SelectItem>
-          </SelectContent>
-        </Select>
+
+          {(genreOptions.sorted.length > 0 || genreOptions.noneCount > 0) && (
+            <Select value={genreFilter} onValueChange={setGenreFilter}>
+              <SelectTrigger
+                className={cn(
+                  "h-9 w-[160px] text-xs transition-colors",
+                  genreFilter !== "all" ? activeTrigger : idleTrigger
+                )}
+              >
+                <SelectValue placeholder="Genre" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All genres</SelectItem>
+                {genreOptions.sorted.map(([g, count]) => (
+                  <SelectItem key={g} value={g}>
+                    {g} ({count})
+                  </SelectItem>
+                ))}
+                {genreOptions.noneCount > 0 && (
+                  <SelectItem value="__none__">
+                    No genre ({genreOptions.noneCount})
+                  </SelectItem>
+                )}
+              </SelectContent>
+            </Select>
+          )}
+
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger
+              className={cn(
+                "h-9 w-[130px] text-xs transition-colors",
+                statusFilter !== "all" ? activeTrigger : idleTrigger
+              )}
+            >
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All statuses</SelectItem>
+              {(["unlisted", "pricing", "listed", "sold"] as AlbumStatus[]).map(
+                (s) => (
+                  <SelectItem key={s} value={s}>
+                    {s.charAt(0).toUpperCase() + s.slice(1)}
+                  </SelectItem>
+                )
+              )}
+            </SelectContent>
+          </Select>
+
+          <Select value={photoFilter} onValueChange={setPhotoFilter}>
+            <SelectTrigger
+              className={cn(
+                "h-9 w-[140px] text-xs transition-colors",
+                photoFilter !== "all" ? activeTrigger : idleTrigger
+              )}
+            >
+              <SelectValue placeholder="Photos" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All photos</SelectItem>
+              <SelectItem value="with">With photos</SelectItem>
+              <SelectItem value="missing">Missing photos</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={priceFilter} onValueChange={setPriceFilter}>
+            <SelectTrigger
+              className={cn(
+                "h-9 w-[140px] text-xs transition-colors",
+                priceFilter !== "all" ? activeTrigger : idleTrigger
+              )}
+            >
+              <SelectValue placeholder="Pricing" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All pricing</SelectItem>
+              <SelectItem value="priced">Priced</SelectItem>
+              <SelectItem value="unpriced">Not priced</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={duplicateFilter} onValueChange={setDuplicateFilter}>
+            <SelectTrigger
+              className={cn(
+                "h-9 w-[170px] text-xs transition-colors",
+                duplicateFilter !== "all" ? activeTrigger : idleTrigger
+              )}
+            >
+              <SelectValue placeholder="Duplicates" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">
+                All albums
+                {duplicateCount > 0 ? ` · ${duplicateCount} dupes` : ""}
+              </SelectItem>
+              <SelectItem value="duplicates">Only duplicates</SelectItem>
+              <SelectItem value="uniques">Only uniques</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {selectedIds.length > 0 && (
