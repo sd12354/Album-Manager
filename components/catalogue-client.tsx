@@ -61,35 +61,51 @@ export function CatalogueClient({
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
-  // All filters initialize from URL so navigating back to /albums restores
-  // the exact view the user left. Updates push back to the URL via
-  // router.replace below.
-  const [globalFilter, setGlobalFilter] = useState(
-    () => searchParams.get("q") ?? ""
+  // Filters initialize from URL params first, then fall back to sessionStorage
+  // so that navigating via the sidebar (which links to plain /albums and
+  // wipes the query string) still restores the user's last view. URL stays
+  // the source of truth for bookmarkable/shareable links.
+  const STORAGE_KEY = "vinylvault.catalogue.filters";
+  const stored = useMemo<Record<string, string>>(() => {
+    if (typeof window === "undefined") return {};
+    try {
+      const raw = window.sessionStorage.getItem(STORAGE_KEY);
+      if (!raw) return {};
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch {
+      return {};
+    }
+  }, []);
+  const fromUrlOrStore = (key: string, fallback: string): string =>
+    searchParams.get(key) ?? stored[key] ?? fallback;
+
+  const [globalFilter, setGlobalFilter] = useState(() =>
+    fromUrlOrStore("q", "")
   );
-  const [conditionFilter, setConditionFilter] = useState<string>(
-    () => searchParams.get("condition") ?? "all"
+  const [conditionFilter, setConditionFilter] = useState<string>(() =>
+    fromUrlOrStore("condition", "all")
   );
-  const [statusFilter, setStatusFilter] = useState<string>(
-    () => searchParams.get("status") ?? "all"
+  const [statusFilter, setStatusFilter] = useState<string>(() =>
+    fromUrlOrStore("status", "all")
   );
-  const [priceFilter, setPriceFilter] = useState<string>(
-    () => searchParams.get("pricing") ?? "all"
+  const [priceFilter, setPriceFilter] = useState<string>(() =>
+    fromUrlOrStore("pricing", "all")
   );
-  const [duplicateFilter, setDuplicateFilter] = useState<string>(
-    () => searchParams.get("dupes") ?? "all"
+  const [duplicateFilter, setDuplicateFilter] = useState<string>(() =>
+    fromUrlOrStore("dupes", "all")
   );
   const [photoFilter, setPhotoFilter] = useState<string>(() => {
     // Back-compat: legacy ?missing=photos param continues to work; new
     // canonical param is ?photos=missing|with|all.
     if (searchParams.get("missing") === "photos") return "missing";
-    return searchParams.get("photos") ?? "all";
+    return fromUrlOrStore("photos", "all");
   });
-  const [genreFilter, setGenreFilter] = useState<string>(
-    () => searchParams.get("genre") ?? "all"
+  const [genreFilter, setGenreFilter] = useState<string>(() =>
+    fromUrlOrStore("genre", "all")
   );
-  const [sortBy, setSortBy] = useState<string>(
-    () => searchParams.get("sort") ?? "default"
+  const [sortBy, setSortBy] = useState<string>(() =>
+    fromUrlOrStore("sort", "default")
   );
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [bulkLoading, setBulkLoading] = useState<null | "price" | "ai-price" | "list" | "delete">(null);
@@ -103,10 +119,10 @@ export function CatalogueClient({
     }
   }, [searchParams]);
 
-  // Mirror current filter state into the URL via router.replace so:
-  //   (a) clicking back to /albums from an album-detail restores the view
-  //   (b) the URL is shareable/bookmarkable
-  //   (c) action-only params (?add, ?action) aren't lost
+  // Mirror current filter state into the URL via router.replace AND into
+  // sessionStorage. URL gives us bookmarkability / browser back-forward;
+  // sessionStorage rescues us when the user navigates via a plain
+  // /albums link (sidebar) that wipes the query string.
   useEffect(() => {
     const params = new URLSearchParams(searchParams.toString());
 
@@ -125,6 +141,26 @@ export function CatalogueClient({
     set("sort", sortBy, "default");
     // Drop the legacy alias once the new param is in place.
     params.delete("missing");
+
+    // Persist to sessionStorage every time so the in-session "remembered
+    // view" survives navigation via a sidebar link that drops the query.
+    if (typeof window !== "undefined") {
+      try {
+        const snapshot = {
+          q: globalFilter,
+          condition: conditionFilter,
+          status: statusFilter,
+          pricing: priceFilter,
+          dupes: duplicateFilter,
+          photos: photoFilter,
+          genre: genreFilter,
+          sort: sortBy,
+        };
+        window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+      } catch {
+        // sessionStorage can throw in private-mode Safari etc. — non-fatal.
+      }
+    }
 
     const next = params.toString();
     const current = searchParams.toString().replace(/&?missing=photos/, "");

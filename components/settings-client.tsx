@@ -464,6 +464,34 @@ export function SettingsClient({
           </AccordionContent>
         </AccordionItem>
 
+        <AccordionItem value="export" className="animate-fade-in-up stagger-5">
+          <AccordionTrigger className="font-display text-lg">
+            Export Collection
+          </AccordionTrigger>
+          <AccordionContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Download a copy of your entire catalogue. Useful for backups,
+              spreadsheet analysis, or migrating elsewhere.
+            </p>
+            <div className="flex flex-wrap gap-3">
+              <Button asChild variant="outline">
+                <a href="/api/albums/export?format=csv" download>
+                  Export as CSV
+                </a>
+              </Button>
+              <Button asChild variant="outline">
+                <a href="/api/albums/export?format=json" download>
+                  Export as JSON
+                </a>
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              CSV opens in Excel / Google Sheets. JSON preserves arrays and
+              nested structure (good for re-importing or programmatic use).
+            </p>
+          </AccordionContent>
+        </AccordionItem>
+
         <AccordionItem value="seller-address" className="animate-fade-in-up stagger-5">
           <AccordionTrigger className="font-display text-lg">
             Seller Address
