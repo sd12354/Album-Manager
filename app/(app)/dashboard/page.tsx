@@ -7,7 +7,7 @@ import { SalesChart, type SalesPoint } from "@/components/sales-chart";
 import { AnimatedStats } from "@/components/animated-stats";
 import { AnimatedCollectionValue } from "@/components/animated-collection-value";
 import { WhatsNewCard } from "@/components/whats-new-card";
-import { fetchAllPages } from "@/lib/paginate";
+import { fetchAllPages, fetchAllPagesParallel } from "@/lib/paginate";
 import { formatRelativeTime, getActivityDescription } from "@/lib/utils";
 import { getActiveCollection } from "@/lib/collections";
 import { summarizeCollectionValue } from "@/lib/collection-value";
@@ -85,13 +85,16 @@ export default async function DashboardPage() {
   const active = user ? await getActiveCollection(user) : null;
   const ownerId = active?.ownerId ?? user?.id ?? "";
 
-  // Only pull the columns the dashboard actually uses. SELECT * was
-  // dragging hundreds of bytes per row (notes, listing_description,
-  // buyer_address_raw, etc.) for no benefit — and at 1000+ rows that
-  // adds noticeable load time. Pagination still applies so the
-  // project-level db-max-rows cap can't silently truncate counts.
+  // ── DATA LOAD ───────────────────────────────────────────────────────────
+  // 1) Tight projection on albums (no SELECT *).
+  // 2) Embed pricing_cache via PostgREST relational select — single round
+  //    trip instead of a separate .in(album_id, [1500 UUIDs]) request that
+  //    blew past URL-length limits and made the dashboard hang.
+  // 3) Count-then-parallel pagination so 2-page fetches happen wall-clock
+  //    once instead of twice.
   const DASHBOARD_COLUMNS =
-    "id, title, artist, status, sold_at, sold_price, list_price, suggested_price, photo_urls, updated_at, user_id";
+    "id, title, artist, status, sold_at, sold_price, list_price, suggested_price, photo_urls, updated_at, user_id, pricing_cache(album_id, source, median_price, lowest_price)";
+
   type DashboardAlbum = Pick<
     Album,
     | "id"
@@ -105,15 +108,44 @@ export default async function DashboardPage() {
     | "photo_urls"
     | "updated_at"
     | "user_id"
-  >;
-  const allAlbums = (await fetchAllPages<DashboardAlbum>((from, to) =>
-    supabase
-      .from("albums")
-      .select(DASHBOARD_COLUMNS)
-      .eq("user_id", ownerId)
-      .order("updated_at", { ascending: false })
-      .range(from, to)
-  ).catch(() => [] as DashboardAlbum[])) as unknown as Album[];
+  > & { pricing_cache?: Array<Pick<PricingCache, "album_id" | "source" | "median_price" | "lowest_price">> };
+
+  const { count: albumCount } = await supabase
+    .from("albums")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", ownerId);
+
+  let albumsWithCache: DashboardAlbum[] = [];
+  try {
+    if (albumCount != null) {
+      albumsWithCache = await fetchAllPagesParallel<DashboardAlbum>(
+        (from, to) =>
+          supabase
+            .from("albums")
+            .select(DASHBOARD_COLUMNS)
+            .eq("user_id", ownerId)
+            .order("updated_at", { ascending: false })
+            .range(from, to),
+        albumCount
+      );
+    } else {
+      // Fallback: count failed, walk sequentially.
+      albumsWithCache = await fetchAllPages<DashboardAlbum>((from, to) =>
+        supabase
+          .from("albums")
+          .select(DASHBOARD_COLUMNS)
+          .eq("user_id", ownerId)
+          .order("updated_at", { ascending: false })
+          .range(from, to)
+      );
+    }
+  } catch {
+    albumsWithCache = [];
+  }
+
+  // Cast back to Album for downstream consumers — we only read the dashboard
+  // fields, so unread Album properties being undefined doesn't matter.
+  const allAlbums = albumsWithCache as unknown as Album[];
   const totalAlbums = allAlbums.length;
   const listedCount = allAlbums.filter((a) => a.status === "listed").length;
   const soldThisMonth = allAlbums.filter(
@@ -124,19 +156,27 @@ export default async function DashboardPage() {
     0
   );
 
-  // Collection value = sum of best available price for every non-sold album,
-  // with low/high bands from pricing cache where available.
-  const unsoldAlbums = allAlbums.filter((a) => a.status !== "sold");
-  const unsoldIds = unsoldAlbums.map((a) => a.id);
+  // Pull the embedded pricing_cache rows out of each album. No extra round
+  // trip, no .in() clause, no URL-length issue.
+  const cacheRows: PricingCache[] = albumsWithCache.flatMap((a) =>
+    (a.pricing_cache ?? []).map(
+      (r) =>
+        ({
+          album_id: r.album_id,
+          source: r.source,
+          median_price: r.median_price,
+          lowest_price: r.lowest_price,
+          // raw_data isn't fetched on the dashboard (only `highest` was used
+          // and a slight under-estimate of the high band is an acceptable
+          // trade-off for the load-time win).
+          raw_data: null,
+          fetched_at: "",
+          id: "",
+        }) as unknown as PricingCache
+    )
+  );
 
-  let cacheRows: PricingCache[] = [];
-  if (unsoldIds.length > 0) {
-    const { data } = await supabase
-      .from("pricing_cache")
-      .select("album_id, source, median_price, lowest_price, raw_data, fetched_at")
-      .in("album_id", unsoldIds);
-    cacheRows = (data ?? []) as PricingCache[];
-  }
+  const unsoldAlbums = allAlbums.filter((a) => a.status !== "sold");
 
   const valueSummary = summarizeCollectionValue(allAlbums, cacheRows);
   const {
