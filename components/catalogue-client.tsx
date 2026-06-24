@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   useReactTable,
@@ -381,11 +382,20 @@ export function CatalogueClient({
         cell: ({ row }) => {
           const cover = row.original.photo_urls?.[0];
           return cover ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
+            // next/image pipes through Vercel's image optimizer:
+            //   - Resized server-side to ~88px (2× retina for a 44px thumb)
+            //     instead of pushing the original 1–5MB JPEG down the wire
+            //   - Auto-converted to WebP/AVIF when the browser supports it
+            //   - Edge-cached after first render
+            //   - lazy-loaded by default (only off-screen rows are deferred)
+            // For 1500-row catalogues this cuts total bytes by 20–100×.
+            <Image
               src={cover}
               alt={`${row.original.title} cover`}
-              loading="lazy"
+              width={88}
+              height={88}
+              sizes="44px"
+              quality={70}
               className="h-11 w-11 shrink-0 rounded-md border border-border object-cover"
             />
           ) : (
