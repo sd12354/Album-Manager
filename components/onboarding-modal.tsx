@@ -474,7 +474,7 @@ const steps: Step[] = [
             },
             {
               title: "AI-Price",
-              desc: "Claude weighs market data + collectability. ~$0.004/album.",
+              desc: "AI weighs market data + collectability for nuanced pricing.",
             },
             {
               title: "Per-album refresh",

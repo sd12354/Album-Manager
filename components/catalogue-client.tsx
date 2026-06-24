@@ -591,14 +591,12 @@ export function CatalogueClient({
   const handleBulkAIPrice = useCallback(async (ids = selectedIds) => {
     if (ids.length === 0) return;
 
-    // Rough cost guard so a stray click can't drop $20+ in one shot. Sonnet
-    // at ~$0.004 per album → 100 albums ≈ $0.40. Confirm above 100.
+    // Guard against accidentally AI-pricing a huge selection in one click.
     if (ids.length > 100) {
-      const estimate = (ids.length * 0.004).toFixed(2);
       if (
         typeof window !== "undefined" &&
         !window.confirm(
-          `AI-price ${ids.length} albums? Estimated Claude API cost: ~$${estimate}. Continue?`
+          `AI-price ${ids.length} albums? This will run analysis on every selected record and may take a few minutes.`
         )
       ) {
         return;
@@ -613,7 +611,7 @@ export function CatalogueClient({
     }
 
     toast.info(
-      `AI-pricing ${ids.length} albums via Claude${
+      `AI-pricing ${ids.length} albums${
         chunks.length > 1 ? ` (in ${chunks.length} batches)` : ""
       }…`
     );
@@ -1017,7 +1015,7 @@ export function CatalogueClient({
             variant="outline"
             onClick={() => handleBulkAIPrice()}
             disabled={!!bulkLoading}
-            title="Uses Claude AI for nuanced pricing. ~$0.004 per album (Sonnet)."
+            title="Uses AI to weigh artist collectability, genre demand, and condition premium alongside market data."
           >
             {bulkLoading === "ai-price" ? (
               <>

@@ -340,13 +340,13 @@ const features = [
   {
     icon: Sparkles,
     title: "AI pricing & descriptions",
-    desc: "Claude weighs Discogs and eBay market data alongside artist collectability and genre demand to suggest the optimal price. Bulk AI pricing on Sonnet runs ~$0.004/album — about $4 for 1,000 records.",
+    desc: "AI weighs Discogs and eBay market data alongside artist collectability and genre demand to suggest the optimal price. Bulk-priceable across your whole catalogue in minutes.",
     color: "text-accent bg-accent/10",
   },
   {
     icon: ImageIcon,
     title: "AI cover-photo matching",
-    desc: "Drop in 100+ cover photos from any device. Claude reads each cover and matches it to the right album in your catalogue. Manual picker fallback when the AI can't read a shot.",
+    desc: "Drop in 100+ cover photos from any device. AI reads each cover and matches it to the right album in your catalogue. Manual picker fallback when the AI can't read a shot.",
     color: "text-pink-400 bg-pink-400/10",
   },
   {
@@ -565,7 +565,7 @@ export function LandingPage({ isLoggedIn = false }: { isLoggedIn?: boolean }) {
               {
                 step: "03",
                 title: "Price every record",
-                desc: "One-click Auto-Price pulls live Discogs grade-specific data with eBay actives as fallback. Need nuance? AI-Price runs Claude over every record for ~$0.004 each.",
+                desc: "One-click Auto-Price pulls live Discogs grade-specific data with eBay actives as fallback. Need nuance? AI-Price runs deeper analysis on every record using market signals and collector demand.",
                 icon: Sparkles,
                 color: "text-accent bg-accent/10",
               },
