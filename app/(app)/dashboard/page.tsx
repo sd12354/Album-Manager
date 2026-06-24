@@ -85,16 +85,35 @@ export default async function DashboardPage() {
   const active = user ? await getActiveCollection(user) : null;
   const ownerId = active?.ownerId ?? user?.id ?? "";
 
-  // Paginate so the project-level db-max-rows cap (Supabase default 1000)
-  // can't silently truncate the dashboard counts on large catalogues.
-  const allAlbums = await fetchAllPages<Album>((from, to) =>
+  // Only pull the columns the dashboard actually uses. SELECT * was
+  // dragging hundreds of bytes per row (notes, listing_description,
+  // buyer_address_raw, etc.) for no benefit — and at 1000+ rows that
+  // adds noticeable load time. Pagination still applies so the
+  // project-level db-max-rows cap can't silently truncate counts.
+  const DASHBOARD_COLUMNS =
+    "id, title, artist, status, sold_at, sold_price, list_price, suggested_price, photo_urls, updated_at, user_id";
+  type DashboardAlbum = Pick<
+    Album,
+    | "id"
+    | "title"
+    | "artist"
+    | "status"
+    | "sold_at"
+    | "sold_price"
+    | "list_price"
+    | "suggested_price"
+    | "photo_urls"
+    | "updated_at"
+    | "user_id"
+  >;
+  const allAlbums = (await fetchAllPages<DashboardAlbum>((from, to) =>
     supabase
       .from("albums")
-      .select("*")
+      .select(DASHBOARD_COLUMNS)
       .eq("user_id", ownerId)
       .order("updated_at", { ascending: false })
       .range(from, to)
-  ).catch(() => [] as Album[]);
+  ).catch(() => [] as DashboardAlbum[])) as unknown as Album[];
   const totalAlbums = allAlbums.length;
   const listedCount = allAlbums.filter((a) => a.status === "listed").length;
   const soldThisMonth = allAlbums.filter(

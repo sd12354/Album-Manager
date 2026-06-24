@@ -7,9 +7,12 @@ import {
   CheckCircle2,
   Disc2,
   DollarSign,
+  ImageIcon,
   Package,
   ShoppingBag,
+  Sparkles,
   Upload,
+  Users,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -273,18 +276,22 @@ const steps: Step[] = [
           market pricing, and list albums for sale on <strong className="text-foreground">eBay</strong> and{" "}
           <strong className="text-foreground">Discogs</strong> — all in one place.
         </p>
-        <p>This quick walkthrough covers the five things you need to get set up:</p>
+        <p>This quick walkthrough covers what you need to get set up:</p>
         <ul className="ml-4 space-y-1.5 list-none">
-          {["Import your collection", "Connect eBay", "Connect Discogs", "Fetch pricing", "List & ship"].map(
-            (item, i) => (
-              <li key={i} className="flex items-center gap-2">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-accent/15 text-[10px] font-bold text-accent">
-                  {i + 1}
-                </span>
-                {item}
-              </li>
-            )
-          )}
+          {[
+            "Import your collection",
+            "Connect Discogs & eBay",
+            "Attach cover photos",
+            "Price every record",
+            "List, sell & ship",
+          ].map((item, i) => (
+            <li key={i} className="flex items-center gap-2">
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-accent/15 text-[10px] font-bold text-accent">
+                {i + 1}
+              </span>
+              {item}
+            </li>
+          ))}
         </ul>
       </div>
     ),
@@ -292,59 +299,62 @@ const steps: Step[] = [
   {
     icon: <Upload className="h-8 w-8 text-accent" />,
     title: "Import your collection",
-    subtitle: "Two ways to get your records in",
+    subtitle: "CSV, box JSON, or manual entry",
     image: <ImportImage />,
     content: (
       <div className="space-y-3 text-sm text-muted-foreground">
         <div className="rounded-xl border border-border bg-secondary/40 p-3 space-y-1">
           <p className="font-semibold text-foreground text-xs">📄 CSV Import</p>
-          <p className="text-xs">Export from any spreadsheet. Map columns to Title, Artist, Genre, Condition, and Catalog #.</p>
+          <p className="text-xs">
+            Drop any spreadsheet — VinylVault auto-detects columns (artist,
+            title, condition, etc.) even with typos or non-standard headers.
+            Confirm the mapping in one click and you&apos;re in.
+          </p>
         </div>
         <div className="rounded-xl border border-border bg-secondary/40 p-3 space-y-1">
-          <p className="font-semibold text-foreground text-xs">📦 Box JSON Files</p>
-          <p className="text-xs">Drop pre-analysed JSON files — pricing, condition, and notes are all imported automatically. No extra fetch needed.</p>
+          <p className="font-semibold text-foreground text-xs">📦 Box JSON files</p>
+          <p className="text-xs">
+            Drop pre-analysed JSON exports — pricing, condition, and notes are
+            all imported in one batch. No extra fetch needed.
+          </p>
         </div>
-      </div>
-    ),
-  },
-  {
-    icon: <ShoppingBag className="h-8 w-8 text-accent" />,
-    title: "Set up eBay",
-    subtitle: "Connect your seller account",
-    image: <EbayImage />,
-    content: (
-      <div className="space-y-2 text-sm">
-        <ul className="space-y-2">
-          {[
-            { check: "Active eBay seller account", detail: "Verify at ebay.com → My eBay → Selling." },
-            { check: "Managed Payments enabled", detail: "Enrol at ebay.com/sell/setup." },
-            { check: "Business policies configured", detail: "At least one Shipping, Returns, and Payment policy required." },
-            { check: "Connect in Settings", detail: "Settings → eBay Account → Connect eBay Account." },
-          ].map(({ check, detail }) => (
-            <li key={check} className="flex gap-2.5">
-              <CheckCircle2 className="h-4 w-4 text-accent shrink-0 mt-0.5" />
-              <div>
-                <p className="font-medium text-foreground text-xs">{check}</p>
-                <p className="text-[11px] text-muted-foreground">{detail}</p>
-              </div>
-            </li>
-          ))}
-        </ul>
+        <div className="rounded-xl border border-border bg-secondary/40 p-3 space-y-1">
+          <p className="font-semibold text-foreground text-xs">➕ Manual add</p>
+          <p className="text-xs">
+            Add records one at a time from the Catalogue page via Add Album.
+          </p>
+        </div>
       </div>
     ),
   },
   {
     icon: <Disc2 className="h-8 w-8 text-accent" />,
-    title: "Set up Discogs",
-    subtitle: "Marketplace selling & pricing",
+    title: "Connect Discogs",
+    subtitle: "One-click OAuth — powers your pricing",
     image: <DiscogsImage />,
     content: (
       <div className="space-y-2 text-sm">
         <ul className="space-y-2">
           {[
-            { check: "Generate a Personal Access Token", detail: "discogs.com/settings/developers → Generate token → paste into Settings." },
-            { check: "Complete your seller profile", detail: "discogs.com/sell/manage — location, currency, and a shipping policy are required for listings to appear publicly." },
-            { check: "Test the connection", detail: "Settings → Discogs → Test Connection." },
+            {
+              check: "Connect with one click",
+              detail:
+                "Settings → Discogs Integration → Connect. Discogs handles the login + authorization; you come back signed in.",
+            },
+            {
+              check: "Or paste a personal access token",
+              detail:
+                "Prefer not to OAuth? discogs.com/settings/developers → Generate token → paste under the Advanced section.",
+            },
+            {
+              check: "Complete your seller profile",
+              detail:
+                "discogs.com/sell/manage — location, currency, and a shipping policy are required for listings to go live.",
+            },
+            {
+              check: "Test the connection",
+              detail: "Settings → Discogs → Test Connection.",
+            },
           ].map(({ check, detail }) => (
             <li key={check} className="flex gap-2.5">
               <CheckCircle2 className="h-4 w-4 text-accent shrink-0 mt-0.5" />
@@ -359,44 +369,156 @@ const steps: Step[] = [
     ),
   },
   {
-    icon: <DollarSign className="h-8 w-8 text-accent" />,
-    title: "Pricing",
-    subtitle: "Market-accurate suggested prices",
+    icon: <ShoppingBag className="h-8 w-8 text-accent" />,
+    title: "Connect eBay",
+    subtitle: "Optional — needed only to list on eBay",
+    image: <EbayImage />,
+    content: (
+      <div className="space-y-2 text-sm">
+        <ul className="space-y-2">
+          {[
+            {
+              check: "Active eBay seller account",
+              detail: "Verify at ebay.com → My eBay → Selling.",
+            },
+            {
+              check: "Managed Payments enabled",
+              detail: "Enrol at ebay.com/sell/setup.",
+            },
+            {
+              check: "Business policies configured",
+              detail:
+                "At least one Shipping, Returns, and Payment policy is required.",
+            },
+            {
+              check: "Connect in Settings",
+              detail: "Settings → eBay Account → Connect eBay Account.",
+            },
+            {
+              check: "Add your seller address",
+              detail:
+                "Settings → Seller Address — eBay needs this for the item location field.",
+            },
+          ].map(({ check, detail }) => (
+            <li key={check} className="flex gap-2.5">
+              <CheckCircle2 className="h-4 w-4 text-accent shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium text-foreground text-xs">{check}</p>
+                <p className="text-[11px] text-muted-foreground">{detail}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
+    ),
+  },
+  {
+    icon: <ImageIcon className="h-8 w-8 text-accent" />,
+    title: "Attach cover photos",
+    subtitle: "Bulk upload, AI matches them to albums",
     image: <PricingImage />,
     content: (
       <div className="space-y-2 text-sm text-muted-foreground">
+        <p className="text-xs">
+          Open the <strong className="text-foreground">Catalogue → Match
+          Photos</strong> panel and drop in your photos (JPEG, PNG, WebP, or
+          iPhone HEIC — converted in your browser). The AI reads each cover
+          and matches it to the right album in your catalogue.
+        </p>
         <div className="grid grid-cols-2 gap-2">
           {[
-            { title: "Per-album", desc: "Open album → Refresh Prices (↻)" },
-            { title: "Bulk", desc: "Catalogue → select → Auto-Price" },
-            { title: "Override", desc: "List Price Override field" },
-            { title: "Pre-loaded", desc: "Box JSON files include pricing" },
+            {
+              title: "Skip dupes",
+              desc: 'Default toggle keeps AI from re-matching already-covered albums.',
+            },
+            {
+              title: "Manual fallback",
+              desc: 'When AI can\'t read a cover, pick the album yourself from the searchable picker.',
+            },
+            {
+              title: "Multiple per album",
+              desc: 'Front + back + label — all go to the same album.',
+            },
+            {
+              title: "Delete a cover",
+              desc: 'Hover any photo on the album page → click the X.',
+            },
           ].map(({ title, desc }) => (
-            <div key={title} className="rounded-lg border border-border bg-secondary/30 px-2.5 py-2">
+            <div
+              key={title}
+              className="rounded-lg border border-border bg-secondary/30 px-2.5 py-2"
+            >
               <p className="font-medium text-foreground text-xs">{title}</p>
               <p className="text-[10px] mt-0.5">{desc}</p>
             </div>
           ))}
         </div>
+      </div>
+    ),
+  },
+  {
+    icon: <DollarSign className="h-8 w-8 text-accent" />,
+    title: "Price every record",
+    subtitle: "Market data + optional AI analysis",
+    image: <PricingImage />,
+    content: (
+      <div className="space-y-2 text-sm text-muted-foreground">
         <p className="text-xs">
-          Discogs pulls grade-specific prices. eBay active listings are used as a fallback when Discogs has no data.
+          Two pricing buttons live on the Catalogue, and one on every album page:
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          {[
+            {
+              title: "Auto-Price",
+              desc: "Discogs grade-specific prices, falls back to eBay actives. Free.",
+            },
+            {
+              title: "AI-Price",
+              desc: "Claude weighs market data + collectability. ~$0.004/album.",
+            },
+            {
+              title: "Per-album refresh",
+              desc: "Album detail → Refresh Prices (↻).",
+            },
+            {
+              title: "Override",
+              desc: "Manual List Price field always wins.",
+            },
+          ].map(({ title, desc }) => (
+            <div
+              key={title}
+              className="rounded-lg border border-border bg-secondary/30 px-2.5 py-2"
+            >
+              <p className="font-medium text-foreground text-xs flex items-center gap-1">
+                {title === "AI-Price" && (
+                  <Sparkles className="h-3 w-3 text-accent" />
+                )}
+                {title}
+              </p>
+              <p className="text-[10px] mt-0.5">{desc}</p>
+            </div>
+          ))}
+        </div>
+        <p className="text-xs">
+          Use the catalogue&apos;s Pricing filter → <em>Not priced</em> to
+          quickly find what still needs pricing.
         </p>
       </div>
     ),
   },
   {
     icon: <Package className="h-8 w-8 text-accent" />,
-    title: "Listing & Shipping",
-    subtitle: "List on eBay & Discogs, ship manually",
+    title: "List, sell & ship",
+    subtitle: "Two platforms, manual listing, cross-cancel",
     image: <ListingShippingImage />,
     content: (
-      <div className="space-y-2 text-sm text-muted-foreground">
+      <div className="space-y-3 text-sm text-muted-foreground">
         <ul className="space-y-1.5">
           {[
-            "Open any album → use List on eBay and/or List on Discogs.",
-            "If it sells on one platform, click Check if Sold — VinylVault auto-cancels the other listing.",
-            "When a sale comes in, buyer's address is captured automatically — ship with the carrier of your choice.",
-            "USPS Media Mail is the cheapest option for vinyl.",
+            "Open any album → List on eBay and/or List on Discogs.",
+            "Already listed it yourself outside VinylVault? Click Track it manually to record the URL + price without re-posting.",
+            "If it sells on one platform, Check if Sold cross-cancels the other automatically.",
+            "Buyer's address is captured on every sale — ship with the carrier of your choice.",
           ].map((item, i) => (
             <li key={i} className="flex gap-2">
               <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
@@ -404,6 +526,17 @@ const steps: Step[] = [
             </li>
           ))}
         </ul>
+        <div className="rounded-lg border border-border bg-secondary/30 p-3 space-y-2 text-xs">
+          <p className="font-medium text-foreground flex items-center gap-1.5">
+            <Users className="h-3.5 w-3.5 text-accent" />
+            Sharing & export (optional)
+          </p>
+          <p>
+            Settings → Collaborators invites others as viewer or editor.
+            Settings → Export Collection downloads the whole catalogue as
+            CSV or JSON anytime.
+          </p>
+        </div>
         <div className="rounded-xl border border-accent/20 bg-accent/5 px-3 py-2 text-accent text-xs font-medium">
           🎉 You&apos;re ready! Head to the Dashboard to get started.
         </div>
