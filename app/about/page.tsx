@@ -80,7 +80,7 @@ export default function AboutPage() {
                 {
                   icon: Sparkles,
                   title: "AI pricing & descriptions",
-                  desc: "Claude prices each record from live Discogs & eBay data and writes the listing.",
+                  desc: "AI prices each record from live Discogs & eBay data and writes the listing.",
                   color: "text-[#8b7fe8] bg-[#8b7fe8]/10",
                 },
                 {
