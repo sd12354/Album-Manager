@@ -19,9 +19,11 @@ export async function POST(request: Request) {
   }
 
   if (!process.env.ANTHROPIC_API_KEY) {
+    // 503 (not 400) — this is a server configuration issue, not a malformed
+    // client request. Clients shouldn't retry it as a bad input.
     return NextResponse.json(
       { error: "AI pricing is not configured on this server. Add ANTHROPIC_API_KEY to your environment variables." },
-      { status: 400 }
+      { status: 503 }
     );
   }
 
