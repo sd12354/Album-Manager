@@ -1,8 +1,10 @@
 "use client";
 
 import {
+  BookOpen,
   Disc2,
   DollarSign,
+  ExternalLink,
   Image as ImageIcon,
   Package,
   ShoppingBag,
@@ -62,6 +64,29 @@ export function HelpPanel({ open, onOpenChange }: HelpPanelProps) {
             explained in depth.
           </SheetDescription>
         </SheetHeader>
+
+        {/* Full guide link — the in-app accordions below cover the most-used
+            flows; the linked Google Doc is the deep reference. */}
+        <a
+          href="https://docs.google.com/document/d/1lrkqK66zOWzvpUq5gvNvKLHtyg-bcRaYINw0WTN0H6s/edit?usp=sharing"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-6 flex items-start gap-3 rounded-xl border border-accent/30 bg-accent/5 p-4 transition-colors hover:border-accent/50 hover:bg-accent/10"
+        >
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent/15 text-accent">
+            <BookOpen className="h-4 w-4" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+              Full user guide
+              <ExternalLink className="h-3 w-3 text-muted-foreground" />
+            </span>
+            <span className="mt-0.5 block text-xs text-muted-foreground">
+              The complete walkthrough — setup, importing, photos, pricing,
+              listing, sharing, and troubleshooting. Opens in a new tab.
+            </span>
+          </span>
+        </a>
 
         <Accordion
           type="multiple"
