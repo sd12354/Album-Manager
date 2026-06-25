@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Mail, Trash2, UserPlus, Users } from "lucide-react";
+import { Crown, Mail, Trash2, UserPlus, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -120,6 +120,43 @@ export function CollaboratorsSection() {
     }
   }
 
+  async function transferOwnership(
+    newOwnerId: string,
+    newOwnerEmail: string | null
+  ) {
+    const recipient = newOwnerEmail ?? newOwnerId;
+    const message =
+      `Transfer this entire collection to ${recipient}?\n\n` +
+      `• Every album you own will move to their account.\n` +
+      `• You will be downgraded to an Editor on the now-shared collection — you can still edit, just not invite collaborators or create marketplace listings.\n` +
+      `• Any active eBay/Discogs listings stay on YOUR marketplace accounts. The new owner will need to connect their own marketplace credentials to manage future listings.\n` +
+      `• This action is permanent. The new owner would have to transfer it back to undo.\n\n` +
+      `Continue?`;
+    if (typeof window === "undefined" || !window.confirm(message)) return;
+
+    setBusyId(newOwnerId);
+    try {
+      const res = await fetch("/api/collection/transfer-ownership", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ newOwnerId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error ?? "Transfer failed", { duration: 8000 });
+        return;
+      }
+      toast.success(
+        `Collection transferred to ${recipient}. You're now an editor of the shared collection.`,
+        { duration: 8000 }
+      );
+      await load();
+      router.refresh();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function revoke(body: Record<string, string>, id: string) {
     setBusyId(id);
     try {
@@ -226,10 +263,18 @@ export function CollaboratorsSection() {
                   </SelectContent>
                 </Select>
                 <button
+                  onClick={() => transferOwnership(m.member_id, m.member_email)}
+                  disabled={busyId === m.member_id}
+                  title="Transfer collection ownership to this collaborator"
+                  className="text-muted-foreground transition-colors hover:text-amber-400 disabled:opacity-40"
+                >
+                  <Crown className="h-4 w-4" />
+                </button>
+                <button
                   onClick={() => revoke({ memberId: m.member_id }, m.member_id)}
                   disabled={busyId === m.member_id}
                   title="Remove access"
-                  className="text-muted-foreground transition-colors hover:text-red-400"
+                  className="text-muted-foreground transition-colors hover:text-red-400 disabled:opacity-40"
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
