@@ -41,16 +41,28 @@ export async function POST(request: Request) {
   );
 
   if (error) {
-    // 403 for permission failures (validation inside the RPC raises 42501),
-    // 400 for "you cannot transfer to yourself" (22023). Everything else is
-    // a 500.
+    // Map Postgres error codes to sensible HTTP statuses:
+    //   42501 (insufficient_privilege)  → 403 — RPC's own permission gate
+    //   22023 (invalid_parameter_value) → 400 — "can't transfer to yourself"
+    //   42883 (undefined_function)      → 503 — migration 010 not applied yet
+    //   PGRST202 (PostgREST: function not found in schema cache) → 503
+    // Everything else → 500.
     const code = (error as { code?: string }).code;
-    const status =
-      code === "42501" ? 403 : code === "22023" ? 400 : 500;
-    return NextResponse.json(
-      { error: error.message ?? "Transfer failed" },
-      { status }
-    );
+    const isMissingFunction =
+      code === "42883" ||
+      code === "PGRST202" ||
+      /transfer_collection_ownership.*does not exist/i.test(error.message ?? "");
+    const status = isMissingFunction
+      ? 503
+      : code === "42501"
+        ? 403
+        : code === "22023"
+          ? 400
+          : 500;
+    const message = isMissingFunction
+      ? "Transfer ownership requires database migration 010. Ask the server admin to run supabase/migrations/010_transfer_ownership.sql in the Supabase SQL Editor."
+      : error.message ?? "Transfer failed";
+    return NextResponse.json({ error: message }, { status });
   }
 
   return NextResponse.json(data);

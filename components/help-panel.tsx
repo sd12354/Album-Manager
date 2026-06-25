@@ -68,7 +68,7 @@ export function HelpPanel({ open, onOpenChange }: HelpPanelProps) {
         {/* Full guide link — the in-app accordions below cover the most-used
             flows; the linked Google Doc is the deep reference. */}
         <a
-          href="https://docs.google.com/document/d/1lrkqK66zOWzvpUq5gvNvKLHtyg-bcRaYINw0WTN0H6s/edit?usp=sharing"
+          href="https://docs.google.com/document/d/1KwS49k_32XyonLN4anqgpY7uWDpvj8kHZYVMrNUGBgs/edit?usp=sharing"
           target="_blank"
           rel="noopener noreferrer"
           className="mt-6 flex items-start gap-3 rounded-xl border border-accent/30 bg-accent/5 p-4 transition-colors hover:border-accent/50 hover:bg-accent/10"
