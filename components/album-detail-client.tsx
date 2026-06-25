@@ -1527,30 +1527,45 @@ export function AlbumDetailClient({
 
       {lightboxUrl && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm animate-fade-in"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm animate-fade-in"
           onClick={() => setLightboxUrl(null)}
           role="dialog"
           aria-modal="true"
         >
+          {/* Close button. z-[60] sits above the image and its wrapper so it
+              can always be clicked. */}
           <button
             type="button"
-            onClick={() => setLightboxUrl(null)}
-            aria-label="Close"
-            className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+            onClick={(e) => {
+              e.stopPropagation();
+              setLightboxUrl(null);
+            }}
+            aria-label="Close (Esc)"
+            title="Close (Esc)"
+            className="fixed right-4 top-4 z-[60] flex h-11 w-11 items-center justify-center rounded-full border border-white/20 bg-black/70 text-white shadow-lg transition-colors hover:border-white/40 hover:bg-black/90"
           >
             <X className="h-5 w-5" />
           </button>
-          {/* Vercel-proxied + edge-cached. unoptimized={false} (default)
-              means a single fetch per unique URL across all viewers. */}
-          <Image
+          {/* Plain <img> in the lightbox (not next/image) — the wrapper Next
+              renders sometimes blocks pointer events on the surrounding
+              backdrop, making the modal feel un-closeable. Direct img is
+              simple and predictable; egress hit is minimal because lightbox
+              is opt-in. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
             src={lightboxUrl}
             alt={`${album.artist} — ${album.title}`}
             onClick={(e) => e.stopPropagation()}
-            width={1920}
-            height={1920}
-            sizes="90vw"
             className="max-h-[90vh] max-w-[90vw] rounded-lg object-contain shadow-2xl"
           />
+          {/* Small hint at the bottom so users know they can press Esc or
+              click outside. */}
+          <p
+            className="pointer-events-none fixed bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-black/60 px-3 py-1 text-[11px] text-white/70"
+            aria-hidden="true"
+          >
+            Click outside or press Esc to close
+          </p>
         </div>
       )}
     </div>
