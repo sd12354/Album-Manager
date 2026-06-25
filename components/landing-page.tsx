@@ -60,7 +60,7 @@ function MarketingNav({ active, isLoggedIn }: { active: "home" | "about" | "poli
           </Link>
         ))}
         <a
-          href="https://docs.google.com/document/d/1lrkqK66zOWzvpUq5gvNvKLHtyg-bcRaYINw0WTN0H6s/edit?usp=sharing"
+          href="https://docs.google.com/document/d/1KwS49k_32XyonLN4anqgpY7uWDpvj8kHZYVMrNUGBgs/edit?usp=sharing"
           target="_blank"
           rel="noopener noreferrer"
           className="rounded-full px-4 py-1.5 text-sm font-medium text-white/60 transition-colors hover:text-white"
@@ -656,7 +656,7 @@ export function LandingPage({ isLoggedIn = false }: { isLoggedIn?: boolean }) {
           <div className="flex gap-6">
             <Link href="/about" className="hover:text-white/60 transition-colors">About</Link>
             <a
-              href="https://docs.google.com/document/d/1lrkqK66zOWzvpUq5gvNvKLHtyg-bcRaYINw0WTN0H6s/edit?usp=sharing"
+              href="https://docs.google.com/document/d/1KwS49k_32XyonLN4anqgpY7uWDpvj8kHZYVMrNUGBgs/edit?usp=sharing"
               target="_blank"
               rel="noopener noreferrer"
               className="hover:text-white/60 transition-colors"
