@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Disc2, ExternalLink, RefreshCw, ShoppingBag, Sparkles, Trash2, Upload, X } from "lucide-react";
@@ -715,9 +716,19 @@ export function AlbumDetailClient({
               {(album.photo_urls ?? []).map((url, i) => (
                 <div
                   key={i}
-                  className="group relative aspect-square overflow-hidden rounded-lg border border-border bg-input bg-cover bg-center"
-                  style={{ backgroundImage: `url(${url})` }}
+                  className="group relative aspect-square overflow-hidden rounded-lg border border-border bg-input"
                 >
+                  {/* Vercel image proxy resizes + caches at the edge, so this
+                      doesn't hammer Supabase egress every time someone opens
+                      the album. Photo URLs are unique-per-upload (timestamp
+                      + random), so caching forever is safe. */}
+                  <Image
+                    src={url}
+                    alt={`${album.artist} — ${album.title}`}
+                    fill
+                    sizes="(max-width: 768px) 50vw, 200px"
+                    className="object-cover"
+                  />
                   <button
                     type="button"
                     onClick={() => setLightboxUrl(url)}
@@ -1367,11 +1378,15 @@ export function AlbumDetailClient({
           >
             <X className="h-5 w-5" />
           </button>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
+          {/* Vercel-proxied + edge-cached. unoptimized={false} (default)
+              means a single fetch per unique URL across all viewers. */}
+          <Image
             src={lightboxUrl}
             alt={`${album.artist} — ${album.title}`}
             onClick={(e) => e.stopPropagation()}
+            width={1920}
+            height={1920}
+            sizes="90vw"
             className="max-h-[90vh] max-w-[90vw] rounded-lg object-contain shadow-2xl"
           />
         </div>
