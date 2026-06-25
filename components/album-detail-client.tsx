@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Disc2, ExternalLink, RefreshCw, ShoppingBag, Sparkles, Trash2, Upload, X } from "lucide-react";
+import { ArrowLeft, Disc2, Download, ExternalLink, RefreshCw, ShoppingBag, Sparkles, Trash2, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { AlbumStatusBadge } from "@/components/album-status-badge";
 import { ConditionBadge } from "@/components/condition-badge";
@@ -31,7 +31,7 @@ import {
   validatePhoto,
 } from "@/lib/photos";
 import { createClient } from "@/lib/supabase/client";
-import { formatCurrency } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 import type { Album, AlbumCondition, PricingResult } from "@/types";
 
 interface AlbumDetailClientProps {
@@ -86,6 +86,8 @@ export function AlbumDetailClient({
   const [uploading, setUploading] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [deletingPhotoUrl, setDeletingPhotoUrl] = useState<string | null>(null);
+  const [downloadingPhotoUrl, setDownloadingPhotoUrl] = useState<string | null>(null);
+  const [downloadingAll, setDownloadingAll] = useState(false);
   const autoSyncStartedRef = useRef(false);
 
   useEffect(() => {
@@ -625,6 +627,120 @@ export function AlbumDetailClient({
     setUploading(false);
   }
 
+  // Build a clean filename for a downloaded photo: artist - title (N).ext
+  // Folder-friendly characters only, stable index across the grid.
+  function buildDownloadName(url: string, index: number): string {
+    const safe = (s: string) =>
+      (s || "")
+        .replace(/[^\w\s\-]+/g, "")
+        .trim()
+        .replace(/\s+/g, "_")
+        .slice(0, 60);
+    let ext = "jpg";
+    try {
+      const pathname = new URL(url).pathname;
+      const m = pathname.match(/\.([a-zA-Z0-9]+)$/);
+      if (m && m[1].length <= 5) ext = m[1].toLowerCase();
+    } catch {
+      // Non-URL string — fall back to jpg.
+    }
+    const base = `${safe(album.artist)}-${safe(album.title)}`;
+    return `${base}_${String(index + 1).padStart(2, "0")}.${ext}`;
+  }
+
+  async function fetchAsBlob(url: string): Promise<Blob> {
+    const res = await fetch(url, { cache: "force-cache" });
+    if (!res.ok) throw new Error(`Failed to fetch image (${res.status})`);
+    return res.blob();
+  }
+
+  function triggerDownload(blob: Blob, filename: string) {
+    const objectUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = objectUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    // Give the browser a beat to start the download before revoking.
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+  }
+
+  async function handleDownloadPhoto(url: string, index: number) {
+    setDownloadingPhotoUrl(url);
+    try {
+      const blob = await fetchAsBlob(url);
+      triggerDownload(blob, buildDownloadName(url, index));
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Couldn't download this photo"
+      );
+    } finally {
+      setDownloadingPhotoUrl(null);
+    }
+  }
+
+  async function handleDownloadAllPhotos() {
+    const urls = album.photo_urls ?? [];
+    if (urls.length === 0) return;
+
+    setDownloadingAll(true);
+    try {
+      // Single photo: skip the ZIP, just download directly. Same UX as the
+      // per-photo button — saves a meaningless one-file archive.
+      if (urls.length === 1) {
+        const blob = await fetchAsBlob(urls[0]);
+        triggerDownload(blob, buildDownloadName(urls[0], 0));
+        return;
+      }
+
+      // Lazy-load jszip so it only ships to album pages that actually
+      // trigger a download — keeps the rest of the bundle small.
+      const { default: JSZip } = await import("jszip");
+      const zip = new JSZip();
+
+      toast.info(`Packaging ${urls.length} photos…`);
+
+      // Sequential fetch so we don't hammer the connection / Supabase egress
+      // all at once. eBay caps at 24 photos per listing, so worst case ~24
+      // sequential fetches — still snappy.
+      let downloaded = 0;
+      for (let i = 0; i < urls.length; i++) {
+        try {
+          const blob = await fetchAsBlob(urls[i]);
+          zip.file(buildDownloadName(urls[i], i), blob);
+          downloaded += 1;
+        } catch {
+          // Best-effort: skip an unreachable photo, continue with the rest.
+        }
+      }
+
+      if (downloaded === 0) {
+        toast.error("Couldn't download any photos. Check your connection.");
+        return;
+      }
+
+      const archive = await zip.generateAsync({ type: "blob" });
+      const safe = (s: string) =>
+        (s || "").replace(/[^\w\s\-]+/g, "").trim().replace(/\s+/g, "_");
+      const zipName = `${safe(album.artist)}-${safe(album.title)}_photos.zip`;
+      triggerDownload(archive, zipName);
+
+      const skipped = urls.length - downloaded;
+      toast.success(
+        skipped > 0
+          ? `Downloaded ${downloaded} of ${urls.length} photos (${skipped} couldn't be fetched).`
+          : `Downloaded ${downloaded} photos.`
+      );
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Couldn't build the ZIP archive"
+      );
+    } finally {
+      setDownloadingAll(false);
+    }
+  }
+
   async function handleDeletePhoto(url: string) {
     if (!canEdit) return;
     if (
@@ -737,6 +853,26 @@ export function AlbumDetailClient({
                   >
                     <span className="absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/20" />
                   </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void handleDownloadPhoto(url, i);
+                    }}
+                    disabled={downloadingPhotoUrl === url}
+                    title="Download this photo"
+                    aria-label="Download this photo"
+                    className={cn(
+                      "absolute z-10 flex h-6 w-6 items-center justify-center rounded-md bg-black/60 text-white opacity-0 transition-opacity hover:bg-accent/80 focus:opacity-100 group-hover:opacity-100 disabled:cursor-wait disabled:opacity-100 top-1",
+                      canEdit ? "right-8" : "right-1"
+                    )}
+                  >
+                    {downloadingPhotoUrl === url ? (
+                      <VinylSpinner size="xs" />
+                    ) : (
+                      <Download className="h-3.5 w-3.5" />
+                    )}
+                  </button>
                   {canEdit && (
                     <button
                       type="button"
@@ -784,6 +920,32 @@ export function AlbumDetailClient({
             <p className="mt-2 text-xs text-muted-foreground">
               JPEG, PNG, WebP, TIFF — stored at full quality, passed to eBay as-is. Min 500px, 1600px+ recommended.
             </p>
+            {(album.photo_urls?.length ?? 0) > 0 && (
+              <div className="mt-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDownloadAllPhotos}
+                  disabled={downloadingAll}
+                  className="gap-2"
+                  title="Download every photo for this album. Useful for manual listings on eBay/Discogs."
+                >
+                  {downloadingAll ? (
+                    <>
+                      <VinylSpinner size="xs" />
+                      Packaging…
+                    </>
+                  ) : (
+                    <>
+                      <Download className="h-3.5 w-3.5" />
+                      {(album.photo_urls?.length ?? 0) === 1
+                        ? "Download photo"
+                        : `Download all ${album.photo_urls?.length} photos`}
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
           </div>
 
           <div className="space-y-4 rounded-xl border border-border p-6">
