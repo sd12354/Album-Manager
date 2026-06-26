@@ -836,7 +836,7 @@ export function CatalogueClient({
             )}
           </div>
           <Select value={sortBy} onValueChange={setSortBy}>
-            <SelectTrigger className="h-10 w-[200px] gap-2">
+            <SelectTrigger className="h-10 w-full sm:w-[200px] gap-2">
               <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />
               <SelectValue placeholder="Sort by" />
             </SelectTrigger>
@@ -874,7 +874,7 @@ export function CatalogueClient({
           <Select value={conditionFilter} onValueChange={setConditionFilter}>
             <SelectTrigger
               className={cn(
-                "h-9 w-[140px] text-xs transition-colors",
+                "h-9 flex-1 min-w-[140px] sm:flex-none sm:w-[140px] text-xs transition-colors",
                 conditionFilter !== "all" ? activeTrigger : idleTrigger
               )}
             >
@@ -896,7 +896,7 @@ export function CatalogueClient({
             <Select value={genreFilter} onValueChange={setGenreFilter}>
               <SelectTrigger
                 className={cn(
-                  "h-9 w-[160px] text-xs transition-colors",
+                  "h-9 flex-1 min-w-[140px] sm:flex-none sm:w-[160px] text-xs transition-colors",
                   genreFilter !== "all" ? activeTrigger : idleTrigger
                 )}
               >
@@ -921,7 +921,7 @@ export function CatalogueClient({
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger
               className={cn(
-                "h-9 w-[130px] text-xs transition-colors",
+                "h-9 flex-1 min-w-[130px] sm:flex-none sm:w-[130px] text-xs transition-colors",
                 statusFilter !== "all" ? activeTrigger : idleTrigger
               )}
             >
@@ -942,7 +942,7 @@ export function CatalogueClient({
           <Select value={photoFilter} onValueChange={setPhotoFilter}>
             <SelectTrigger
               className={cn(
-                "h-9 w-[140px] text-xs transition-colors",
+                "h-9 flex-1 min-w-[140px] sm:flex-none sm:w-[140px] text-xs transition-colors",
                 photoFilter !== "all" ? activeTrigger : idleTrigger
               )}
             >
@@ -958,7 +958,7 @@ export function CatalogueClient({
           <Select value={priceFilter} onValueChange={setPriceFilter}>
             <SelectTrigger
               className={cn(
-                "h-9 w-[140px] text-xs transition-colors",
+                "h-9 flex-1 min-w-[140px] sm:flex-none sm:w-[140px] text-xs transition-colors",
                 priceFilter !== "all" ? activeTrigger : idleTrigger
               )}
             >
@@ -974,7 +974,7 @@ export function CatalogueClient({
           <Select value={duplicateFilter} onValueChange={setDuplicateFilter}>
             <SelectTrigger
               className={cn(
-                "h-9 w-[170px] text-xs transition-colors",
+                "h-9 flex-1 min-w-[140px] sm:flex-none sm:w-[170px] text-xs transition-colors",
                 duplicateFilter !== "all" ? activeTrigger : idleTrigger
               )}
             >

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CircleHelp, Moon, Sun } from "lucide-react";
+import { CircleHelp, Menu, Moon, Sun } from "lucide-react";
 import { Sidebar } from "@/components/sidebar";
 import { OnboardingModal } from "@/components/onboarding-modal";
 import { HelpPanel } from "@/components/help-panel";
@@ -29,6 +29,7 @@ export function AppShell({
   children,
 }: AppShellProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [helpPanelOpen, setHelpPanelOpen] = useState(false);
@@ -92,15 +93,27 @@ export function AppShell({
         collapsed={collapsed}
         onToggle={() => setCollapsed((v) => !v)}
         onHelpClick={() => setHelpPanelOpen(true)}
+        mobileOpen={mobileOpen}
+        onMobileClose={() => setMobileOpen(false)}
       />
 
       <div
-        className={`min-h-screen flex flex-col transition-[margin] duration-200 ease-out ${
-          collapsed ? "ml-16" : "ml-60"
+        className={`min-h-screen flex flex-col transition-[margin] duration-200 ease-out ml-0 ${
+          collapsed ? "md:ml-16" : "md:ml-60"
         }`}
       >
         {/* Top bar */}
-        <header className="sticky top-0 z-20 flex h-12 items-center justify-end gap-1 border-b border-border bg-background/80 px-6 backdrop-blur-sm">
+        <header className="sticky top-0 z-20 flex h-12 items-center justify-between gap-1 border-b border-border bg-background/80 px-3 backdrop-blur-sm sm:px-6">
+          {/* Mobile hamburger — opens the sidebar drawer */}
+          <button
+            onClick={() => setMobileOpen(true)}
+            aria-label="Open navigation"
+            title="Open navigation"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground md:hidden"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+          <div className="flex flex-1 items-center justify-end gap-1">
           {/* Help */}
           <button
             onClick={() => setHelpPanelOpen(true)}
@@ -125,9 +138,10 @@ export function AppShell({
               <Moon className="h-4 w-4" />
             )}
           </button>
+          </div>
         </header>
 
-        <main className="flex-1 p-8">{children}</main>
+        <main className="flex-1 p-4 sm:p-6 md:p-8">{children}</main>
       </div>
 
       {/* First-time-only welcome tour (auto-opens once per browser) */}

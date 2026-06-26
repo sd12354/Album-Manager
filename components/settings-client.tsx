@@ -25,6 +25,8 @@ import {
 import { VinylSpinner } from "@/components/vinyl-spinner";
 import { createClient } from "@/lib/supabase/client";
 import { CONDITION_MULTIPLIERS } from "@/lib/pricing";
+import { APP_VERSION } from "@/lib/version";
+import { CHANGELOG } from "@/lib/changelog";
 import type { AlbumCondition } from "@/types";
 
 interface SettingsClientProps {
@@ -582,6 +584,75 @@ export function SettingsClient({
               >
                 Save Address
               </Button>
+            </div>
+          </AccordionContent>
+        </AccordionItem>
+
+        <AccordionItem value="about" className="animate-fade-in-up stagger-5">
+          <AccordionTrigger className="font-display text-lg">
+            <div className="flex items-center gap-2">
+              <span>About</span>
+              <span className="rounded-full bg-muted/60 px-2 py-0.5 font-mono text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                v{APP_VERSION}
+              </span>
+            </div>
+          </AccordionTrigger>
+          <AccordionContent className="space-y-4">
+            <div className="rounded-lg border border-border bg-muted/10 p-4">
+              <p className="text-sm">
+                <span className="font-medium text-foreground">VinylVault</span>
+                <span className="text-muted-foreground"> · version </span>
+                <span className="font-mono text-foreground">{APP_VERSION}</span>
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Released {CHANGELOG[0]?.date}. The version bumps any time we
+                ship a release with user-facing changes.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-sm font-medium text-foreground">
+                Recent releases
+              </p>
+              <div className="space-y-3">
+                {CHANGELOG.slice(0, 4).map((entry) => (
+                  <div
+                    key={entry.date}
+                    className="rounded-lg border border-border bg-muted/5 p-3"
+                  >
+                    <div className="flex items-baseline justify-between gap-2">
+                      <p className="text-sm font-medium">{entry.title}</p>
+                      <span className="shrink-0 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                        {entry.version ? `v${entry.version} · ` : ""}
+                        {entry.date}
+                      </span>
+                    </div>
+                    <ul className="mt-2 space-y-1">
+                      {entry.items.slice(0, 4).map((item, i) => (
+                        <li
+                          key={i}
+                          className="flex gap-2 text-xs text-muted-foreground leading-relaxed"
+                        >
+                          <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-accent" />
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Full release history lives in the{" "}
+                <a
+                  href="https://docs.google.com/document/d/1KwS49k_32XyonLN4anqgpY7uWDpvj8kHZYVMrNUGBgs/edit?usp=sharing"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-accent hover:underline"
+                >
+                  user guide
+                </a>
+                .
+              </p>
             </div>
           </AccordionContent>
         </AccordionItem>
