@@ -35,6 +35,10 @@ interface SidebarProps {
   activeOwnerId?: string;
   onToggle?: () => void;
   onHelpClick?: () => void;
+  /** Whether the mobile drawer is open. Ignored at md+. */
+  mobileOpen?: boolean;
+  /** Close the mobile drawer (called when user taps backdrop or a nav link). */
+  onMobileClose?: () => void;
 }
 
 export function Sidebar({
@@ -46,6 +50,8 @@ export function Sidebar({
   activeOwnerId = "",
   onToggle,
   onHelpClick,
+  mobileOpen = false,
+  onMobileClose,
 }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
@@ -58,12 +64,26 @@ export function Sidebar({
   }
 
   return (
-    <aside
-      className={cn(
-        "fixed left-0 top-0 z-30 flex h-screen flex-col border-r border-border bg-sidebar transition-[width] duration-200 ease-out",
-        collapsed ? "w-16" : "w-60"
+    <>
+      {/* Mobile backdrop — visible only when drawer is open on small screens.
+          Tap to close. */}
+      {mobileOpen && (
+        <div
+          onClick={onMobileClose}
+          className="fixed inset-0 z-30 bg-black/60 backdrop-blur-sm md:hidden"
+          aria-hidden="true"
+        />
       )}
-    >
+      <aside
+        className={cn(
+          "fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-border bg-sidebar transition-transform duration-200 ease-out md:transition-[width,transform]",
+          collapsed ? "md:w-16" : "md:w-60",
+          // Mobile: full width drawer that slides in/out. Always full 240px
+          // wide on mobile so labels read correctly.
+          "w-60",
+          mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+        )}
+      >
       <div
         className={cn(
           "flex items-center py-6",
@@ -104,6 +124,7 @@ export function Sidebar({
             <Link
               key={href}
               href={href}
+              onClick={onMobileClose}
               aria-label={label}
               title={collapsed ? label : undefined}
               className={cn(
@@ -225,5 +246,6 @@ export function Sidebar({
         )}
       </div>
     </aside>
+    </>
   );
 }

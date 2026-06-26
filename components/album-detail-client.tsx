@@ -828,7 +828,7 @@ export function AlbumDetailClient({
         <div className="space-y-6">
           <div>
             <Label className="mb-3 block">Photos</Label>
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
               {(album.photo_urls ?? []).map((url, i) => (
                 <div
                   key={i}
@@ -969,7 +969,7 @@ export function AlbumDetailClient({
                 }
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Genre</Label>
                 <Input
