@@ -53,6 +53,25 @@ function iconFor(type: AppNotification["type"]) {
   }
 }
 
+/**
+ * Per-notification-type accent so the inbox reads at a glance — sales
+ * pop green (money in), invites pop accent purple (welcome moment),
+ * collaboration events pop blue (shared world). Defaults stay muted.
+ */
+function colorFor(type: AppNotification["type"]): string {
+  switch (type) {
+    case "album_sold":
+      return "bg-emerald-500/15 text-emerald-400";
+    case "collection_invite":
+      return "bg-accent/15 text-accent";
+    case "collection_shared":
+    case "collaborator_joined":
+      return "bg-blue-500/15 text-blue-400";
+    default:
+      return "bg-muted/50 text-muted-foreground";
+  }
+}
+
 export function NotificationsBell() {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -115,7 +134,9 @@ export function NotificationsBell() {
         title="Notifications"
         aria-expanded={open}
         aria-haspopup="true"
-        className="relative flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+        className={`relative flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:bg-muted/40 hover:text-accent ${
+          unreadCount > 0 ? "text-accent" : "text-muted-foreground"
+        }`}
       >
         <Bell className="h-4 w-4" />
         {unreadCount > 0 && (
@@ -155,9 +176,12 @@ export function NotificationsBell() {
               <ul className="divide-y divide-border">
                 {notifications.map((item) => {
                   const Icon = iconFor(item.type);
+                  const color = colorFor(item.type);
                   const inner = (
                     <>
-                      <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted/50 text-muted-foreground">
+                      <span
+                        className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${color}`}
+                      >
                         <Icon className="h-4 w-4" />
                       </span>
                       <span className="min-w-0 flex-1">
