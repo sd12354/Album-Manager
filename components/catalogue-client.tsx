@@ -11,7 +11,7 @@ import {
   type ColumnDef,
   type RowSelectionState,
 } from "@tanstack/react-table";
-import { ArrowUpDown, Disc2, Eye, Plus, Search, SlidersHorizontal, Trash2, Users, X as XIcon } from "lucide-react";
+import { ArrowUpDown, Copy, Disc2, Eye, Plus, Search, SlidersHorizontal, Trash2, Users, X as XIcon } from "lucide-react";
 import { VinylSpinner } from "@/components/vinyl-spinner";
 import { toast } from "sonner";
 import { AddAlbumDrawer } from "@/components/add-album-drawer";
@@ -36,6 +36,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { celebrateFirstSale } from "@/lib/celebrate";
+import { createClient as createSupabaseClient } from "@/lib/supabase/client";
+import { EBAY_MAX_PHOTOS, getOriginalPublicUrl, sanitizeFilename } from "@/lib/photos";
 import { cn, formatCurrency } from "@/lib/utils";
 import type { Album, AlbumCondition, AlbumStatus } from "@/types";
 
@@ -109,10 +112,13 @@ export function CatalogueClient({
     fromUrlOrStore("sort", "default")
   );
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [bulkLoading, setBulkLoading] = useState<null | "price" | "ai-price" | "list" | "delete">(null);
+  const [bulkLoading, setBulkLoading] = useState<null | "price" | "ai-price" | "list" | "delete" | "redistribute-photos">(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const priceAllStartedRef = useRef(false);
   const marketplaceSyncStartedRef = useRef(false);
+  const searchWrapperRef = useRef<HTMLDivElement>(null);
+  const [searchFocused, setSearchFocused] = useState(false);
+  const [searchHighlight, setSearchHighlight] = useState(-1);
 
   useEffect(() => {
     if (searchParams.get("add") === "true") {
@@ -197,8 +203,26 @@ export function CatalogueClient({
       try {
         const res = await fetch("/api/ebay/sync", { method: "POST" });
         if (!res.ok || cancelled) return;
-        const data = await res.json();
-        if (!cancelled && data.changed > 0) {
+        const data = await res.json() as {
+          changed?: number;
+          synced?: Array<{ soldOn?: string }>;
+        };
+        // First-sale confetti: if any background-sync result shows a sold
+        // album, fire the one-shot celebration. Localstorage guard means
+        // it only ever plays once.
+        const newSale = (data.synced ?? []).some((s) => s.soldOn);
+        if (newSale) {
+          void (async () => {
+            const fired = await celebrateFirstSale();
+            if (fired && !cancelled) {
+              toast.success(
+                "🎉 First sale! Congrats — that's one record off your shelf.",
+                { duration: 8000 }
+              );
+            }
+          })();
+        }
+        if (!cancelled && (data.changed ?? 0) > 0) {
           router.refresh();
         }
       } catch {
@@ -232,6 +256,73 @@ export function CatalogueClient({
     return dupIds;
   }, [albums]);
   const duplicateCount = duplicateIds.size;
+
+  // Predictive search: when the user types in the global filter and the
+  // search input is focused, surface up to 8 matching albums in a dropdown
+  // for quick jump-to-detail. Match logic mirrors the table filter so
+  // results in the dropdown exactly match what the user would see in the
+  // narrowed table — no surprise mismatches.
+  const searchSuggestions = useMemo(() => {
+    const q = globalFilter.trim().toLowerCase();
+    if (!q) return [];
+    const out: Album[] = [];
+    for (const album of albums) {
+      const artistMatch = album.artist.toLowerCase().includes(q);
+      const titleMatch = album.title.toLowerCase().includes(q);
+      if (artistMatch || titleMatch) {
+        out.push(album);
+        if (out.length >= 8) break;
+      }
+    }
+    return out;
+  }, [albums, globalFilter]);
+
+  // Close the dropdown when the user clicks outside the search wrapper.
+  useEffect(() => {
+    if (!searchFocused) return;
+    const handler = (e: MouseEvent) => {
+      if (
+        searchWrapperRef.current &&
+        !searchWrapperRef.current.contains(e.target as Node)
+      ) {
+        setSearchFocused(false);
+      }
+    };
+    window.addEventListener("mousedown", handler);
+    return () => window.removeEventListener("mousedown", handler);
+  }, [searchFocused]);
+
+  // Reset highlight whenever the suggestions list changes.
+  useEffect(() => {
+    setSearchHighlight(-1);
+  }, [globalFilter]);
+
+  // Count duplicate albums missing photos whose duplicate(s) have photos —
+  // i.e. how many records the "Fill duplicates from covers" button could
+  // give a free cover to. Surface on the button so the user knows what
+  // they're getting into before clicking.
+  const redistributableCount = useMemo(() => {
+    const buckets = new Map<string, Album[]>();
+    for (const album of albums) {
+      const key = `${album.artist.trim().toLowerCase()}|${album.title.trim().toLowerCase()}`;
+      if (!key.includes("|") || key === "|") continue;
+      const list = buckets.get(key) ?? [];
+      list.push(album);
+      buckets.set(key, list);
+    }
+    let n = 0;
+    for (const group of buckets.values()) {
+      if (group.length < 2) continue;
+      const anyCovered = group.some(
+        (a) => Array.isArray(a.photo_urls) && a.photo_urls.length > 0
+      );
+      if (!anyCovered) continue;
+      n += group.filter(
+        (a) => !Array.isArray(a.photo_urls) || a.photo_urls.length === 0
+      ).length;
+    }
+    return n;
+  }, [albums]);
 
   // Track which filters are currently non-default so we can light them up
   // in the toolbar and surface a one-click "Reset" affordance.
@@ -690,6 +781,165 @@ export function CatalogueClient({
     }
   }, [selectedIds, router]);
 
+  /**
+   * Scan duplicates (same artist + title) and copy photos from the
+   * covered album into any uncovered duplicates. We *copy* the storage
+   * files into a new path under each recipient album (rather than
+   * sharing URLs) so future per-album deletes can't break the donor.
+   *
+   * Donor selection: the duplicate with the most photos wins. Ties
+   * broken by most recently updated.
+   */
+  const handleRedistributePhotos = useCallback(async () => {
+    if (!canEdit) return;
+
+    // Build groups of duplicate albums (mirrors duplicateIds logic, but
+    // returns full albums so we can compare photo state).
+    const buckets = new Map<string, Album[]>();
+    for (const album of albums) {
+      const key = `${album.artist.trim().toLowerCase()}|${album.title.trim().toLowerCase()}`;
+      if (!key.includes("|") || key === "|") continue;
+      const list = buckets.get(key) ?? [];
+      list.push(album);
+      buckets.set(key, list);
+    }
+
+    // Identify candidate redistributions.
+    type Job = { donor: Album; recipients: Album[] };
+    const jobs: Job[] = [];
+    for (const group of buckets.values()) {
+      if (group.length < 2) continue;
+      const covered = group.filter(
+        (a) => Array.isArray(a.photo_urls) && a.photo_urls.length > 0
+      );
+      const uncovered = group.filter(
+        (a) => !Array.isArray(a.photo_urls) || a.photo_urls.length === 0
+      );
+      if (covered.length === 0 || uncovered.length === 0) continue;
+      // Pick the donor with the most photos; ties broken by most recently
+      // updated so the freshest cover wins.
+      const donor = covered.slice().sort((a, b) => {
+        const photoDiff = (b.photo_urls?.length ?? 0) - (a.photo_urls?.length ?? 0);
+        if (photoDiff !== 0) return photoDiff;
+        return (b.updated_at ?? "").localeCompare(a.updated_at ?? "");
+      })[0];
+      jobs.push({ donor, recipients: uncovered });
+    }
+
+    if (jobs.length === 0) {
+      toast.info(
+        "Nothing to redistribute — every duplicate group is already fully covered or fully empty."
+      );
+      return;
+    }
+
+    const totalRecipients = jobs.reduce((s, j) => s + j.recipients.length, 0);
+    const confirmMsg =
+      `Copy photos to ${totalRecipients} uncovered duplicate${totalRecipients === 1 ? "" : "s"} ` +
+      `across ${jobs.length} group${jobs.length === 1 ? "" : "s"}? ` +
+      `This downloads each donor photo and uploads a fresh copy under each recipient so deletes on either side stay independent.`;
+    if (typeof window !== "undefined" && !window.confirm(confirmMsg)) return;
+
+    setBulkLoading("redistribute-photos");
+    const supabaseClient = createSupabaseClient();
+    const { data: { user: currentUser } } = await supabaseClient.auth.getUser();
+    if (!currentUser) {
+      toast.error("Sign in expired — reload and try again.");
+      setBulkLoading(null);
+      return;
+    }
+
+    const folderOwner = ownerId || currentUser.id;
+    let copiedTotal = 0;
+    let albumsUpdated = 0;
+    let failed = 0;
+    const failureMessages: string[] = [];
+
+    try {
+      for (const { donor, recipients } of jobs) {
+        const donorUrls = donor.photo_urls ?? [];
+        if (donorUrls.length === 0) continue;
+
+        for (const recipient of recipients) {
+          const existing = recipient.photo_urls ?? [];
+          const room = EBAY_MAX_PHOTOS - existing.length;
+          if (room <= 0) continue;
+          const toCopy = donorUrls.slice(0, room);
+          const newUrls: string[] = [];
+
+          for (const sourceUrl of toCopy) {
+            try {
+              const blob = await (await fetch(sourceUrl)).blob();
+              const m = sourceUrl.match(/\/([^/?#]+?)(?:[?#].*)?$/);
+              const baseName = sanitizeFilename(m ? m[1] : "photo.jpg");
+              const rand = Math.random().toString(36).slice(2, 8);
+              const path = `${folderOwner}/${recipient.id}/${Date.now()}-${rand}-${baseName}`;
+              const { error: uploadError } = await supabaseClient.storage
+                .from("album-photos")
+                .upload(path, blob, {
+                  contentType: blob.type || "image/jpeg",
+                  upsert: false,
+                  cacheControl: "31536000",
+                });
+              if (uploadError) {
+                failed += 1;
+                continue;
+              }
+              const { data: urlData } = supabaseClient.storage
+                .from("album-photos")
+                .getPublicUrl(path);
+              newUrls.push(getOriginalPublicUrl(urlData.publicUrl));
+              copiedTotal += 1;
+            } catch (err) {
+              failed += 1;
+              if (failureMessages.length < 3) {
+                failureMessages.push(
+                  err instanceof Error ? err.message : "Network error"
+                );
+              }
+            }
+          }
+
+          if (newUrls.length > 0) {
+            const merged = [...existing, ...newUrls];
+            const { error: updateError } = await supabaseClient
+              .from("albums")
+              .update({ photo_urls: merged })
+              .eq("id", recipient.id);
+            if (updateError) {
+              failed += newUrls.length;
+              continue;
+            }
+            albumsUpdated += 1;
+          }
+        }
+      }
+
+      const parts: string[] = [];
+      if (albumsUpdated > 0) {
+        parts.push(
+          `${copiedTotal} photo${copiedTotal === 1 ? "" : "s"} copied to ${albumsUpdated} album${albumsUpdated === 1 ? "" : "s"}`
+        );
+      }
+      if (failed > 0) parts.push(`${failed} failed`);
+      const summary = parts.join(" · ") || "no changes";
+      if (failed > 0 && failureMessages.length > 0) {
+        toast.warning(`${summary} — ${failureMessages[0]}`, { duration: 10000 });
+      } else if (albumsUpdated > 0) {
+        toast.success(summary);
+      } else {
+        toast.info("No photos could be copied.");
+      }
+      if (albumsUpdated > 0) router.refresh();
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Redistribute failed"
+      );
+    } finally {
+      setBulkLoading(null);
+    }
+  }, [albums, canEdit, ownerId, router]);
+
   useEffect(() => {
     if (searchParams.get("action") !== "price-all") {
       priceAllStartedRef.current = false;
@@ -800,41 +1050,148 @@ export function CatalogueClient({
           )}
         </div>
         {canEdit && (
-          <Button onClick={() => setDrawerOpen(true)}>
-            <Plus className="h-4 w-4" />
-            Add Album
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {redistributableCount > 0 && (
+              <Button
+                variant="outline"
+                onClick={handleRedistributePhotos}
+                disabled={bulkLoading === "redistribute-photos"}
+                title={`Copy photos from duplicate albums that have covers into the ${redistributableCount} that don't.`}
+                className="gap-2"
+              >
+                {bulkLoading === "redistribute-photos" ? (
+                  <>
+                    <VinylSpinner size="xs" />
+                    Copying photos…
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-4 w-4" />
+                    Fill {redistributableCount} duplicate
+                    {redistributableCount === 1 ? "" : "s"} from covers
+                  </>
+                )}
+              </Button>
+            )}
+            <Button onClick={() => setDrawerOpen(true)}>
+              <Plus className="h-4 w-4" />
+              Add Album
+            </Button>
+          </div>
         )}
       </div>
 
-      {/* Toolbar: search + sort on top, filters below.
-          Splitting into two rows gives the search bar room to breathe and
-          stops the screen-wide pile of 8 equal-weight pills that read as
-          disorienting noise. Active filters get an accent border so you
-          can scan the row and tell what's narrowing the view. */}
+      {/* Toolbar: search on its own prominent row, filters + sort below.
+          Active filters get an accent border so you can scan the row and
+          tell what's narrowing the view. The search input also surfaces a
+          predictive dropdown for direct jump-to-album. */}
       <div className="mt-6 space-y-3">
-        {/* Row 1 — search + sort + reset */}
+        {/* Row 1 — search (full width, predictive) */}
+        <div ref={searchWrapperRef} className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search by title or artist…"
+            value={globalFilter}
+            onChange={(e) => setGlobalFilter(e.target.value)}
+            onFocus={() => setSearchFocused(true)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                setSearchFocused(false);
+              } else if (e.key === "ArrowDown" && searchSuggestions.length > 0) {
+                e.preventDefault();
+                setSearchHighlight((h) =>
+                  Math.min(h + 1, searchSuggestions.length - 1)
+                );
+              } else if (e.key === "ArrowUp" && searchSuggestions.length > 0) {
+                e.preventDefault();
+                setSearchHighlight((h) => Math.max(h - 1, -1));
+              } else if (e.key === "Enter" && searchHighlight >= 0) {
+                e.preventDefault();
+                const pick = searchSuggestions[searchHighlight];
+                if (pick) {
+                  setSearchFocused(false);
+                  router.push(`/albums/${pick.id}`);
+                }
+              }
+            }}
+            className="h-11 pl-9 pr-9 text-sm"
+          />
+          {globalFilter && (
+            <button
+              type="button"
+              onClick={() => {
+                setGlobalFilter("");
+                setSearchFocused(false);
+              }}
+              aria-label="Clear search"
+              title="Clear search"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+            >
+              <XIcon className="h-3.5 w-3.5" />
+            </button>
+          )}
+
+          {/* Predictive results dropdown */}
+          {searchFocused && globalFilter.trim() && (
+            <div
+              role="listbox"
+              className="absolute left-0 right-0 top-full z-40 mt-1 max-h-80 overflow-y-auto rounded-lg border border-border bg-background shadow-xl animate-fade-in"
+            >
+              {searchSuggestions.length === 0 ? (
+                <p className="px-3 py-3 text-xs text-muted-foreground">
+                  No albums match — try a different word.
+                </p>
+              ) : (
+                <>
+                  {searchSuggestions.map((album, i) => (
+                    <button
+                      key={album.id}
+                      role="option"
+                      aria-selected={i === searchHighlight}
+                      type="button"
+                      onMouseEnter={() => setSearchHighlight(i)}
+                      onClick={() => {
+                        setSearchFocused(false);
+                        router.push(`/albums/${album.id}`);
+                      }}
+                      className={cn(
+                        "flex w-full items-center gap-3 border-b border-border/40 px-3 py-2 text-left text-xs transition-colors last:border-b-0",
+                        i === searchHighlight
+                          ? "bg-accent/10"
+                          : "hover:bg-muted/40"
+                      )}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">
+                          {album.title}
+                        </p>
+                        <p className="truncate text-[11px] text-muted-foreground">
+                          {album.artist}
+                          {album.genre ? ` · ${album.genre}` : ""}
+                          {" · "}
+                          {album.condition}
+                        </p>
+                      </div>
+                      {(album.list_price ?? album.suggested_price) ? (
+                        <span className="shrink-0 font-mono text-[11px] text-accent">
+                          {formatCurrency(
+                            album.list_price ?? album.suggested_price
+                          )}
+                        </span>
+                      ) : null}
+                    </button>
+                  ))}
+                  <p className="border-t border-border/40 bg-muted/20 px-3 py-1.5 text-[10px] text-muted-foreground">
+                    ↑↓ to navigate · Enter to open · Esc to close
+                  </p>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Row 2 — sort + reset on the left, filters on the right */}
         <div className="flex flex-wrap items-center gap-3">
-          <div className="relative flex-1 min-w-[260px]">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search by title or artist…"
-              value={globalFilter}
-              onChange={(e) => setGlobalFilter(e.target.value)}
-              className="h-10 pl-9 pr-9"
-            />
-            {globalFilter && (
-              <button
-                type="button"
-                onClick={() => setGlobalFilter("")}
-                aria-label="Clear search"
-                title="Clear search"
-                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-              >
-                <XIcon className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
           <Select value={sortBy} onValueChange={setSortBy}>
             <SelectTrigger className="h-10 w-full sm:w-[200px] gap-2">
               <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />

@@ -31,6 +31,7 @@ import {
   validatePhoto,
 } from "@/lib/photos";
 import { createClient } from "@/lib/supabase/client";
+import { celebrateFirstSale } from "@/lib/celebrate";
 import { cn, formatCurrency } from "@/lib/utils";
 import type { Album, AlbumCondition, PricingResult } from "@/types";
 
@@ -162,6 +163,17 @@ export function AlbumDetailClient({
         const platform = data.soldOn === "ebay" ? "eBay" : "Discogs";
         toast.success(`Marked as sold on ${platform}`);
       }
+      // One-shot confetti for the user's lifetime-first sale (flagged in
+      // localStorage so it never replays). Async + decorative so a failure
+      // can't break the sync UX.
+      void (async () => {
+        const fired = await celebrateFirstSale();
+        if (fired) {
+          toast.success("🎉 First sale! Congrats — that's one record off your shelf.", {
+            duration: 8000,
+          });
+        }
+      })();
       router.refresh();
       return true;
     }
