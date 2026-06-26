@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { CircleHelp, Menu, Moon, Sun } from "lucide-react";
 import { Sidebar } from "@/components/sidebar";
 import { OnboardingModal } from "@/components/onboarding-modal";
+import { UpdateModal } from "@/components/update-modal";
 import { HelpPanel } from "@/components/help-panel";
 import { NotificationsBell } from "@/components/notifications-bell";
 import type { AccessibleCollection } from "@/types";
@@ -146,6 +147,11 @@ export function AppShell({
 
       {/* First-time-only welcome tour (auto-opens once per browser) */}
       <OnboardingModal />
+
+      {/* Returning-user "what's new" modal — shows once per shipped
+          version. Defers to the onboarding modal for brand-new users so
+          they never see both at once. */}
+      <UpdateModal />
 
       {/* In-depth help, opened from the Help & Guide buttons */}
       <HelpPanel open={helpPanelOpen} onOpenChange={setHelpPanelOpen} />

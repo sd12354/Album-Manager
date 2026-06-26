@@ -16,8 +16,10 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { APP_VERSION } from "@/lib/version";
 
 const STORAGE_KEY = "vinylvault.onboarded";
+const SEEN_VERSION_KEY = "vinylvault.lastSeenVersion";
 
 /* ─────────────────────────────────────────────────────────────────────────────
    Per-step visual mockups
@@ -566,7 +568,13 @@ export function OnboardingModal({ forceOpen, onClose }: OnboardingModalProps) {
   }, [forceOpen]);
 
   function close() {
-    try { window.localStorage.setItem(STORAGE_KEY, "1"); } catch { /* ignore */ }
+    try {
+      window.localStorage.setItem(STORAGE_KEY, "1");
+      // Seed the seen-version flag so a brand-new user who just finished
+      // onboarding doesn't immediately get the update modal next session
+      // for the same version they were just walked through.
+      window.localStorage.setItem(SEEN_VERSION_KEY, APP_VERSION);
+    } catch { /* ignore */ }
     setOpen(false);
     onClose?.();
   }

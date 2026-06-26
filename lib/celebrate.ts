@@ -8,6 +8,7 @@
  */
 
 const FIRST_SALE_KEY = "vinylvault.firstSale.celebrated";
+const FIRST_LISTING_KEY = "vinylvault.firstListing.celebrated";
 
 /** Whether a milestone celebration has already played. SSR-safe. */
 export function hasCelebrated(key: string): boolean {
@@ -77,5 +78,32 @@ export async function celebrateFirstSale(): Promise<boolean> {
   if (hasCelebrated(FIRST_SALE_KEY)) return false;
   markCelebrated(FIRST_SALE_KEY);
   await fireConfetti();
+  return true;
+}
+
+/**
+ * One-shot first-listing celebration. Same one-shot semantics as the
+ * first-sale celebration, with a slightly more restrained burst — first
+ * listing is a milestone but it's not money in hand yet, so we don't
+ * want to upstage the eventual first-sale moment.
+ */
+export async function celebrateFirstListing(): Promise<boolean> {
+  if (hasCelebrated(FIRST_LISTING_KEY)) return false;
+  markCelebrated(FIRST_LISTING_KEY);
+  try {
+    const { default: confetti } = await import("canvas-confetti");
+    // Gentler than the first-sale firework: one upward fountain in the
+    // brand accent only.
+    confetti({
+      particleCount: 80,
+      spread: 60,
+      startVelocity: 35,
+      ticks: 200,
+      origin: { y: 0.4 },
+      colors: ["#8b7fe8", "#a594f5", "#cfc7ff"],
+    });
+  } catch {
+    // Decorative — never break the listing UX.
+  }
   return true;
 }
