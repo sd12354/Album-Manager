@@ -8,6 +8,7 @@ import { AnimatedStats } from "@/components/animated-stats";
 import { AnimatedCollectionValue } from "@/components/animated-collection-value";
 import { WhatsNewCard } from "@/components/whats-new-card";
 import { DashboardSearch } from "@/components/dashboard-search";
+import { RearrangeableDashboard, type DashboardSection } from "@/components/rearrangeable-dashboard";
 import { fetchAllPages, fetchAllPagesParallel } from "@/lib/paginate";
 import { formatRelativeTime, getActivityDescription } from "@/lib/utils";
 import { getActiveCollection } from "@/lib/collections";
@@ -232,137 +233,208 @@ export default async function DashboardPage() {
         />
       </div>
 
-      {/* Animated stat cards */}
-      <div className="mt-8">
+      <RearrangeableDashboard
+        sections={buildSections({
+          totalAlbums,
+          listedCount,
+          soldThisMonthCount: soldThisMonth.length,
+          revenueThisMonth,
+          collectionValue,
+          collectionLow,
+          collectionHigh,
+          pricedCount,
+          unpricedCount,
+          marketDataCount,
+          unlistedValue,
+          listedValue,
+          withPhotos,
+          missingPhotos,
+          photoCoveragePct,
+          monthlySales,
+          recentActivity,
+        })}
+      />
+    </div>
+  );
+}
+
+interface SectionInput {
+  totalAlbums: number;
+  listedCount: number;
+  soldThisMonthCount: number;
+  revenueThisMonth: number;
+  collectionValue: number;
+  collectionLow: number;
+  collectionHigh: number;
+  pricedCount: number;
+  unpricedCount: number;
+  marketDataCount: number;
+  unlistedValue: number;
+  listedValue: number;
+  withPhotos: number;
+  missingPhotos: number;
+  photoCoveragePct: number;
+  monthlySales: SalesPoint[];
+  recentActivity: Album[];
+}
+
+function buildSections(input: SectionInput): DashboardSection[] {
+  const sections: DashboardSection[] = [
+    {
+      id: "stats",
+      label: "Stats",
+      node: (
         <AnimatedStats
-          totalAlbums={totalAlbums}
-          listedCount={listedCount}
-          soldThisMonth={soldThisMonth.length}
-          revenueThisMonth={revenueThisMonth}
+          totalAlbums={input.totalAlbums}
+          listedCount={input.listedCount}
+          soldThisMonth={input.soldThisMonthCount}
+          revenueThisMonth={input.revenueThisMonth}
         />
-      </div>
-
-      {/* Animated collection value */}
-      <div className="mt-4">
+      ),
+    },
+    {
+      id: "collection-value",
+      label: "Collection Value",
+      node: (
         <AnimatedCollectionValue
-          collectionValue={collectionValue}
-          collectionLow={collectionLow}
-          collectionHigh={collectionHigh}
-          pricedCount={pricedCount}
-          unpricedCount={unpricedCount}
-          marketDataCount={marketDataCount}
-          unlistedValue={unlistedValue}
-          listedValue={listedValue}
+          collectionValue={input.collectionValue}
+          collectionLow={input.collectionLow}
+          collectionHigh={input.collectionHigh}
+          pricedCount={input.pricedCount}
+          unpricedCount={input.unpricedCount}
+          marketDataCount={input.marketDataCount}
+          unlistedValue={input.unlistedValue}
+          listedValue={input.listedValue}
         />
-      </div>
+      ),
+    },
+  ];
 
-      {totalAlbums > 0 && (
-        <div className="mt-4 animate-fade-in-up stagger-3">
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                <div>
-                  <h2 className="font-display text-lg font-bold">Album Photos</h2>
-                  <p className="text-sm text-muted-foreground">
-                    {totalAlbums === 0
-                      ? "Add albums to start tracking photo coverage."
-                      : `${photoCoveragePct}% of your catalogue has cover photos.`}
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-center gap-3">
-                  <span className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-sm font-medium text-emerald-400">
-                    <ImageIcon className="h-4 w-4" />
-                    {withPhotos} with photo{withPhotos === 1 ? "" : "s"}
-                  </span>
-                  <span className="inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-sm font-medium text-amber-400">
-                    <ImageOff className="h-4 w-4" />
-                    {missingPhotos} missing photo{missingPhotos === 1 ? "" : "s"}
-                  </span>
-                  {missingPhotos > 0 && (
-                    <Button variant="outline" size="sm" asChild>
-                      <Link href="/albums?missing=photos">View missing</Link>
-                    </Button>
-                  )}
-                </div>
+  if (input.totalAlbums > 0) {
+    sections.push({
+      id: "photo-coverage",
+      label: "Album Photos",
+      node: (
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <h2 className="font-display text-lg font-bold">Album Photos</h2>
+                <p className="text-sm text-muted-foreground">
+                  {`${input.photoCoveragePct}% of your catalogue has cover photos.`}
+                </p>
               </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-sm font-medium text-emerald-400">
+                  <ImageIcon className="h-4 w-4" />
+                  {input.withPhotos} with photo{input.withPhotos === 1 ? "" : "s"}
+                </span>
+                <span className="inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-sm font-medium text-amber-400">
+                  <ImageOff className="h-4 w-4" />
+                  {input.missingPhotos} missing photo
+                  {input.missingPhotos === 1 ? "" : "s"}
+                </span>
+                {input.missingPhotos > 0 && (
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href="/albums?missing=photos">View missing</Link>
+                  </Button>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ),
+    });
+  }
+
+  sections.push(
+    {
+      id: "sales-chart",
+      label: "Sales Chart",
+      node: <SalesChart data={input.monthlySales} />,
+    },
+    {
+      id: "whats-new",
+      label: "What's New",
+      node: <WhatsNewCard />,
+    },
+    {
+      id: "quick-actions",
+      label: "Quick Actions",
+      node: (
+        <div>
+          <h2 className="mb-4 font-display text-xl font-bold">Quick Actions</h2>
+          <div className="flex flex-wrap gap-3">
+            <Button variant="outline" asChild>
+              <Link href="/import">
+                <Upload className="h-4 w-4" />
+                Import CSV
+              </Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link href="/albums?add=true">
+                <Plus className="h-4 w-4" />
+                Add Album
+              </Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link href="/albums?action=price-all">
+                <DollarSign className="h-4 w-4" />
+                Price All Unlisted
+              </Link>
+            </Button>
+          </div>
+        </div>
+      ),
+    },
+    {
+      id: "recent-activity",
+      label: "Recent Activity",
+      node: (
+        <div>
+          <h2 className="mb-4 font-display text-xl font-bold">Recent Activity</h2>
+          <Card>
+            <CardContent className="p-0">
+              {input.recentActivity.length === 0 ? (
+                <div className="px-6 py-12 text-center">
+                  <p className="text-muted-foreground">No activity yet.</p>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Import your catalogue or add an album to get started.
+                  </p>
+                  <Button className="mt-4" asChild>
+                    <Link href="/import">Import CSV</Link>
+                  </Button>
+                </div>
+              ) : (
+                <div className="divide-y divide-white/8">
+                  {input.recentActivity.map((album) => (
+                    <Link
+                      key={album.id}
+                      href={`/albums/${album.id}`}
+                      className="group flex items-center justify-between gap-4 px-6 py-4 transition-colors hover:bg-muted/30 focus-visible:bg-muted/30 focus-visible:outline-none"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate font-medium transition-colors group-hover:text-accent">
+                          {album.title}
+                        </p>
+                        <p className="truncate text-sm text-muted-foreground">
+                          {album.artist} ·{" "}
+                          {getActivityDescription(album.status, album.sold_price)}
+                        </p>
+                      </div>
+                      <span className="shrink-0 text-xs text-muted-foreground">
+                        {formatRelativeTime(album.updated_at)}
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
-      )}
-
-      <div className="mt-8">
-        <SalesChart data={monthlySales} />
-      </div>
-
-      <div className="mt-8 animate-fade-in-up stagger-5">
-        <WhatsNewCard />
-      </div>
-
-      <div className="mt-8 animate-fade-in-up stagger-5">
-        <h2 className="mb-4 font-display text-xl font-bold">Quick Actions</h2>
-        <div className="flex flex-wrap gap-3">
-          <Button variant="outline" asChild>
-            <Link href="/import">
-              <Upload className="h-4 w-4" />
-              Import CSV
-            </Link>
-          </Button>
-          <Button variant="outline" asChild>
-            <Link href="/albums?add=true">
-              <Plus className="h-4 w-4" />
-              Add Album
-            </Link>
-          </Button>
-          <Button variant="outline" asChild>
-            <Link href="/albums?action=price-all">
-              <DollarSign className="h-4 w-4" />
-              Price All Unlisted
-            </Link>
-          </Button>
-        </div>
-      </div>
-
-      <div className="mt-8 animate-fade-in-up stagger-5">
-        <h2 className="mb-4 font-display text-xl font-bold">Recent Activity</h2>
-        <Card>
-          <CardContent className="p-0">
-            {recentActivity.length === 0 ? (
-              <div className="px-6 py-12 text-center">
-                <p className="text-muted-foreground">No activity yet.</p>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Import your catalogue or add an album to get started.
-                </p>
-                <Button className="mt-4" asChild>
-                  <Link href="/import">Import CSV</Link>
-                </Button>
-              </div>
-            ) : (
-              <div className="divide-y divide-white/8">
-                {recentActivity.map((album, i) => (
-                  <Link
-                    key={album.id}
-                    href={`/albums/${album.id}`}
-                    className={`group flex items-center justify-between gap-4 px-6 py-4 transition-colors hover:bg-muted/30 focus-visible:bg-muted/30 focus-visible:outline-none animate-fade-in-up stagger-${Math.min(i + 1, 5)}`}
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate font-medium transition-colors group-hover:text-accent">
-                        {album.title}
-                      </p>
-                      <p className="truncate text-sm text-muted-foreground">
-                        {album.artist} ·{" "}
-                        {getActivityDescription(album.status, album.sold_price)}
-                      </p>
-                    </div>
-                    <span className="shrink-0 text-xs text-muted-foreground">
-                      {formatRelativeTime(album.updated_at)}
-                    </span>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-    </div>
+      ),
+    }
   );
+
+  return sections;
 }

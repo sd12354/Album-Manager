@@ -119,7 +119,7 @@ export function AppShell({
           <button
             onClick={() => setHelpPanelOpen(true)}
             title="Help & Guide"
-            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/40 hover:text-accent"
           >
             <CircleHelp className="h-4 w-4" />
           </button>
@@ -131,7 +131,7 @@ export function AppShell({
           <button
             onClick={toggleTheme}
             title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/40 hover:text-accent"
           >
             {theme === "dark" ? (
               <Sun className="h-4 w-4" />

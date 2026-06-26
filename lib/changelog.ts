@@ -18,6 +18,17 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-06-25",
+    version: "0.6.0",
+    title: "Rearrangeable dashboard & color cues",
+    items: [
+      "Drag-reorder dashboard sections — hover any section on desktop to grab the handle on its left edge. Order is remembered per device.",
+      "\"Reset layout\" appears once you've customized the order, in case you want the defaults back.",
+      "Notification icons now color-code at a glance: sales are green, invites are accent purple, collaboration events are blue.",
+      "The bell tints accent when you have unread items, and top-bar utility icons get an accent-on-hover treatment.",
+    ],
+  },
+  {
+    date: "2026-06-25",
     version: "0.5.0",
     title: "Mobile, ownership & polish",
     items: [
