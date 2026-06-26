@@ -31,7 +31,7 @@ import {
   validatePhoto,
 } from "@/lib/photos";
 import { createClient } from "@/lib/supabase/client";
-import { celebrateFirstSale } from "@/lib/celebrate";
+import { celebrateFirstListing, celebrateFirstSale } from "@/lib/celebrate";
 import { cn, formatCurrency } from "@/lib/utils";
 import type { Album, AlbumCondition, PricingResult } from "@/types";
 
@@ -327,6 +327,17 @@ export function AlbumDetailClient({
           list_price: price,
         }));
         toast.success("Listed on eBay");
+        // One-shot first-listing confetti — gentler than first-sale so it
+        // doesn't upstage the eventual sale moment.
+        void (async () => {
+          const fired = await celebrateFirstListing();
+          if (fired) {
+            toast.success(
+              "🎵 Your first listing! It's now live for buyers to find.",
+              { duration: 8000 }
+            );
+          }
+        })();
         router.refresh();
       }
     } else {
@@ -359,6 +370,17 @@ export function AlbumDetailClient({
       } else {
         toast.success("Listed on Discogs");
       }
+      // One-shot first-listing confetti (shared with eBay path — first
+      // listing on EITHER platform fires it).
+      void (async () => {
+        const fired = await celebrateFirstListing();
+        if (fired) {
+          toast.success(
+            "🎵 Your first listing! It's now live for buyers to find.",
+            { duration: 8000 }
+          );
+        }
+      })();
       router.refresh();
     } else {
       const err = await res.json().catch(() => ({}));
