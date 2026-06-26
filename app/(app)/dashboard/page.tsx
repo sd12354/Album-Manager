@@ -7,6 +7,7 @@ import { SalesChart, type SalesPoint } from "@/components/sales-chart";
 import { AnimatedStats } from "@/components/animated-stats";
 import { AnimatedCollectionValue } from "@/components/animated-collection-value";
 import { WhatsNewCard } from "@/components/whats-new-card";
+import { DashboardSearch } from "@/components/dashboard-search";
 import { fetchAllPages, fetchAllPagesParallel } from "@/lib/paginate";
 import { formatRelativeTime, getActivityDescription } from "@/lib/utils";
 import { getActiveCollection } from "@/lib/collections";
@@ -215,6 +216,21 @@ export default async function DashboardPage() {
   return (
     <div className="animate-fade-in">
       <h1 className="font-display text-3xl font-bold">Dashboard</h1>
+
+      {/* Global search — albums, pages, and actions in one place.
+          Cmd+K from anywhere on the dashboard focuses it. */}
+      <div className="mt-6">
+        <DashboardSearch
+          albums={allAlbums.map((a) => ({
+            id: a.id,
+            title: a.title,
+            artist: a.artist,
+            status: a.status,
+            list_price: a.list_price,
+            suggested_price: a.suggested_price,
+          }))}
+        />
+      </div>
 
       {/* Animated stat cards */}
       <div className="mt-8">
