@@ -75,13 +75,18 @@ export async function GET(request: Request) {
       () => null
     );
 
-    await supabase.auth.updateUser({
+    const { error: metadataError } = await supabase.auth.updateUser({
       data: {
         discogs_oauth_token: token,
         discogs_oauth_token_secret: tokenSecret,
         discogs_username: username ?? "Discogs user",
       },
     });
+    if (metadataError) {
+      throw new Error(
+        `Could not save Discogs account details: ${metadataError.message}`
+      );
+    }
 
     console.log("[discogs]", {
       scope: "discogs",
