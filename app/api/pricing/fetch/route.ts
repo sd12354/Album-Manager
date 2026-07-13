@@ -38,46 +38,56 @@ function buildFromCache(
   discogsRow?: CacheRow,
   ebayRow?: CacheRow
 ): PricingResult {
-  const result: PricingResult = {
-    suggestedPrice: album.suggested_price ?? 0,
-    confidence: "low",
-  };
+  const discogsResult = discogsRow
+    ? (() => {
+        const raw = (discogsRow.raw_data ?? {}) as Record<string, unknown>;
+        return {
+          releaseId: raw.releaseId as number | undefined,
+          releaseTitle: raw.releaseTitle as string | undefined,
+          releaseYear: raw.releaseYear as string | undefined,
+          median: discogsRow.median_price ?? undefined,
+          lowest: discogsRow.lowest_price ?? undefined,
+          numForSale: discogsRow.num_sales ?? undefined,
+          priceForCondition: raw.priceForCondition as number | undefined,
+          allConditionPrices: raw.allConditionPrices as
+            | Record<string, number>
+            | undefined,
+          matchedVia: raw.matchedVia as string | undefined,
+        };
+      })()
+    : null;
+
+  const ebayResult = ebayRow
+    ? (() => {
+        const raw = (ebayRow.raw_data ?? {}) as Record<string, unknown>;
+        const comparables = (raw.comparables as number[] | undefined) ?? [];
+        return {
+          median: ebayRow.median_price ?? undefined,
+          lowest: ebayRow.lowest_price ?? undefined,
+          highest: raw.highest as number | undefined,
+          comparables,
+          sampleListings: raw.sampleListings as
+            | Array<{ price: number; title: string; url: string }>
+            | undefined,
+          count: ebayRow.num_sales ?? comparables.length,
+        };
+      })()
+    : null;
+
+  const result = buildCombinedPricing(
+    discogsResult?.releaseId ? discogsResult : null,
+    ebayResult && ebayResult.count > 0 ? ebayResult : null,
+    album.condition as AlbumCondition
+  );
+
+  if (!result.suggestionSource && album.suggested_price != null) {
+    result.suggestedPrice = album.suggested_price;
+  }
 
   if (discogsRow) {
     const raw = (discogsRow.raw_data ?? {}) as Record<string, unknown>;
-    result.discogsMedian = discogsRow.median_price ?? undefined;
-    result.discogsLowest = discogsRow.lowest_price ?? undefined;
-    result.discogsSalesCount = discogsRow.num_sales ?? undefined;
-    result.discogsReleaseId = raw.releaseId as number | undefined;
-    result.discogsReleaseTitle = raw.releaseTitle as string | undefined;
-    result.discogsReleaseYear = raw.releaseYear as string | undefined;
-    result.discogsPriceForCondition = raw.priceForCondition as
-      | number
-      | undefined;
-    result.discogsConditionPrices = raw.allConditionPrices as
-      | Record<string, number>
-      | undefined;
-    if (result.discogsPriceForCondition != null) {
-      result.suggestionSource = "discogs-condition";
-    } else if (result.discogsMedian != null) {
-      result.suggestionSource = "discogs-median";
-    }
     result.confidence =
       (raw.confidence as PricingResult["confidence"]) ?? "low";
-  }
-
-  if (ebayRow) {
-    const raw = (ebayRow.raw_data ?? {}) as Record<string, unknown>;
-    result.ebayMedian = ebayRow.median_price ?? undefined;
-    result.ebayLowest = ebayRow.lowest_price ?? undefined;
-    result.ebayHighest = raw.highest as number | undefined;
-    result.ebayComparables = raw.comparables as number[] | undefined;
-    result.ebayCount = ebayRow.num_sales ?? undefined;
-    result.ebaySampleListings = raw.sampleListings as
-      | PricingResult["ebaySampleListings"];
-    if (!result.suggestionSource && result.ebayMedian != null) {
-      result.suggestionSource = "ebay-active";
-    }
   }
 
   result.notice = "Showing cached pricing (fetched within last 24h).";
@@ -99,6 +109,36 @@ async function persistDiscogsReleaseId(
 
   if (error) {
     throw new Error(`Failed to save Discogs release ID: ${error.message}`);
+  }
+}
+
+async function persistCachedPricing(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  album: Album,
+  pricing: PricingResult
+) {
+  if (!pricing.suggestionSource || pricing.suggestedPrice <= 0) return;
+
+  const needsUpdate =
+    (album.suggested_price ?? 0) <= 0 ||
+    album.suggested_price !== pricing.suggestedPrice ||
+    (pricing.discogsReleaseId != null &&
+      album.discogs_release_id !== pricing.discogsReleaseId);
+
+  if (!needsUpdate) return;
+
+  const { error } = await supabase
+    .from("albums")
+    .update({
+      suggested_price: pricing.suggestedPrice,
+      discogs_release_id: pricing.discogsReleaseId ?? album.discogs_release_id,
+      status: album.status === "unlisted" ? "pricing" : album.status,
+    })
+    .eq("id", album.id)
+    .eq("user_id", album.user_id);
+
+  if (error) {
+    throw new Error(`Failed to save cached album pricing: ${error.message}`);
   }
 }
 
@@ -151,22 +191,34 @@ export async function POST(request: Request) {
     const discogsRow = rows.find((r) => r.source === "discogs");
     const ebayRow = rows.find((r) => r.source === "ebay");
     if (isFresh(discogsRow) || isFresh(ebayRow)) {
+      const cachedPricing = buildFromCache(
+        typedAlbum,
+        isFresh(discogsRow) ? discogsRow : undefined,
+        isFresh(ebayRow) ? ebayRow : undefined
+      );
       const cachedReleaseId = (discogsRow?.raw_data ?? {}).releaseId as
         | number
         | undefined;
-      await persistDiscogsReleaseId(
-        supabase,
-        albumId,
-        typedAlbum.user_id,
-        cachedReleaseId
-      );
-      return NextResponse.json(
-        buildFromCache(
-          typedAlbum,
-          isFresh(discogsRow) ? discogsRow : undefined,
-          isFresh(ebayRow) ? ebayRow : undefined
-        )
-      );
+      try {
+        await persistDiscogsReleaseId(
+          supabase,
+          albumId,
+          typedAlbum.user_id,
+          cachedReleaseId
+        );
+        await persistCachedPricing(supabase, typedAlbum, cachedPricing);
+      } catch (err) {
+        return NextResponse.json(
+          {
+            error:
+              err instanceof Error
+                ? err.message
+                : "Failed to save cached album pricing",
+          },
+          { status: 500 }
+        );
+      }
+      return NextResponse.json(cachedPricing);
     }
   }
 
