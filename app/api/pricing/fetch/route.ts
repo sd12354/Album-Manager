@@ -66,9 +66,10 @@ function buildFromCache(
           lowest: ebayRow.lowest_price ?? undefined,
           highest: raw.highest as number | undefined,
           comparables,
-          sampleListings: raw.sampleListings as
-            | Array<{ price: number; title: string; url: string }>
-            | undefined,
+          sampleListings:
+            (raw.sampleListings as
+              | Array<{ price: number; title: string; url: string }>
+              | undefined) ?? [],
           count: ebayRow.num_sales ?? comparables.length,
         };
       })()
