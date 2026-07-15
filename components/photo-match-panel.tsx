@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -110,7 +111,9 @@ function confidenceBadge(confidence?: string) {
 }
 
 export function PhotoMatchPanel() {
+  const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const ownerIdRef = useRef("");
   const [rows, setRows] = useState<PhotoMatchRow[]>([]);
   const [albums, setAlbums] = useState<
     Pick<Album, "id" | "artist" | "title" | "photo_urls">[]
@@ -135,8 +138,19 @@ export function PhotoMatchPanel() {
 
   const supabase = useMemo(() => createClient(), []);
 
-  useEffect(() => {
-    void (async () => {
+  const clearPhotoRows = useCallback(() => {
+    setRows((prev) => {
+      for (const row of prev) {
+        if (row.previewUrl) URL.revokeObjectURL(row.previewUrl);
+      }
+      return [];
+    });
+    setDone(null);
+    setLightboxUrl(null);
+  }, []);
+
+  const loadActiveCollection = useCallback(
+    async ({ clearRows = false }: { clearRows?: boolean } = {}) => {
       setCollectionLoading(true);
       setCollectionError(null);
       try {
@@ -150,6 +164,12 @@ export function PhotoMatchPanel() {
         }
 
         const activeOwner = active.ownerId as string;
+        const ownerChanged =
+          ownerIdRef.current !== "" && ownerIdRef.current !== activeOwner;
+        ownerIdRef.current = activeOwner;
+        if (clearRows || ownerChanged) {
+          clearPhotoRows();
+        }
         setOwnerId(activeOwner);
         setCanEdit(active.role === "owner" || active.role === "editor");
         setCollectionLabel(active.isOwner ? null : (active.label as string));
@@ -177,8 +197,23 @@ export function PhotoMatchPanel() {
       } finally {
         setCollectionLoading(false);
       }
-    })();
-  }, [supabase]);
+    },
+    [clearPhotoRows, supabase]
+  );
+
+  useEffect(() => {
+    void loadActiveCollection();
+    const onCollectionChanged = () => {
+      void loadActiveCollection({ clearRows: true });
+    };
+    window.addEventListener("vinylvault:collection-changed", onCollectionChanged);
+    return () => {
+      window.removeEventListener(
+        "vinylvault:collection-changed",
+        onCollectionChanged
+      );
+    };
+  }, [loadActiveCollection]);
 
   useEffect(() => {
     if (!lightboxUrl) return;
@@ -358,6 +393,7 @@ export function PhotoMatchPanel() {
     setAnalyzing(true);
     setAnalyzeProgress(0);
     let completed = 0;
+    let failed = 0;
     let rateLimitedToastShown = false;
 
     // Each photo triggers up to 3 Anthropic Vision calls server-side
@@ -427,6 +463,7 @@ export function PhotoMatchPanel() {
                 ? "AI rate limit — try again in a minute."
                 : lastError,
             });
+            failed += 1;
             return;
           }
 
@@ -436,6 +473,7 @@ export function PhotoMatchPanel() {
               status: "error",
               error: data.error ?? "Analysis failed",
             });
+            failed += 1;
             return;
           }
 
@@ -454,6 +492,7 @@ export function PhotoMatchPanel() {
 
         // All attempts exhausted — surface whatever the last error was.
         updateRow(row.id, { status: "error", error: lastError });
+        failed += 1;
       } finally {
         completed += 1;
         setAnalyzeProgress(Math.round((completed / pending.length) * 100));
@@ -461,10 +500,9 @@ export function PhotoMatchPanel() {
     });
 
     setAnalyzing(false);
-    const errs = rows.filter((r) => r.status === "error").length;
-    if (errs > 0) {
+    if (failed > 0) {
       toast.warning(
-        `Analysis done — ${errs} photo${errs === 1 ? "" : "s"} had errors, review below.`,
+        `Analysis done — ${failed} photo${failed === 1 ? "" : "s"} had errors, review below.`,
         { duration: 6000 }
       );
     } else {
@@ -586,6 +624,7 @@ export function PhotoMatchPanel() {
     setDone({ attached, failed });
     toast.success(`Attached ${attached} photo${attached === 1 ? "" : "s"}`);
     setAttaching(false);
+    router.refresh();
   }
 
   // When the "only missing photos" toggle is on, hide already-covered

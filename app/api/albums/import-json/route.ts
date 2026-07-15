@@ -256,15 +256,25 @@ export async function POST(request: Request) {
     }
   }
 
+  let pricingCacheFailed = 0;
   for (let i = 0; i < cacheRows.length; i += CHUNK) {
     const chunk = cacheRows.slice(i, i + CHUNK);
-    await supabase.from("pricing_cache").insert(chunk);
-    // Non-fatal — pricing cache is best-effort
+    const { error } = await supabase.from("pricing_cache").insert(chunk);
+    if (error) {
+      pricingCacheFailed += chunk.length;
+      console.error("[import-json]", {
+        event: "pricing_cache_insert_failed",
+        chunk: Math.floor(i / CHUNK) + 1,
+        count: chunk.length,
+        message: error.message,
+      });
+    }
   }
 
   return NextResponse.json({
     count: insertedAlbums.length,
     skipped: skipped.length,
     skippedDetails: skipped.slice(0, 20),
+    pricingCacheFailed,
   });
 }
