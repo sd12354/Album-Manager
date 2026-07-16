@@ -997,11 +997,20 @@ export function CatalogueClient({
     let listed = 0;
     let previewed = 0;
     let failed = 0;
+    let unpriced = 0;
     for (const id of selectedIds) {
+      const album = albums.find((item) => item.id === id);
+      const rawPrice = album?.list_price ?? album?.suggested_price;
+      const price = Number(rawPrice);
+      if (rawPrice == null || !Number.isFinite(price) || price <= 0) {
+        unpriced += 1;
+        continue;
+      }
+
       const res = await fetch("/api/ebay/list", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ albumId: id }),
+        body: JSON.stringify({ albumId: id, listPrice: price }),
       });
       if (!res.ok) {
         failed += 1;
@@ -1012,23 +1021,27 @@ export function CatalogueClient({
       else listed += 1;
     }
 
-    if (previewed > 0 && listed === 0) {
+    const parts: string[] = [];
+    if (listed > 0) parts.push(`${listed} listed`);
+    if (previewed > 0) parts.push(`${previewed} preview-only`);
+    if (failed > 0) parts.push(`${failed} failed`);
+    if (unpriced > 0) parts.push(`${unpriced} missing price`);
+
+    if (previewed > 0 && listed === 0 && failed === 0 && unpriced === 0) {
       toast.warning(
         `Preview only — eBay listing isn't wired up yet, so ${previewed} ${
           previewed === 1 ? "album was" : "albums were"
         } not posted.`,
         { duration: 10000 }
       );
+    } else if (listed === 0 && previewed === 0) {
+      toast.warning(parts.join(" · ") || "No albums were listed.");
     } else {
-      const parts: string[] = [];
-      if (listed > 0) parts.push(`${listed} listed`);
-      if (previewed > 0) parts.push(`${previewed} preview-only`);
-      if (failed > 0) parts.push(`${failed} failed`);
       toast.success(parts.join(" · "));
       router.refresh();
     }
     setBulkLoading(null);
-  }, [selectedIds, router]);
+  }, [albums, selectedIds, router]);
 
   return (
     <div className="animate-fade-in">
