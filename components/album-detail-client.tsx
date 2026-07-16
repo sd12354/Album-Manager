@@ -285,6 +285,8 @@ export function AlbumDetailClient({
       const data = await res.json();
       setPricing((prev) => ({
         ...(prev ?? { suggestedPrice: 0, confidence: "low" as const }),
+        suggestedPrice: data.suggestedPrice,
+        confidence: data.confidence,
         aiSuggestedPrice: data.suggestedPrice,
         aiPriceRange: data.priceRange,
         aiReasoning: data.reasoning,

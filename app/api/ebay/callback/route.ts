@@ -90,7 +90,7 @@ export async function GET(request: Request) {
       });
     }
 
-    await supabase.from("ebay_credentials").upsert({
+    const { error: upsertError } = await supabase.from("ebay_credentials").upsert({
       user_id: user.id,
       access_token: "stub-access-token",
       refresh_token: "stub-refresh-token",
@@ -98,12 +98,23 @@ export async function GET(request: Request) {
       updated_at: new Date().toISOString(),
     });
 
-    await supabase.auth.updateUser({
+    if (upsertError) {
+      return settingsRedirect(request, {
+        ebay_error: "Could not save the eBay connection. Please try again.",
+      });
+    }
+
+    const { error: metadataError } = await supabase.auth.updateUser({
       data: {
         ebay_username: "vinyl_collector_pro",
         ebay_environment: "stub",
       },
     });
+    if (metadataError) {
+      return settingsRedirect(request, {
+        ebay_error: "Could not save the eBay connection details. Please try again.",
+      });
+    }
   } else {
     const clientId = process.env.EBAY_CLIENT_ID;
     const clientSecret = process.env.EBAY_CLIENT_SECRET;
@@ -152,7 +163,7 @@ export async function GET(request: Request) {
       return settingsRedirect(request, { ebay_error: message });
     }
 
-    await supabase.from("ebay_credentials").upsert({
+    const { error: upsertError } = await supabase.from("ebay_credentials").upsert({
       user_id: user.id,
       access_token: tokenData.access_token,
       refresh_token: tokenData.refresh_token,
@@ -162,10 +173,16 @@ export async function GET(request: Request) {
       updated_at: new Date().toISOString(),
     });
 
+    if (upsertError) {
+      return settingsRedirect(request, {
+        ebay_error: "Could not save the eBay connection. Please try again.",
+      });
+    }
+
     // Try to fetch the user's real eBay handle. Falls back to a generic label
     // if the identity scope isn't granted or the keyset doesn't allow it.
     const realUsername = await fetchEbayUsername(tokenData.access_token);
-    await supabase.auth.updateUser({
+    const { error: metadataError } = await supabase.auth.updateUser({
       data: {
         ebay_username:
           realUsername ??
@@ -175,6 +192,11 @@ export async function GET(request: Request) {
         ebay_environment: EBAY_ENVIRONMENT,
       },
     });
+    if (metadataError) {
+      return settingsRedirect(request, {
+        ebay_error: "Could not save the eBay connection details. Please try again.",
+      });
+    }
   }
 
   return settingsRedirect(request, { ebay: "connected" });

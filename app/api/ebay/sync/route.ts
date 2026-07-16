@@ -29,13 +29,25 @@ export async function POST() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { data: albums } = await supabase
+  const { data: albums, error: albumsError } = await supabase
     .from("albums")
     .select("*")
     .eq("user_id", user.id)
     .neq("status", "sold")
     .or("ebay_listing_id.not.is.null,discogs_listing_id.not.is.null")
     .limit(MAX_SYNC);
+
+  if (albumsError) {
+    console.error("[sync]", {
+      scope: "sync",
+      event: "bulk_sync_load_failed",
+      message: albumsError.message,
+    });
+    return NextResponse.json(
+      { error: "Could not load albums for marketplace sync." },
+      { status: 500 }
+    );
+  }
 
   const { data: ebayCreds } = await supabase
     .from("ebay_credentials")
@@ -79,6 +91,7 @@ export async function POST() {
     changed: boolean;
     soldOn?: string;
     delistedFrom?: string[];
+    error?: string;
   }> = [];
 
   for (const row of albums ?? []) {
@@ -89,7 +102,26 @@ export async function POST() {
     });
 
     if (outcome.changed) {
-      await supabase.from("albums").update(outcome.updates).eq("id", album.id);
+      const { error: updateError } = await supabase
+        .from("albums")
+        .update(outcome.updates)
+        .eq("id", album.id);
+
+      if (updateError) {
+        console.error("[sync]", {
+          scope: "sync",
+          event: "bulk_sync_persist_failed",
+          albumId: album.id,
+          message: updateError.message,
+        });
+        synced.push({
+          albumId: album.id,
+          status: album.status,
+          changed: false,
+          error: "Marketplace status changed but could not be saved.",
+        });
+        continue;
+      }
 
       if (outcome.soldOn) {
         await crossCancelOtherMarketplace(
@@ -114,11 +146,13 @@ export async function POST() {
   }
 
   const changed = synced.filter((r) => r.changed).length;
+  const failed = synced.filter((r) => r.error).length;
 
   return NextResponse.json({
     synced,
     count: synced.length,
     changed,
+    failed,
     capped: (albums?.length ?? 0) >= MAX_SYNC,
   });
 }
