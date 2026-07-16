@@ -110,10 +110,23 @@ export async function POST(request: Request) {
     return NextResponse.json({ status: typedAlbum.status, changed: false });
   }
 
-  await supabase
+  const { error: updateError } = await supabase
     .from("albums")
     .update(outcome.updates)
     .eq("id", albumId);
+
+  if (updateError) {
+    console.error("[sync]", {
+      scope: "sync",
+      event: "single_sync_persist_failed",
+      albumId,
+      message: updateError.message,
+    });
+    return NextResponse.json(
+      { error: "Marketplace status changed but could not be saved. Please try again." },
+      { status: 500 }
+    );
+  }
 
   if (outcome.soldOn) {
     await crossCancelOtherMarketplace(

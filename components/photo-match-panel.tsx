@@ -135,50 +135,52 @@ export function PhotoMatchPanel() {
 
   const supabase = useMemo(() => createClient(), []);
 
-  useEffect(() => {
-    void (async () => {
-      setCollectionLoading(true);
-      setCollectionError(null);
-      try {
-        const res = await fetch("/api/collection/active");
-        if (!res.ok) {
-          throw new Error("Could not load your active collection.");
-        }
-        const { active } = await res.json();
-        if (!active?.ownerId) {
-          throw new Error("No active collection is available.");
-        }
-
-        const activeOwner = active.ownerId as string;
-        setOwnerId(activeOwner);
-        setCanEdit(active.role === "owner" || active.role === "editor");
-        setCollectionLabel(active.isOwner ? null : (active.label as string));
-
-        // Paginate so the project-level db-max-rows cap can't truncate
-        // the picker / matcher candidate set on large catalogues.
-        type PickerRow = Pick<Album, "id" | "artist" | "title" | "photo_urls">;
-        const rows = await fetchAllPages<PickerRow>((from, to) =>
-          supabase
-            .from("albums")
-            .select("id, artist, title, photo_urls")
-            .eq("user_id", activeOwner)
-            .order("title", { ascending: true })
-            .range(from, to)
-        );
-        setAlbums(rows);
-      } catch (error) {
-        setAlbums([]);
-        setCanEdit(false);
-        setCollectionError(
-          error instanceof Error
-            ? error.message
-            : "Could not load your active collection."
-        );
-      } finally {
-        setCollectionLoading(false);
+  const loadActiveCollection = useCallback(async () => {
+    setCollectionLoading(true);
+    setCollectionError(null);
+    try {
+      const res = await fetch("/api/collection/active");
+      if (!res.ok) {
+        throw new Error("Could not load your active collection.");
       }
-    })();
+      const { active } = await res.json();
+      if (!active?.ownerId) {
+        throw new Error("No active collection is available.");
+      }
+
+      const activeOwner = active.ownerId as string;
+      setOwnerId(activeOwner);
+      setCanEdit(active.role === "owner" || active.role === "editor");
+      setCollectionLabel(active.isOwner ? null : (active.label as string));
+
+      // Paginate so the project-level db-max-rows cap can't truncate
+      // the picker / matcher candidate set on large catalogues.
+      type PickerRow = Pick<Album, "id" | "artist" | "title" | "photo_urls">;
+      const rows = await fetchAllPages<PickerRow>((from, to) =>
+        supabase
+          .from("albums")
+          .select("id, artist, title, photo_urls")
+          .eq("user_id", activeOwner)
+          .order("title", { ascending: true })
+          .range(from, to)
+      );
+      setAlbums(rows);
+    } catch (error) {
+      setAlbums([]);
+      setCanEdit(false);
+      setCollectionError(
+        error instanceof Error
+          ? error.message
+          : "Could not load your active collection."
+      );
+    } finally {
+      setCollectionLoading(false);
+    }
   }, [supabase]);
+
+  useEffect(() => {
+    void loadActiveCollection();
+  }, [loadActiveCollection]);
 
   useEffect(() => {
     if (!lightboxUrl) return;
@@ -205,6 +207,38 @@ export function PhotoMatchPanel() {
   const updateRow = useCallback((id: string, patch: Partial<PhotoMatchRow>) => {
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
   }, []);
+
+  const resetForCollectionChange = useCallback(() => {
+    setRows((prev) => {
+      for (const row of prev) {
+        if (row.previewUrl) URL.revokeObjectURL(row.previewUrl);
+      }
+      return [];
+    });
+    setAnalyzing(false);
+    setAnalyzeProgress(0);
+    setAttaching(false);
+    setAttachProgress(0);
+    setConverting(false);
+    setConvertDone(0);
+    setConvertTotal(0);
+    setLightboxUrl(null);
+    setDone(null);
+    setOwnerId("");
+    setAlbums([]);
+    setCanEdit(true);
+    setCollectionLabel(null);
+  }, []);
+
+  useEffect(() => {
+    const onCollectionChange = () => {
+      resetForCollectionChange();
+      void loadActiveCollection();
+    };
+    window.addEventListener("vinylvault:collection-change", onCollectionChange);
+    return () =>
+      window.removeEventListener("vinylvault:collection-change", onCollectionChange);
+  }, [loadActiveCollection, resetForCollectionChange]);
 
   const addFiles = useCallback(async (fileList: FileList | null) => {
     if (!fileList) return;
