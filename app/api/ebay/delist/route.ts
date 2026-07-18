@@ -60,9 +60,11 @@ export async function POST(request: Request) {
   const { data: ebayCreds } = await supabase.from("ebay_credentials").select("*").eq("user_id", user.id).maybeSingle();
 
   const isRealEbay = hasRealEbayCredentials(ebayCreds);
-  const isManualListing = typedAlbum.ebay_listing_id.startsWith("manual-");
+  const isLocalOnlyListing =
+    typedAlbum.ebay_listing_id.startsWith("manual-") ||
+    typedAlbum.ebay_listing_id.startsWith("STUB-");
 
-  if (isRealEbay && ebayCreds && !isManualListing) {
+  if (isRealEbay && ebayCreds && !isLocalOnlyListing) {
     const tokenResult = await getValidEbayToken(ebayCreds as EbayTokenCredentials);
     if (tokenResult.refreshed) {
       await supabase.from("ebay_credentials").update({
@@ -100,5 +102,5 @@ export async function POST(request: Request) {
     );
   }
 
-  return NextResponse.json({ ok: true, stub: !isRealEbay });
+  return NextResponse.json({ ok: true, stub: !isRealEbay || isLocalOnlyListing });
 }
