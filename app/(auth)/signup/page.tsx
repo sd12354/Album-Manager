@@ -57,9 +57,10 @@ export default function SignupPage() {
     }
 
     setLoading(true);
+    const normalizedEmail = email.trim();
 
     const { data, error } = await supabase.auth.signUp({
-      email,
+      email: normalizedEmail,
       password,
       options: {
         // Ensures the confirmation link (when email confirmation is enabled
@@ -107,7 +108,7 @@ export default function SignupPage() {
         <h1 className="font-display text-xl font-bold">Check your email</h1>
         <p className="mt-3 text-sm text-muted-foreground">
           We sent a confirmation link to{" "}
-          <span className="font-medium text-foreground">{email}</span>. Click the
+          <span className="font-medium text-foreground">{email.trim()}</span>. Click the
           link to verify your account, then sign in.
         </p>
         <Button asChild className="mt-6 w-full" size="lg">
