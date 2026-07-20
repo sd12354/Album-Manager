@@ -42,11 +42,7 @@ export default function UpdatePasswordPage() {
           : null;
 
       if (code && handledRecoveryCode !== code) {
-        handledRecoveryCode = code;
         const { error } = await supabase.auth.exchangeCodeForSession(code);
-        if (typeof window !== "undefined") {
-          window.history.replaceState(null, "", "/update-password");
-        }
         if (error) {
           if (!mounted) return;
           setError(
@@ -54,6 +50,10 @@ export default function UpdatePasswordPage() {
           );
           setCheckingSession(false);
           return;
+        }
+        handledRecoveryCode = code;
+        if (typeof window !== "undefined") {
+          window.history.replaceState(null, "", "/update-password");
         }
       }
 
