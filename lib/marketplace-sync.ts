@@ -76,7 +76,9 @@ export async function checkAlbumMarketplaceState(
   let buyerAddressRaw: string | null = null;
   let ebayToken: string | null = null;
 
-  const ebayIsManual = album.ebay_listing_id?.startsWith("manual-") ?? false;
+  const ebayListingId = album.ebay_listing_id ?? "";
+  const ebayIsManual =
+    ebayListingId.startsWith("manual-") || ebayListingId.startsWith("STUB-");
   const discogsIsManual = album.discogs_listing_id?.startsWith("manual-") ?? false;
 
   if (album.ebay_listing_id && !ebayIsManual && ctx.ebayCreds && ctx.isRealEbay) {
@@ -215,7 +217,9 @@ export async function crossCancelOtherMarketplace(
   ebayToken: string | null,
   isRealEbay: boolean
 ): Promise<void> {
-  const ebayIsManual = album.ebay_listing_id?.startsWith("manual-") ?? false;
+  const ebayListingId = album.ebay_listing_id ?? "";
+  const ebayIsManual =
+    ebayListingId.startsWith("manual-") || ebayListingId.startsWith("STUB-");
   const discogsIsManual = album.discogs_listing_id?.startsWith("manual-") ?? false;
 
   if (
