@@ -9,6 +9,7 @@ import {
   buildMarketplaceSyncContext,
   checkAlbumMarketplaceState,
   crossCancelOtherMarketplace,
+  isLocalMarketplaceListing,
 } from "@/lib/marketplace-sync";
 import type { Album } from "@/types";
 
@@ -59,11 +60,13 @@ export async function POST(request: Request) {
   }
 
   // Manually-tracked listings have no marketplace API to query against.
-  const ebayIsManual = typedAlbum.ebay_listing_id?.startsWith("manual-") ?? false;
-  const discogsIsManual = typedAlbum.discogs_listing_id?.startsWith("manual-") ?? false;
+  const ebayIsLocal = isLocalMarketplaceListing(typedAlbum.ebay_listing_id);
+  const discogsIsLocal = isLocalMarketplaceListing(
+    typedAlbum.discogs_listing_id
+  );
   if (
-    (!typedAlbum.ebay_listing_id || ebayIsManual) &&
-    (!typedAlbum.discogs_listing_id || discogsIsManual)
+    (!typedAlbum.ebay_listing_id || ebayIsLocal) &&
+    (!typedAlbum.discogs_listing_id || discogsIsLocal)
   ) {
     return NextResponse.json({
       status: typedAlbum.status,
@@ -72,11 +75,18 @@ export async function POST(request: Request) {
     });
   }
 
-  const { data: ebayCreds } = await supabase
+  const { data: ebayCreds, error: ebayCredsError } = await supabase
     .from("ebay_credentials")
     .select("*")
     .eq("user_id", user.id)
     .maybeSingle();
+
+  if (ebayCredsError) {
+    return NextResponse.json(
+      { error: "Could not load eBay credentials for marketplace sync." },
+      { status: 500 }
+    );
+  }
 
   const isRealEbay = hasRealEbayCredentials(ebayCreds);
   let ebayToken: string | null = null;
@@ -87,7 +97,7 @@ export async function POST(request: Request) {
         ebayCreds as EbayTokenCredentials
       );
       if (tokenResult.refreshed) {
-        await supabase
+        const { error: tokenUpdateError } = await supabase
           .from("ebay_credentials")
           .update({
             access_token: tokenResult.token,
@@ -95,6 +105,12 @@ export async function POST(request: Request) {
             updated_at: new Date().toISOString(),
           })
           .eq("user_id", user.id);
+        if (tokenUpdateError) {
+          return NextResponse.json(
+            { error: "Could not save refreshed eBay credentials." },
+            { status: 500 }
+          );
+        }
       }
       ebayToken = tokenResult.token;
     } catch {
@@ -110,10 +126,26 @@ export async function POST(request: Request) {
     return NextResponse.json({ status: typedAlbum.status, changed: false });
   }
 
-  await supabase
+  const { error: updateError } = await supabase
     .from("albums")
     .update(outcome.updates)
     .eq("id", albumId);
+
+  if (updateError) {
+    console.error("[sync]", {
+      scope: "marketplace-sync",
+      event: "single_sync_persist_failed",
+      albumId,
+      message: updateError.message,
+    });
+    return NextResponse.json(
+      {
+        error:
+          "Marketplace state changed, but VinylVault could not save the updated album state. Please retry before taking further listing actions.",
+      },
+      { status: 500 }
+    );
+  }
 
   if (outcome.soldOn) {
     await crossCancelOtherMarketplace(
