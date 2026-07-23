@@ -132,6 +132,9 @@ Migrations in `supabase/migrations/` (apply in order):
 | `006_listing_description.sql` | AI listing description column |
 | `007_collection_sharing.sql` | `collection_members`, `collection_invites`, shared RLS |
 | `008_advisor_hardening.sql` | Security hardening for advisor findings |
+| `009_lock_album_owner_updates.sql` | Prevent direct album owner changes |
+| `010_transfer_ownership.sql` | Atomic collection ownership transfer RPC |
+| `011_guard_editor_marketplace_fields.sql` | Owner-only marketplace/sale/fulfillment fields |
 
 ```bash
 npx supabase db push
@@ -271,11 +274,12 @@ Bulk pricing is chunked client-side (3 albums per API call) to stay within Verce
 - Site URL = your production domain
 - Redirect URLs = `https://your-domain.com/**`
 
-**Run migrations** `001` through `008` on your Supabase project.
+**Run migrations** `001` through `011` on your Supabase project.
 
 **eBay** (if using live OAuth): set RuName / auth-accepted URL to `{APP_URL}/api/ebay/callback`.
 
-`vercel.json` sets `maxDuration` to 60s on pricing, import, and marketplace routes.
+Long-running pricing, import, and marketplace route handlers export per-route
+`maxDuration` values for Vercel.
 
 ---
 

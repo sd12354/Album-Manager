@@ -6,6 +6,7 @@ import {
   hasRealEbayCredentials,
   type EbayTokenCredentials,
 } from "@/lib/ebay";
+import { isLocalMarketplaceListing } from "@/lib/marketplace-ids";
 import type { Album } from "@/types";
 
 export const runtime = "nodejs";
@@ -57,19 +58,31 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Album is not listed on eBay" }, { status: 400 });
   }
 
-  const { data: ebayCreds } = await supabase.from("ebay_credentials").select("*").eq("user_id", user.id).maybeSingle();
+  const { data: ebayCreds, error: ebayCredsError } = await supabase.from("ebay_credentials").select("*").eq("user_id", user.id).maybeSingle();
+  if (ebayCredsError) {
+    return NextResponse.json(
+      { error: "Could not load eBay credentials for delisting." },
+      { status: 500 }
+    );
+  }
 
   const isRealEbay = hasRealEbayCredentials(ebayCreds);
-  const isManualListing = typedAlbum.ebay_listing_id.startsWith("manual-");
+  const isLocalListing = isLocalMarketplaceListing(typedAlbum.ebay_listing_id);
 
-  if (isRealEbay && ebayCreds && !isManualListing) {
+  if (isRealEbay && ebayCreds && !isLocalListing) {
     const tokenResult = await getValidEbayToken(ebayCreds as EbayTokenCredentials);
     if (tokenResult.refreshed) {
-      await supabase.from("ebay_credentials").update({
+      const { error: tokenUpdateError } = await supabase.from("ebay_credentials").update({
         access_token: tokenResult.token,
         token_expiry: tokenResult.expiry,
         updated_at: new Date().toISOString(),
       }).eq("user_id", user.id);
+      if (tokenUpdateError) {
+        return NextResponse.json(
+          { error: "Could not save refreshed eBay credentials." },
+          { status: 500 }
+        );
+      }
     }
     await endEbayListing(typedAlbum.ebay_listing_id, tokenResult.token);
   }
