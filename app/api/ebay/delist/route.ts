@@ -6,7 +6,7 @@ import {
   hasRealEbayCredentials,
   type EbayTokenCredentials,
 } from "@/lib/ebay";
-import { isLocalMarketplaceListing } from "@/lib/marketplace-sync";
+import { isLocalMarketplaceListing } from "@/lib/marketplace-ids";
 import type { Album } from "@/types";
 
 export const runtime = "nodejs";

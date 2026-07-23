@@ -15,6 +15,7 @@ import {
   resolveUserDiscogsAuth,
   type DiscogsAuth,
 } from "@/lib/discogs";
+import { isLocalMarketplaceListing } from "@/lib/marketplace-ids";
 import type { Album, AlbumStatus } from "@/types";
 
 function formatAddress(a: {
@@ -56,13 +57,6 @@ export interface MarketplaceSyncContext {
   discogsAuth: DiscogsAuth | null;
   ebayCreds: EbayTokenCredentials | null;
   isRealEbay: boolean;
-}
-
-export function isLocalMarketplaceListing(listingId: string | null | undefined) {
-  return (
-    listingId?.startsWith("manual-") === true ||
-    listingId?.startsWith("STUB-") === true
-  );
 }
 
 /**
