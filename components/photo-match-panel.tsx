@@ -136,7 +136,11 @@ export function PhotoMatchPanel() {
   const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
-    void (async () => {
+    let cancelled = false;
+    let loadSeq = 0;
+
+    async function loadActiveCollection() {
+      const seq = ++loadSeq;
       setCollectionLoading(true);
       setCollectionError(null);
       try {
@@ -150,9 +154,6 @@ export function PhotoMatchPanel() {
         }
 
         const activeOwner = active.ownerId as string;
-        setOwnerId(activeOwner);
-        setCanEdit(active.role === "owner" || active.role === "editor");
-        setCollectionLabel(active.isOwner ? null : (active.label as string));
 
         // Paginate so the project-level db-max-rows cap can't truncate
         // the picker / matcher candidate set on large catalogues.
@@ -165,8 +166,13 @@ export function PhotoMatchPanel() {
             .order("title", { ascending: true })
             .range(from, to)
         );
+        if (cancelled || seq !== loadSeq) return;
+        setOwnerId(activeOwner);
+        setCanEdit(active.role === "owner" || active.role === "editor");
+        setCollectionLabel(active.isOwner ? null : (active.label as string));
         setAlbums(rows);
       } catch (error) {
+        if (cancelled || seq !== loadSeq) return;
         setAlbums([]);
         setCanEdit(false);
         setCollectionError(
@@ -175,9 +181,41 @@ export function PhotoMatchPanel() {
             : "Could not load your active collection."
         );
       } finally {
-        setCollectionLoading(false);
+        if (!cancelled && seq === loadSeq) setCollectionLoading(false);
       }
-    })();
+    }
+
+    function resetCollectionScopedState() {
+      setRows((prev) => {
+        for (const row of prev) {
+          if (row.previewUrl) URL.revokeObjectURL(row.previewUrl);
+        }
+        return [];
+      });
+      setAlbums([]);
+      setOwnerId("");
+      setCanEdit(true);
+      setCollectionLabel(null);
+      setDone(null);
+      setAnalyzeProgress(0);
+      setAttachProgress(0);
+      setConvertDone(0);
+      setConvertTotal(0);
+      setConverting(false);
+      setAnalyzing(false);
+      setAttaching(false);
+      void loadActiveCollection();
+    }
+
+    void loadActiveCollection();
+    window.addEventListener("vinylvault:collection-change", resetCollectionScopedState);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(
+        "vinylvault:collection-change",
+        resetCollectionScopedState
+      );
+    };
   }, [supabase]);
 
   useEffect(() => {
@@ -200,6 +238,10 @@ export function PhotoMatchPanel() {
         return prev;
       });
     };
+  }, []);
+
+  const updateRow = useCallback((id: string, patch: Partial<PhotoMatchRow>) => {
+    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
   }, []);
 
   const addFiles = useCallback(async (fileList: FileList | null) => {
@@ -328,7 +370,7 @@ export function PhotoMatchPanel() {
       );
       setConverting(false);
     }
-  }, []);
+  }, [updateRow]);
 
   function removeRow(id: string) {
     setRows((prev) => {
@@ -336,10 +378,6 @@ export function PhotoMatchPanel() {
       if (row) URL.revokeObjectURL(row.previewUrl);
       return prev.filter((r) => r.id !== id);
     });
-  }
-
-  function updateRow(id: string, patch: Partial<PhotoMatchRow>) {
-    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
   }
 
   async function analyzePhotos() {
