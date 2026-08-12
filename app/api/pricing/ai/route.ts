@@ -52,6 +52,13 @@ export async function POST(request: Request) {
     );
   }
 
+  if (typedAlbum.status === "sold") {
+    return NextResponse.json(
+      { error: "Sold albums cannot be repriced." },
+      { status: 409 }
+    );
+  }
+
   // Pull the latest pricing cache to give the AI real market context
   const { data: cacheRows } = await supabase
     .from("pricing_cache")
@@ -88,6 +95,22 @@ export async function POST(request: Request) {
       ebaySampleListings: ebayRaw.sampleListings as Array<{ price: number; title: string }> | undefined,
       currentSuggestedPrice,
     });
+
+    const { error: updateError } = await supabase
+      .from("albums")
+      .update({
+        suggested_price: result.suggestedPrice,
+        status: typedAlbum.status === "unlisted" ? "pricing" : typedAlbum.status,
+      })
+      .eq("id", albumId)
+      .eq("user_id", typedAlbum.user_id);
+
+    if (updateError) {
+      return NextResponse.json(
+        { error: `Failed to save AI price: ${updateError.message}` },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json(result);
   } catch (err) {

@@ -59,6 +59,11 @@ export function CollectionSwitcher({
         return;
       }
       setOpen(false);
+      window.dispatchEvent(
+        new CustomEvent("vinylvault:collection-change", {
+          detail: { ownerId },
+        })
+      );
       if (pathname.startsWith("/albums/")) {
         router.push("/albums");
       } else {
