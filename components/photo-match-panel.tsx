@@ -136,7 +136,12 @@ export function PhotoMatchPanel() {
   const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
-    void (async () => {
+    let cancelled = false;
+    let loadVersion = 0;
+
+    async function loadActiveCollection() {
+      const version = ++loadVersion;
+      const isStale = () => cancelled || version !== loadVersion;
       setCollectionLoading(true);
       setCollectionError(null);
       try {
@@ -150,6 +155,7 @@ export function PhotoMatchPanel() {
         }
 
         const activeOwner = active.ownerId as string;
+        if (isStale()) return;
         setOwnerId(activeOwner);
         setCanEdit(active.role === "owner" || active.role === "editor");
         setCollectionLabel(active.isOwner ? null : (active.label as string));
@@ -165,8 +171,10 @@ export function PhotoMatchPanel() {
             .order("title", { ascending: true })
             .range(from, to)
         );
+        if (isStale()) return;
         setAlbums(rows);
       } catch (error) {
+        if (isStale()) return;
         setAlbums([]);
         setCanEdit(false);
         setCollectionError(
@@ -175,9 +183,42 @@ export function PhotoMatchPanel() {
             : "Could not load your active collection."
         );
       } finally {
-        setCollectionLoading(false);
+        if (!isStale()) setCollectionLoading(false);
       }
-    })();
+    }
+
+    function resetAndReloadCollection() {
+      setRows((prev) => {
+        for (const row of prev) {
+          if (row.previewUrl) URL.revokeObjectURL(row.previewUrl);
+        }
+        return [];
+      });
+      setDone(null);
+      setAlbums([]);
+      setOwnerId("");
+      setCanEdit(false);
+      setCollectionLabel(null);
+      setCollectionError(null);
+      setAnalyzing(false);
+      setAnalyzeProgress(0);
+      setAttaching(false);
+      setAttachProgress(0);
+      void loadActiveCollection();
+    }
+
+    void loadActiveCollection();
+    window.addEventListener(
+      "vinylvault:collection-change",
+      resetAndReloadCollection
+    );
+    return () => {
+      cancelled = true;
+      window.removeEventListener(
+        "vinylvault:collection-change",
+        resetAndReloadCollection
+      );
+    };
   }, [supabase]);
 
   useEffect(() => {
