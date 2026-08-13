@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Eye, EyeOff } from "lucide-react";
@@ -20,9 +20,17 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [destination, setDestination] = useState("/dashboard");
   const router = useRouter();
   const configError = getSupabaseBrowserConfigError();
   const supabase = configError ? null : createClient();
+
+  useEffect(() => {
+    const nextPath = new URLSearchParams(window.location.search).get("next");
+    if (nextPath?.startsWith("/") && !nextPath.startsWith("//")) {
+      setDestination(nextPath);
+    }
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -42,7 +50,7 @@ export default function LoginPage() {
       setError(error.message);
       setLoading(false);
     } else {
-      router.push("/dashboard");
+      router.push(destination);
       router.refresh();
     }
   }

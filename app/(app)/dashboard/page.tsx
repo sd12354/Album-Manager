@@ -11,7 +11,7 @@ import { DashboardSearch } from "@/components/dashboard-search";
 import { RearrangeableDashboard, type DashboardSection } from "@/components/rearrangeable-dashboard";
 import { fetchAllPages, fetchAllPagesParallel } from "@/lib/paginate";
 import { formatRelativeTime, getActivityDescription } from "@/lib/utils";
-import { getActiveCollection } from "@/lib/collections";
+import { canManage, getActiveCollection } from "@/lib/collections";
 import { summarizeCollectionValue } from "@/lib/collection-value";
 import type { Album, PricingCache } from "@/types";
 
@@ -86,6 +86,7 @@ export default async function DashboardPage() {
   } = await supabase.auth.getUser();
   const active = user ? await getActiveCollection(user) : null;
   const ownerId = active?.ownerId ?? user?.id ?? "";
+  const canEdit = canManage(active?.role ?? null);
 
   // ── DATA LOAD ───────────────────────────────────────────────────────────
   // 1) Tight projection on albums (no SELECT *).
@@ -252,6 +253,7 @@ export default async function DashboardPage() {
           photoCoveragePct,
           monthlySales,
           recentActivity,
+          canEdit,
         })}
       />
     </div>
@@ -276,6 +278,7 @@ interface SectionInput {
   photoCoveragePct: number;
   monthlySales: SalesPoint[];
   recentActivity: Album[];
+  canEdit: boolean;
 }
 
 function buildSections(input: SectionInput): DashboardSection[] {
@@ -364,26 +367,33 @@ function buildSections(input: SectionInput): DashboardSection[] {
       node: (
         <div>
           <h2 className="mb-4 font-display text-xl font-bold">Quick Actions</h2>
-          <div className="flex flex-wrap gap-3">
-            <Button variant="outline" asChild>
-              <Link href="/import">
-                <Upload className="h-4 w-4" />
-                Import CSV
-              </Link>
-            </Button>
-            <Button variant="outline" asChild>
-              <Link href="/albums?add=true">
-                <Plus className="h-4 w-4" />
-                Add Album
-              </Link>
-            </Button>
-            <Button variant="outline" asChild>
-              <Link href="/albums?action=price-all">
-                <DollarSign className="h-4 w-4" />
-                Price All Unlisted
-              </Link>
-            </Button>
-          </div>
+          {input.canEdit ? (
+            <div className="flex flex-wrap gap-3">
+              <Button variant="outline" asChild>
+                <Link href="/import">
+                  <Upload className="h-4 w-4" />
+                  Import CSV
+                </Link>
+              </Button>
+              <Button variant="outline" asChild>
+                <Link href="/albums?add=true">
+                  <Plus className="h-4 w-4" />
+                  Add Album
+                </Link>
+              </Button>
+              <Button variant="outline" asChild>
+                <Link href="/albums?action=price-all">
+                  <DollarSign className="h-4 w-4" />
+                  Price All Unlisted
+                </Link>
+              </Button>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              This shared collection is view-only. Ask the owner for editor
+              access to import, add, or price albums.
+            </p>
+          )}
         </div>
       ),
     },
@@ -401,9 +411,15 @@ function buildSections(input: SectionInput): DashboardSection[] {
                   <p className="mt-2 text-sm text-muted-foreground">
                     Import your catalogue or add an album to get started.
                   </p>
-                  <Button className="mt-4" asChild>
-                    <Link href="/import">Import CSV</Link>
-                  </Button>
+                  {input.canEdit ? (
+                    <Button className="mt-4" asChild>
+                      <Link href="/import">Import CSV</Link>
+                    </Button>
+                  ) : (
+                    <p className="mt-4 text-xs text-muted-foreground">
+                      You have view-only access to this collection.
+                    </p>
+                  )}
                 </div>
               ) : (
                 <div className="divide-y divide-white/8">
