@@ -9,7 +9,10 @@ import { VinylSpinner } from "@/components/vinyl-spinner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
+import {
+  createClient,
+  getSupabaseBrowserConfigError,
+} from "@/lib/supabase/client";
 import { getAppUrl } from "@/lib/site-url";
 
 const PASSWORD_RULES = [
@@ -34,7 +37,8 @@ export default function SignupPage() {
   const [error, setError] = useState("");
   const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
   const router = useRouter();
-  const supabase = createClient();
+  const configError = getSupabaseBrowserConfigError();
+  const supabase = configError ? null : createClient();
 
   const passwordChecks = PASSWORD_RULES.map((rule) => ({
     ...rule,
@@ -46,6 +50,11 @@ export default function SignupPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+
+    if (!supabase) {
+      setError(configError ?? "Supabase is not configured.");
+      return;
+    }
 
     if (!isPasswordStrong) {
       setError("Please choose a stronger password that meets all requirements.");
@@ -215,13 +224,17 @@ export default function SignupPage() {
           )}
         </div>
 
-        {error && <p className="text-sm text-red-400">{error}</p>}
+        {(configError || error) && (
+          <p className="text-sm text-red-400">{configError || error}</p>
+        )}
 
         <Button
           type="submit"
           className="w-full"
           size="lg"
-          disabled={loading || !isPasswordStrong || !passwordsMatch}
+          disabled={
+            loading || !!configError || !isPasswordStrong || !passwordsMatch
+          }
         >
           {loading ? (
             <>

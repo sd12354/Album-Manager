@@ -6,7 +6,10 @@ import { VinylLogo } from "@/components/vinyl-logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
+import {
+  createClient,
+  getSupabaseBrowserConfigError,
+} from "@/lib/supabase/client";
 import { getAppUrl } from "@/lib/site-url";
 
 export default function ResetPage() {
@@ -14,10 +17,15 @@ export default function ResetPage() {
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
-  const supabase = createClient();
+  const configError = getSupabaseBrowserConfigError();
+  const supabase = configError ? null : createClient();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!supabase) {
+      setError(configError ?? "Supabase is not configured.");
+      return;
+    }
     setLoading(true);
     setError("");
 
@@ -71,9 +79,16 @@ export default function ResetPage() {
             />
           </div>
 
-          {error && <p className="text-sm text-red-400">{error}</p>}
+          {(configError || error) && (
+            <p className="text-sm text-red-400">{configError || error}</p>
+          )}
 
-          <Button type="submit" className="w-full" size="lg" disabled={loading}>
+          <Button
+            type="submit"
+            className="w-full"
+            size="lg"
+            disabled={loading || !!configError}
+          >
             {loading ? "Sending..." : "Send Reset Link"}
           </Button>
 

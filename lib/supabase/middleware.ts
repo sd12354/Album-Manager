@@ -47,13 +47,24 @@ export async function updateSession(request: NextRequest) {
 
   if (isProtected && !user) {
     const url = request.nextUrl.clone();
+    const nextPath = `${request.nextUrl.pathname}${request.nextUrl.search}`;
     url.pathname = "/login";
+    url.search = "";
+    url.searchParams.set("next", nextPath);
     return redirectWithSessionCookies(url, supabaseResponse);
   }
 
   if (isAuthPage && user) {
     const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
+    const nextPath = request.nextUrl.searchParams.get("next");
+    if (nextPath?.startsWith("/") && !nextPath.startsWith("//")) {
+      const nextUrl = new URL(nextPath, request.nextUrl.origin);
+      url.pathname = nextUrl.pathname;
+      url.search = nextUrl.search;
+    } else {
+      url.pathname = "/dashboard";
+      url.search = "";
+    }
     return redirectWithSessionCookies(url, supabaseResponse);
   }
 

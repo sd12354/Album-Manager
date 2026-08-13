@@ -121,10 +121,16 @@ export function CatalogueClient({
   const [searchHighlight, setSearchHighlight] = useState(-1);
 
   useEffect(() => {
-    if (searchParams.get("add") === "true") {
-      setDrawerOpen(true);
+    if (searchParams.get("add") !== "true") return;
+
+    if (!canEdit) {
+      toast.info("This shared collection is view-only.");
+      router.replace("/albums");
+      return;
     }
-  }, [searchParams]);
+
+    setDrawerOpen(true);
+  }, [canEdit, router, searchParams]);
 
   // Mirror current filter state into the URL via router.replace AND into
   // sessionStorage. URL gives us bookmarkability / browser back-forward;
@@ -946,10 +952,13 @@ export function CatalogueClient({
       return;
     }
 
-    if (
-      !canEdit ||
-      priceAllStartedRef.current
-    ) {
+    if (!canEdit) {
+      toast.info("You need editor access to price albums in this collection.");
+      router.replace("/albums");
+      return;
+    }
+
+    if (priceAllStartedRef.current) {
       return;
     }
 
@@ -1019,6 +1028,7 @@ export function CatalogueClient({
         } not posted.`,
         { duration: 10000 }
       );
+      router.refresh();
     } else {
       const parts: string[] = [];
       if (listed > 0) parts.push(`${listed} listed`);
