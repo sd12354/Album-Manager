@@ -9,7 +9,10 @@ import { VinylSpinner } from "@/components/vinyl-spinner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
+import {
+  createClient,
+  getSupabaseBrowserConfigError,
+} from "@/lib/supabase/client";
 
 const PASSWORD_RULES = [
   { id: "length", label: "at least 8 characters", test: (p: string) => p.length >= 8 },
@@ -23,7 +26,11 @@ let handledRecoveryCode: string | null = null;
 
 export default function UpdatePasswordPage() {
   const router = useRouter();
-  const supabase = useMemo(() => createClient(), []);
+  const configError = getSupabaseBrowserConfigError();
+  const supabase = useMemo(
+    () => (configError ? null : createClient()),
+    [configError]
+  );
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -36,6 +43,12 @@ export default function UpdatePasswordPage() {
     let mounted = true;
 
     async function checkRecoverySession() {
+      if (!supabase) {
+        setError(configError ?? "Supabase is not configured.");
+        setCheckingSession(false);
+        return;
+      }
+
       const code =
         typeof window !== "undefined"
           ? new URLSearchParams(window.location.search).get("code")
@@ -74,7 +87,7 @@ export default function UpdatePasswordPage() {
     return () => {
       mounted = false;
     };
-  }, [supabase]);
+  }, [configError, supabase]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -91,6 +104,11 @@ export default function UpdatePasswordPage() {
     }
 
     setLoading(true);
+    if (!supabase) {
+      setError(configError ?? "Supabase is not configured.");
+      setLoading(false);
+      return;
+    }
     const { error } = await supabase.auth.updateUser({ password });
     setLoading(false);
 

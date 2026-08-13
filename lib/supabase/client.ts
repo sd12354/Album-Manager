@@ -1,5 +1,15 @@
 import { createBrowserClient } from "@supabase/ssr";
 
+export const SUPABASE_BROWSER_CONFIG_ERROR =
+  "Supabase is not configured. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY, then redeploy.";
+
+export function getSupabaseBrowserConfigError(): string | null {
+  return process.env.NEXT_PUBLIC_SUPABASE_URL &&
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    ? null
+    : SUPABASE_BROWSER_CONFIG_ERROR;
+}
+
 /**
  * Browser-side Supabase client. Falls back to safe placeholders during
  * server-side prerender so `next build` doesn't crash before env vars are
@@ -13,9 +23,7 @@ export function createClient() {
 
   if (!url || !key) {
     if (typeof window !== "undefined") {
-      throw new Error(
-        "Supabase environment variables are not set. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in your Vercel project settings, then redeploy."
-      );
+      throw new Error(SUPABASE_BROWSER_CONFIG_ERROR);
     }
     return createBrowserClient(
       "https://placeholder.supabase.co",

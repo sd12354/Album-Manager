@@ -9,7 +9,10 @@ import { VinylSpinner } from "@/components/vinyl-spinner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
+import {
+  createClient,
+  getSupabaseBrowserConfigError,
+} from "@/lib/supabase/client";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -18,10 +21,15 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const router = useRouter();
-  const supabase = createClient();
+  const configError = getSupabaseBrowserConfigError();
+  const supabase = configError ? null : createClient();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!supabase) {
+      setError(configError ?? "Supabase is not configured.");
+      return;
+    }
     setLoading(true);
     setError("");
 
@@ -94,9 +102,16 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {error && <p className="text-sm text-red-400">{error}</p>}
+        {(configError || error) && (
+          <p className="text-sm text-red-400">{configError || error}</p>
+        )}
 
-        <Button type="submit" className="w-full" size="lg" disabled={loading}>
+        <Button
+          type="submit"
+          className="w-full"
+          size="lg"
+          disabled={loading || !!configError}
+        >
           {loading ? (
             <>
               <VinylSpinner size="sm" />
