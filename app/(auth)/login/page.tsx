@@ -9,14 +9,8 @@ import { VinylSpinner } from "@/components/vinyl-spinner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { safeRelativeRedirect } from "@/lib/safe-redirect";
 import { createClient } from "@/lib/supabase/client";
-
-function safeRelativeNext(value: string | null) {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) {
-    return null;
-  }
-  return value;
-}
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -41,7 +35,7 @@ export default function LoginPage() {
       setError(error.message);
       setLoading(false);
     } else {
-      const next = safeRelativeNext(new URLSearchParams(window.location.search).get("next"));
+      const next = safeRelativeRedirect(new URLSearchParams(window.location.search).get("next"));
       router.push(next ?? "/dashboard");
       router.refresh();
     }

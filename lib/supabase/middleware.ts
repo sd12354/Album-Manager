@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { safeRelativeRedirect } from "@/lib/safe-redirect";
 
 function redirectWithSessionCookies(url: URL, supabaseResponse: NextResponse) {
   const response = NextResponse.redirect(url);
@@ -7,13 +8,6 @@ function redirectWithSessionCookies(url: URL, supabaseResponse: NextResponse) {
     response.cookies.set(cookie);
   });
   return response;
-}
-
-function safeRelativeNext(value: string | null) {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) {
-    return null;
-  }
-  return value;
 }
 
 export async function updateSession(request: NextRequest) {
@@ -63,7 +57,8 @@ export async function updateSession(request: NextRequest) {
 
   if (isAuthPage && user) {
     const url = request.nextUrl.clone();
-    url.pathname = safeRelativeNext(request.nextUrl.searchParams.get("next")) ?? "/dashboard";
+    url.pathname =
+      safeRelativeRedirect(request.nextUrl.searchParams.get("next")) ?? "/dashboard";
     url.search = "";
     return redirectWithSessionCookies(url, supabaseResponse);
   }
