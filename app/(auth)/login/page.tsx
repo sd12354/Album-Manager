@@ -9,6 +9,7 @@ import { VinylSpinner } from "@/components/vinyl-spinner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { safeRelativeRedirect } from "@/lib/safe-redirect";
 import { createClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
@@ -34,7 +35,8 @@ export default function LoginPage() {
       setError(error.message);
       setLoading(false);
     } else {
-      router.push("/dashboard");
+      const next = safeRelativeRedirect(new URLSearchParams(window.location.search).get("next"));
+      router.push(next ?? "/dashboard");
       router.refresh();
     }
   }
