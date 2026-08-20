@@ -9,6 +9,13 @@ function redirectWithSessionCookies(url: URL, supabaseResponse: NextResponse) {
   return response;
 }
 
+function safeRelativeNext(value: string | null) {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) {
+    return null;
+  }
+  return value;
+}
+
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
@@ -47,13 +54,17 @@ export async function updateSession(request: NextRequest) {
 
   if (isProtected && !user) {
     const url = request.nextUrl.clone();
+    const next = `${request.nextUrl.pathname}${request.nextUrl.search}`;
     url.pathname = "/login";
+    url.search = "";
+    url.searchParams.set("next", next);
     return redirectWithSessionCookies(url, supabaseResponse);
   }
 
   if (isAuthPage && user) {
     const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
+    url.pathname = safeRelativeNext(request.nextUrl.searchParams.get("next")) ?? "/dashboard";
+    url.search = "";
     return redirectWithSessionCookies(url, supabaseResponse);
   }
 
