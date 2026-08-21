@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { isLocalMarketplaceListingId } from "@/lib/marketplace-listing";
 import {
   deleteDiscogsListing,
   DiscogsError,
@@ -56,9 +57,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Album is not listed on Discogs" }, { status: 400 });
   }
 
-  const isManualListing = typedAlbum.discogs_listing_id.startsWith("manual-");
+  const isLocalListing = isLocalMarketplaceListingId(typedAlbum.discogs_listing_id);
 
-  if (!isManualListing) {
+  if (!isLocalListing) {
     const discogsAuth = resolveUserDiscogsAuth(user.user_metadata);
 
     if (!discogsAuth) {

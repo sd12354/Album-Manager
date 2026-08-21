@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { resolveListingPrice } from "@/lib/marketplace-listing";
 import {
   createEbayListing,
   getValidEbayToken,
@@ -81,10 +82,8 @@ export async function POST(request: Request) {
     );
   }
 
-  const rawPrice =
-    listPrice ?? typedAlbum.list_price ?? typedAlbum.suggested_price ?? 9.99;
-  const price = Number(rawPrice);
-  if (!Number.isFinite(price) || price <= 0) {
+  const price = resolveListingPrice(typedAlbum, listPrice);
+  if (price == null) {
     return NextResponse.json(
       { error: "List price must be a positive number." },
       { status: 400 }
