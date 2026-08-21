@@ -19,4 +19,4 @@ describe("marketplace listing helpers", () => {
     expect(resolveListingPrice({ list_price: 22, suggested_price: 18 })).toBe(22);
     expect(resolveListingPrice({ list_price: 22, suggested_price: 18 }, 30)).toBe(30);
   });
-}
+});

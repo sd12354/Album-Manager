@@ -18,4 +18,4 @@ describe("getSafeRedirectPath", () => {
     expect(getSafeRedirectPath("")).toBe("/dashboard");
     expect(getSafeRedirectPath("not-a-path")).toBe("/dashboard");
   });
-}
+});
