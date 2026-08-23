@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
+import { sanitizeNextPath } from "@/lib/safe-redirect";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -34,7 +35,11 @@ export default function LoginPage() {
       setError(error.message);
       setLoading(false);
     } else {
-      router.push("/dashboard");
+      const nextPath =
+        typeof window === "undefined"
+          ? "/dashboard"
+          : sanitizeNextPath(new URLSearchParams(window.location.search).get("next"));
+      router.push(nextPath);
       router.refresh();
     }
   }
