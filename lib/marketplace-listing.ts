@@ -8,3 +8,13 @@ export function resolveListingPrice(
 
   return Number.isFinite(price) && price > 0 ? price : null;
 }
+
+export function isLocalMarketplaceListingId(
+  listingId: string | null | undefined
+) {
+  return (
+    listingId?.startsWith("manual-") ||
+    listingId?.startsWith("STUB-") ||
+    false
+  );
+}

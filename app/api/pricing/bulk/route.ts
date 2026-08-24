@@ -4,6 +4,10 @@ import { fetchDiscogsPricing, type DiscogsAuth } from "@/lib/discogs";
 import { searchEbayActiveListings, type EbayPriceResult } from "@/lib/ebay";
 import { buildCombinedPricing } from "@/lib/pricing";
 import {
+  reconstructPricingFromCache,
+  type CachedPricingRow,
+} from "@/lib/pricing-cache";
+import {
   canManage,
   getDiscogsAuthForOwner,
   getRoleForOwner,
@@ -19,70 +23,6 @@ export const dynamic = "force-dynamic";
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
-interface CachedPricingRow {
-  source: string;
-  median_price: number | null;
-  lowest_price: number | null;
-  raw_data: Record<string, unknown> | null;
-}
-
-/**
- * Rebuild a PricingResult from cached rows so we can apply the existing
- * suggestion to an album row whose suggested_price was lost without
- * re-hitting Discogs/eBay.
- */
-function reconstructPricingFromCache(
-  rows: CachedPricingRow[],
-  condition: AlbumCondition
-): PricingResult {
-  const discogsRow = rows.find((r) => r.source === "discogs");
-  const ebayRow = rows.find((r) => r.source === "ebay");
-
-  const discogsResult =
-    discogsRow && typeof discogsRow.raw_data === "object" && discogsRow.raw_data
-      ? {
-          releaseId:
-            (discogsRow.raw_data.releaseId as number | undefined) ?? undefined,
-          releaseTitle: discogsRow.raw_data.releaseTitle as string | undefined,
-          releaseYear: discogsRow.raw_data.releaseYear as string | undefined,
-          median: discogsRow.median_price ?? undefined,
-          lowest: discogsRow.lowest_price ?? undefined,
-          numForSale: undefined as number | undefined,
-          priceForCondition:
-            (discogsRow.raw_data.priceForCondition as number | undefined) ??
-            undefined,
-          allConditionPrices:
-            (discogsRow.raw_data.allConditionPrices as
-              | Record<string, number>
-              | undefined) ?? undefined,
-          matchedVia: undefined as string | undefined,
-        }
-      : null;
-
-  const ebayResult =
-    ebayRow && typeof ebayRow.raw_data === "object" && ebayRow.raw_data
-      ? {
-          median: ebayRow.median_price ?? undefined,
-          lowest: ebayRow.lowest_price ?? undefined,
-          highest:
-            (ebayRow.raw_data.highest as number | undefined) ?? undefined,
-          comparables:
-            (ebayRow.raw_data.comparables as number[] | undefined) ?? [],
-          sampleListings:
-            (ebayRow.raw_data.sampleListings as
-              | Array<{ price: number; title: string; url: string }>
-              | undefined) ?? [],
-          count:
-            (ebayRow.raw_data.comparables as number[] | undefined)?.length ?? 0,
-        }
-      : null;
-
-  return buildCombinedPricing(
-    discogsResult?.releaseId ? discogsResult : null,
-    ebayResult && ebayResult.count > 0 ? ebayResult : null,
-    condition
-  );
-}
 const MAX_BULK = 3;
 
 export async function POST(request: Request) {
