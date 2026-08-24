@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
+import { getSafeRedirectPath } from "@/lib/safe-redirect";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -34,7 +35,8 @@ export default function LoginPage() {
       setError(error.message);
       setLoading(false);
     } else {
-      router.push("/dashboard");
+      const params = new URLSearchParams(window.location.search);
+      router.push(getSafeRedirectPath(params.get("next")));
       router.refresh();
     }
   }

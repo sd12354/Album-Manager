@@ -19,7 +19,9 @@ const PASSWORD_RULES = [
   { id: "special", label: "one special character", test: (p: string) => /[^A-Za-z0-9]/.test(p) },
 ] as const;
 
-let handledRecoveryCode: string | null = null;
+function getHandledRecoveryKey(code: string) {
+  return `vv_recovery_code:${code}`;
+}
 
 export default function UpdatePasswordPage() {
   const router = useRouter();
@@ -41,28 +43,38 @@ export default function UpdatePasswordPage() {
           ? new URLSearchParams(window.location.search).get("code")
           : null;
 
-      if (code && handledRecoveryCode !== code) {
-        handledRecoveryCode = code;
-        const { error } = await supabase.auth.exchangeCodeForSession(code);
+      if (code) {
+        const storageKey = getHandledRecoveryKey(code);
+        const alreadyHandled =
+          typeof window !== "undefined" &&
+          window.sessionStorage.getItem(storageKey) === "true";
+
+        if (!alreadyHandled) {
+          const { error } = await supabase.auth.exchangeCodeForSession(code);
+          if (error) {
+            if (!mounted) return;
+            setError(
+              "This reset link is invalid or has expired. Request a new password reset email."
+            );
+            setCheckingSession(false);
+            return;
+          }
+          if (typeof window !== "undefined") {
+            window.sessionStorage.setItem(storageKey, "true");
+          }
+        }
+
         if (typeof window !== "undefined") {
           window.history.replaceState(null, "", "/update-password");
-        }
-        if (error) {
-          if (!mounted) return;
-          setError(
-            "This reset link is invalid or has expired. Request a new password reset email."
-          );
-          setCheckingSession(false);
-          return;
         }
       }
 
       const {
-        data: { session },
-      } = await supabase.auth.getSession();
+        data: { user },
+      } = await supabase.auth.getUser();
 
       if (!mounted) return;
-      if (!session) {
+      if (!user) {
         setError(
           "This reset link is invalid or has expired. Request a new password reset email."
         );
