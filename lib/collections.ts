@@ -2,7 +2,11 @@ import "server-only";
 import { cookies } from "next/headers";
 import type { User } from "@supabase/supabase-js";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { resolveUserDiscogsAuth, type DiscogsAuth } from "@/lib/discogs";
+import {
+  resolveDiscogsAuth,
+  resolveUserDiscogsAuth,
+  type DiscogsAuth,
+} from "@/lib/discogs";
 import type {
   AccessibleCollection,
   CollectionMember,
@@ -32,13 +36,13 @@ export async function getDiscogsAuthForOwner(
   ownerId: string
 ): Promise<DiscogsAuth | null> {
   if (ownerId === user.id) {
-    return resolveUserDiscogsAuth(user.user_metadata);
+    return resolveDiscogsAuth(user.user_metadata);
   }
 
   try {
     const admin = await createServiceClient();
     const { data } = await admin.auth.admin.getUserById(ownerId);
-    return resolveUserDiscogsAuth(data?.user?.user_metadata);
+    return resolveDiscogsAuth(data?.user?.user_metadata);
   } catch {
     return null;
   }

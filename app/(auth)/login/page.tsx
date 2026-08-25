@@ -9,6 +9,7 @@ import { VinylSpinner } from "@/components/vinyl-spinner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { getSafeRedirectPath } from "@/lib/safe-redirect";
 import { createClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
@@ -34,7 +35,11 @@ export default function LoginPage() {
       setError(error.message);
       setLoading(false);
     } else {
-      router.push("/dashboard");
+      const next =
+        typeof window !== "undefined"
+          ? new URLSearchParams(window.location.search).get("next")
+          : null;
+      router.push(getSafeRedirectPath(next));
       router.refresh();
     }
   }

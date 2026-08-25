@@ -3,12 +3,13 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchDiscogsPricing } from "@/lib/discogs";
 import { searchEbayActiveListings, type EbayPriceResult } from "@/lib/ebay";
 import { buildCombinedPricing } from "@/lib/pricing";
+import { buildPricingFromCacheRows } from "@/lib/pricing-cache";
 import {
   canManage,
   getDiscogsAuthForOwner,
   getRoleForOwner,
 } from "@/lib/collections";
-import type { Album, AlbumCondition, PricingResult } from "@/types";
+import type { Album, AlbumCondition } from "@/types";
 
 // Single-album fetch can issue ~12 sequential Discogs requests at 1.1s each
 // (plus an eBay fallback). Pin to Node runtime + raise timeout for Vercel.
@@ -31,57 +32,6 @@ interface CacheRow {
 function isFresh(row?: CacheRow): boolean {
   if (!row?.fetched_at) return false;
   return Date.now() - new Date(row.fetched_at).getTime() < CACHE_TTL_MS;
-}
-
-function buildFromCache(
-  album: Album,
-  discogsRow?: CacheRow,
-  ebayRow?: CacheRow
-): PricingResult {
-  const result: PricingResult = {
-    suggestedPrice: album.suggested_price ?? 0,
-    confidence: "low",
-  };
-
-  if (discogsRow) {
-    const raw = (discogsRow.raw_data ?? {}) as Record<string, unknown>;
-    result.discogsMedian = discogsRow.median_price ?? undefined;
-    result.discogsLowest = discogsRow.lowest_price ?? undefined;
-    result.discogsSalesCount = discogsRow.num_sales ?? undefined;
-    result.discogsReleaseId = raw.releaseId as number | undefined;
-    result.discogsReleaseTitle = raw.releaseTitle as string | undefined;
-    result.discogsReleaseYear = raw.releaseYear as string | undefined;
-    result.discogsPriceForCondition = raw.priceForCondition as
-      | number
-      | undefined;
-    result.discogsConditionPrices = raw.allConditionPrices as
-      | Record<string, number>
-      | undefined;
-    if (result.discogsPriceForCondition != null) {
-      result.suggestionSource = "discogs-condition";
-    } else if (result.discogsMedian != null) {
-      result.suggestionSource = "discogs-median";
-    }
-    result.confidence =
-      (raw.confidence as PricingResult["confidence"]) ?? "low";
-  }
-
-  if (ebayRow) {
-    const raw = (ebayRow.raw_data ?? {}) as Record<string, unknown>;
-    result.ebayMedian = ebayRow.median_price ?? undefined;
-    result.ebayLowest = ebayRow.lowest_price ?? undefined;
-    result.ebayHighest = raw.highest as number | undefined;
-    result.ebayComparables = raw.comparables as number[] | undefined;
-    result.ebayCount = ebayRow.num_sales ?? undefined;
-    result.ebaySampleListings = raw.sampleListings as
-      | PricingResult["ebaySampleListings"];
-    if (!result.suggestionSource && result.ebayMedian != null) {
-      result.suggestionSource = "ebay-active";
-    }
-  }
-
-  result.notice = "Showing cached pricing (fetched within last 24h).";
-  return result;
 }
 
 async function persistDiscogsReleaseId(
@@ -151,6 +101,13 @@ export async function POST(request: Request) {
     const discogsRow = rows.find((r) => r.source === "discogs");
     const ebayRow = rows.find((r) => r.source === "ebay");
     if (isFresh(discogsRow) || isFresh(ebayRow)) {
+      const cachedPricing = buildPricingFromCacheRows(
+        [discogsRow, ebayRow].filter(
+          (row): row is CacheRow => Boolean(row) && isFresh(row)
+        ),
+        typedAlbum.condition as AlbumCondition,
+        typedAlbum.suggested_price
+      );
       const cachedReleaseId = (discogsRow?.raw_data ?? {}).releaseId as
         | number
         | undefined;
@@ -160,13 +117,29 @@ export async function POST(request: Request) {
         typedAlbum.user_id,
         cachedReleaseId
       );
-      return NextResponse.json(
-        buildFromCache(
-          typedAlbum,
-          isFresh(discogsRow) ? discogsRow : undefined,
-          isFresh(ebayRow) ? ebayRow : undefined
-        )
-      );
+      if (
+        cachedPricing.suggestionSource &&
+        cachedPricing.suggestedPrice > 0 &&
+        typedAlbum.suggested_price !== cachedPricing.suggestedPrice
+      ) {
+        const { error: updateError } = await supabase
+          .from("albums")
+          .update({
+            suggested_price: cachedPricing.suggestedPrice,
+            status:
+              typedAlbum.status === "unlisted" ? "pricing" : typedAlbum.status,
+          })
+          .eq("id", albumId)
+          .eq("user_id", typedAlbum.user_id);
+
+        if (updateError) {
+          return NextResponse.json(
+            { error: `Failed to save album pricing: ${updateError.message}` },
+            { status: 500 }
+          );
+        }
+      }
+      return NextResponse.json(cachedPricing);
     }
   }
 
