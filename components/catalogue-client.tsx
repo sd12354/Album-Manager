@@ -54,6 +54,14 @@ interface CatalogueClientProps {
   ownerId?: string;
 }
 
+function albumText(value: string | null | undefined) {
+  return (value ?? "").trim();
+}
+
+function albumKey(album: Pick<Album, "artist" | "title">) {
+  return `${albumText(album.artist).toLowerCase()}|${albumText(album.title).toLowerCase()}`;
+}
+
 export function CatalogueClient({
   albums,
   canEdit = true,
@@ -243,7 +251,7 @@ export function CatalogueClient({
   const duplicateIds = useMemo(() => {
     const buckets = new Map<string, string[]>();
     for (const album of albums) {
-      const key = `${album.artist.trim().toLowerCase()}|${album.title.trim().toLowerCase()}`;
+      const key = albumKey(album);
       if (!key.includes("|") || key === "|") continue; // missing artist/title
       const list = buckets.get(key) ?? [];
       list.push(album.id);
@@ -267,8 +275,8 @@ export function CatalogueClient({
     if (!q) return [];
     const out: Album[] = [];
     for (const album of albums) {
-      const artistMatch = album.artist.toLowerCase().includes(q);
-      const titleMatch = album.title.toLowerCase().includes(q);
+      const artistMatch = albumText(album.artist).toLowerCase().includes(q);
+      const titleMatch = albumText(album.title).toLowerCase().includes(q);
       if (artistMatch || titleMatch) {
         out.push(album);
         if (out.length >= 8) break;
@@ -304,7 +312,7 @@ export function CatalogueClient({
   const redistributableCount = useMemo(() => {
     const buckets = new Map<string, Album[]>();
     for (const album of albums) {
-      const key = `${album.artist.trim().toLowerCase()}|${album.title.trim().toLowerCase()}`;
+      const key = albumKey(album);
       if (!key.includes("|") || key === "|") continue;
       const list = buckets.get(key) ?? [];
       list.push(album);
@@ -349,6 +357,7 @@ export function CatalogueClient({
     setPhotoFilter("all");
     setPriceFilter("all");
     setDuplicateFilter("all");
+    setSortBy("default");
   }
 
   // Tailwind class applied to a SelectTrigger when its filter is "active"
@@ -381,8 +390,8 @@ export function CatalogueClient({
     const filtered = albums.filter((album) => {
       const matchesSearch =
         !globalFilter ||
-        album.title.toLowerCase().includes(globalFilter.toLowerCase()) ||
-        album.artist.toLowerCase().includes(globalFilter.toLowerCase());
+        albumText(album.title).toLowerCase().includes(globalFilter.toLowerCase()) ||
+        albumText(album.artist).toLowerCase().includes(globalFilter.toLowerCase());
       const matchesCondition =
         conditionFilter === "all" || album.condition === conditionFilter;
       const matchesStatus =
@@ -430,9 +439,13 @@ export function CatalogueClient({
       // When viewing duplicates, sort by artist/title so identical copies
       // sit next to each other for easy comparison and deletion.
       filtered.sort((a, b) => {
-        const k = a.artist.trim().toLowerCase().localeCompare(b.artist.trim().toLowerCase());
+        const k = albumText(a.artist)
+          .toLowerCase()
+          .localeCompare(albumText(b.artist).toLowerCase());
         if (k !== 0) return k;
-        return a.title.trim().toLowerCase().localeCompare(b.title.trim().toLowerCase());
+        return albumText(a.title)
+          .toLowerCase()
+          .localeCompare(albumText(b.title).toLowerCase());
       });
     }
 
@@ -797,7 +810,7 @@ export function CatalogueClient({
     // returns full albums so we can compare photo state).
     const buckets = new Map<string, Album[]>();
     for (const album of albums) {
-      const key = `${album.artist.trim().toLowerCase()}|${album.title.trim().toLowerCase()}`;
+      const key = albumKey(album);
       if (!key.includes("|") || key === "|") continue;
       const list = buckets.get(key) ?? [];
       list.push(album);

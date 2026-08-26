@@ -29,13 +29,20 @@ export async function POST() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { data: albums } = await supabase
+  const { data: albums, error: albumsError } = await supabase
     .from("albums")
     .select("*")
     .eq("user_id", user.id)
     .neq("status", "sold")
     .or("ebay_listing_id.not.is.null,discogs_listing_id.not.is.null")
     .limit(MAX_SYNC);
+
+  if (albumsError) {
+    return NextResponse.json(
+      { error: `Could not load albums to sync: ${albumsError.message}` },
+      { status: 500 }
+    );
+  }
 
   const { data: ebayCreds } = await supabase
     .from("ebay_credentials")
@@ -79,6 +86,7 @@ export async function POST() {
     changed: boolean;
     soldOn?: string;
     delistedFrom?: string[];
+    error?: string;
   }> = [];
 
   for (const row of albums ?? []) {
@@ -89,7 +97,28 @@ export async function POST() {
     });
 
     if (outcome.changed) {
-      await supabase.from("albums").update(outcome.updates).eq("id", album.id);
+      const { error: updateError } = await supabase
+        .from("albums")
+        .update(outcome.updates)
+        .eq("id", album.id)
+        .eq("user_id", user.id);
+
+      if (updateError) {
+        console.error("[ebay]", {
+          scope: "ebay",
+          event: "bulk_sync_persist_failed",
+          albumId: album.id,
+          message: updateError.message,
+        });
+        synced.push({
+          albumId: album.id,
+          status: album.status,
+          changed: false,
+          error:
+            "Marketplace changes were detected, but VinylVault could not save them.",
+        });
+        continue;
+      }
 
       if (outcome.soldOn) {
         await crossCancelOtherMarketplace(

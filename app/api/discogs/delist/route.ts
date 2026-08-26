@@ -5,6 +5,7 @@ import {
   DiscogsError,
   resolveUserDiscogsAuth,
 } from "@/lib/discogs";
+import { isLocalMarketplaceListingId } from "@/lib/marketplace-sync";
 import type { Album } from "@/types";
 
 export const runtime = "nodejs";
@@ -56,7 +57,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Album is not listed on Discogs" }, { status: 400 });
   }
 
-  const isManualListing = typedAlbum.discogs_listing_id.startsWith("manual-");
+  const isManualListing = isLocalMarketplaceListingId(
+    typedAlbum.discogs_listing_id
+  );
 
   if (!isManualListing) {
     const discogsAuth = resolveUserDiscogsAuth(user.user_metadata);
