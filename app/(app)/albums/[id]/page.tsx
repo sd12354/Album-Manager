@@ -44,7 +44,7 @@ export default async function AlbumDetailPage({ params }: AlbumDetailPageProps) 
   }
 
   const role = await getRoleForOwner(user, typedAlbum.user_id);
-  if (role === "none") {
+  if (!role) {
     notFound();
   }
 
