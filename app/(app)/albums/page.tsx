@@ -26,7 +26,13 @@ export default async function AlbumsPage() {
       .eq("user_id", ownerId)
       .order("title", { ascending: true })
       .range(from, to)
-  ).catch(() => [] as Album[]);
+  ).catch((error) => {
+    throw new Error(
+      error instanceof Error
+        ? `Failed to load catalogue: ${error.message}`
+        : "Failed to load catalogue."
+    );
+  });
 
   return (
     <Suspense

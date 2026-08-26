@@ -9,7 +9,9 @@ import { VinylSpinner } from "@/components/vinyl-spinner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
+import { SupabaseConfigNotice } from "@/components/supabase-config-notice";
+import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import { getSafeRedirectPath } from "@/lib/safe-redirect";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -18,6 +20,11 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const router = useRouter();
+
+  if (!isSupabaseConfigured()) {
+    return <SupabaseConfigNotice />;
+  }
+
   const supabase = createClient();
 
   async function handleSubmit(e: React.FormEvent) {
@@ -34,7 +41,11 @@ export default function LoginPage() {
       setError(error.message);
       setLoading(false);
     } else {
-      router.push("/dashboard");
+      const nextPath =
+        typeof window !== "undefined"
+          ? new URLSearchParams(window.location.search).get("next")
+          : null;
+      router.push(getSafeRedirectPath(nextPath));
       router.refresh();
     }
   }

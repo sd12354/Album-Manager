@@ -9,6 +9,7 @@ import {
   buildMarketplaceSyncContext,
   checkAlbumMarketplaceState,
   crossCancelOtherMarketplace,
+  isLocalMarketplaceListingId,
 } from "@/lib/marketplace-sync";
 import type { Album } from "@/types";
 
@@ -59,8 +60,10 @@ export async function POST(request: Request) {
   }
 
   // Manually-tracked listings have no marketplace API to query against.
-  const ebayIsManual = typedAlbum.ebay_listing_id?.startsWith("manual-") ?? false;
-  const discogsIsManual = typedAlbum.discogs_listing_id?.startsWith("manual-") ?? false;
+  const ebayIsManual = isLocalMarketplaceListingId(typedAlbum.ebay_listing_id);
+  const discogsIsManual = isLocalMarketplaceListingId(
+    typedAlbum.discogs_listing_id
+  );
   if (
     (!typedAlbum.ebay_listing_id || ebayIsManual) &&
     (!typedAlbum.discogs_listing_id || discogsIsManual)
@@ -110,10 +113,27 @@ export async function POST(request: Request) {
     return NextResponse.json({ status: typedAlbum.status, changed: false });
   }
 
-  await supabase
+  const { error: updateError } = await supabase
     .from("albums")
     .update(outcome.updates)
-    .eq("id", albumId);
+    .eq("id", albumId)
+    .eq("user_id", user.id);
+
+  if (updateError) {
+    console.error("[sync]", {
+      scope: "sync",
+      event: "sync_persist_failed",
+      albumId,
+      message: updateError.message,
+    });
+    return NextResponse.json(
+      {
+        error:
+          "Marketplace sync detected changes, but VinylVault could not save them. Please try again before relying on the local status.",
+      },
+      { status: 500 }
+    );
+  }
 
   if (outcome.soldOn) {
     await crossCancelOtherMarketplace(

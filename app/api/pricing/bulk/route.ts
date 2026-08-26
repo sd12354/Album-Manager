@@ -183,7 +183,7 @@ export async function POST(request: Request) {
               (typedAlbum.suggested_price ?? 0) <= 0 ||
               typedAlbum.suggested_price !== cachedPricing.suggestedPrice;
             if (needsUpdate) {
-              await supabase
+              const { error: updateError } = await supabase
                 .from("albums")
                 .update({
                   suggested_price: cachedPricing.suggestedPrice,
@@ -197,6 +197,14 @@ export async function POST(request: Request) {
                 })
                 .eq("id", albumId)
                 .eq("user_id", typedAlbum.user_id);
+              if (updateError) {
+                results.push({
+                  albumId,
+                  status: "error",
+                  error: `Could not save cached pricing: ${updateError.message}`,
+                });
+                continue;
+              }
             }
             results.push({
               albumId,
