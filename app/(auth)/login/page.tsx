@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SupabaseConfigNotice } from "@/components/supabase-config-notice";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import { getSafeRedirectPath } from "@/lib/safe-redirect";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -40,7 +41,11 @@ export default function LoginPage() {
       setError(error.message);
       setLoading(false);
     } else {
-      router.push("/dashboard");
+      const nextPath =
+        typeof window !== "undefined"
+          ? new URLSearchParams(window.location.search).get("next")
+          : null;
+      router.push(getSafeRedirectPath(nextPath));
       router.refresh();
     }
   }

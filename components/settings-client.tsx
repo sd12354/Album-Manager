@@ -6,6 +6,7 @@ import { EbayConnectButton } from "@/components/ebay-connect-button";
 import { DiscogsConnectButton } from "@/components/discogs-connect-button";
 import { CollaboratorsSection } from "@/components/collaborators-section";
 import { getAppUrl } from "@/lib/site-url";
+import { buildAuthCallbackUrl } from "@/lib/safe-redirect";
 import {
   Accordion,
   AccordionContent,
@@ -166,7 +167,7 @@ export function SettingsClient({
     const { error } = await supabase.auth.updateUser(
       { email: trimmed },
       {
-        emailRedirectTo: `${getAppUrl()}/settings`,
+        emailRedirectTo: `${getAppUrl()}${buildAuthCallbackUrl("/settings")}`,
       }
     );
     if (error) {

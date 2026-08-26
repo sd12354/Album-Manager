@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SupabaseConfigNotice } from "@/components/supabase-config-notice";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import { buildAuthCallbackUrl } from "@/lib/safe-redirect";
 import { getAppUrl } from "@/lib/site-url";
 
 const PASSWORD_RULES = [
@@ -71,7 +72,7 @@ export default function SignupPage() {
         // Ensures the confirmation link (when email confirmation is enabled
         // in Supabase) returns the user to the canonical production app rather
         // than an ephemeral deployment URL or localhost.
-        emailRedirectTo: `${getAppUrl()}/login`,
+        emailRedirectTo: `${getAppUrl()}${buildAuthCallbackUrl("/dashboard")}`,
       },
     });
 

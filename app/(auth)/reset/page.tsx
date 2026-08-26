@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SupabaseConfigNotice } from "@/components/supabase-config-notice";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import { buildAuthCallbackUrl } from "@/lib/safe-redirect";
 import { getAppUrl } from "@/lib/site-url";
 
 export default function ResetPage() {
@@ -29,7 +30,7 @@ export default function ResetPage() {
 
     const trimmedEmail = email.trim();
     const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
-      redirectTo: `${getAppUrl()}/update-password`,
+      redirectTo: `${getAppUrl()}${buildAuthCallbackUrl("/update-password")}`,
     });
 
     if (error) {
