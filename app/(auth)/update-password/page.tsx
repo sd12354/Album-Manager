@@ -9,7 +9,8 @@ import { VinylSpinner } from "@/components/vinyl-spinner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
+import { SupabaseConfigNotice } from "@/components/supabase-config-notice";
+import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 
 const PASSWORD_RULES = [
   { id: "length", label: "at least 8 characters", test: (p: string) => p.length >= 8 },
@@ -23,7 +24,11 @@ let handledRecoveryCode: string | null = null;
 
 export default function UpdatePasswordPage() {
   const router = useRouter();
-  const supabase = useMemo(() => createClient(), []);
+  const supabaseConfigured = isSupabaseConfigured();
+  const supabase = useMemo(
+    () => (supabaseConfigured ? createClient() : null),
+    [supabaseConfigured]
+  );
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -36,6 +41,11 @@ export default function UpdatePasswordPage() {
     let mounted = true;
 
     async function checkRecoverySession() {
+      if (!supabase) {
+        if (mounted) setCheckingSession(false);
+        return;
+      }
+
       const code =
         typeof window !== "undefined"
           ? new URLSearchParams(window.location.search).get("code")
@@ -80,6 +90,11 @@ export default function UpdatePasswordPage() {
     e.preventDefault();
     setError("");
 
+    if (!supabase) {
+      setError("Supabase is not configured.");
+      return;
+    }
+
     const failedRule = PASSWORD_RULES.find((rule) => !rule.test(password));
     if (failedRule) {
       setError(`Password must include ${failedRule.label}.`);
@@ -104,6 +119,10 @@ export default function UpdatePasswordPage() {
       router.push("/dashboard");
       router.refresh();
     }, 1200);
+  }
+
+  if (!supabaseConfigured) {
+    return <SupabaseConfigNotice />;
   }
 
   return (

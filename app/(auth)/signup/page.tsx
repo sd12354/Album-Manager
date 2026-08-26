@@ -9,7 +9,8 @@ import { VinylSpinner } from "@/components/vinyl-spinner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
+import { SupabaseConfigNotice } from "@/components/supabase-config-notice";
+import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { getAppUrl } from "@/lib/site-url";
 
 const PASSWORD_RULES = [
@@ -34,6 +35,11 @@ export default function SignupPage() {
   const [error, setError] = useState("");
   const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
   const router = useRouter();
+
+  if (!isSupabaseConfigured()) {
+    return <SupabaseConfigNotice />;
+  }
+
   const supabase = createClient();
 
   const passwordChecks = PASSWORD_RULES.map((rule) => ({
