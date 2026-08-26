@@ -62,7 +62,7 @@ Album catalogue manager for vinyl sellers — import your inventory, auto-price 
 
 ## Prerequisites
 
-- Node.js 18+
+- Node.js 20.9+
 - [Supabase](https://supabase.com) project
 - (Recommended) [Discogs](https://www.discogs.com/settings/developers) OAuth app or personal token
 - (Optional) [eBay Developer](https://developer.ebay.com/) production or sandbox keyset
