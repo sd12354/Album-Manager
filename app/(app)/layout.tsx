@@ -1,5 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/app-shell";
+import { redirect } from "next/navigation";
+import { headers } from "next/headers";
+import { safeRedirectPath } from "@/lib/safe-redirect";
 import {
   claimPendingInvites,
   getAccessibleCollections,
@@ -17,12 +20,16 @@ export default async function AppLayout({
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Turn any invites addressed to this user's email into memberships.
-  if (user) {
-    await claimPendingInvites(user).catch(() => 0);
+  if (!user) {
+    const headerStore = await headers();
+    const pathname = headerStore.get("x-pathname") ?? "/dashboard";
+    redirect(`/login?next=${encodeURIComponent(safeRedirectPath(pathname))}`);
   }
 
-  const collections = user ? await getAccessibleCollections(user) : [];
+  // Turn any invites addressed to this user's email into memberships.
+  await claimPendingInvites(user).catch(() => 0);
+
+  const collections = await getAccessibleCollections(user);
   const active =
     user && collections.length > 0
       ? await getActiveCollection(user, collections)
