@@ -16,10 +16,10 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
 
-/** Max albums per bulk sync request (each may call eBay + Discogs). */
+/** Max albums per bulk sync page (each may call eBay + Discogs). */
 const MAX_SYNC = 10;
 
-export async function POST() {
+export async function POST(request: Request) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -29,13 +29,24 @@ export async function POST() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { data: albums } = await supabase
+  const body = (await request.json().catch(() => ({}))) as {
+    afterId?: string;
+  };
+
+  let query = supabase
     .from("albums")
     .select("*")
     .eq("user_id", user.id)
     .neq("status", "sold")
     .or("ebay_listing_id.not.is.null,discogs_listing_id.not.is.null")
+    .order("id", { ascending: true })
     .limit(MAX_SYNC);
+
+  if (body.afterId) {
+    query = query.gt("id", body.afterId);
+  }
+
+  const { data: albums } = await query;
 
   const { data: ebayCreds } = await supabase
     .from("ebay_credentials")
@@ -120,5 +131,6 @@ export async function POST() {
     count: synced.length,
     changed,
     capped: (albums?.length ?? 0) >= MAX_SYNC,
+    nextCursor: (albums?.at(-1) as Album | undefined)?.id ?? null,
   });
 }

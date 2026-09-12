@@ -201,16 +201,31 @@ export function CatalogueClient({
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch("/api/ebay/sync", { method: "POST" });
-        if (!res.ok || cancelled) return;
-        const data = await res.json() as {
-          changed?: number;
-          synced?: Array<{ soldOn?: string }>;
-        };
+        let afterId: string | null = null;
+        let totalChanged = 0;
+        let newSale = false;
+        for (let page = 0; page < 20; page += 1) {
+          const res = await fetch("/api/ebay/sync", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(afterId ? { afterId } : {}),
+          });
+          if (!res.ok || cancelled) return;
+          const data = (await res.json()) as {
+            changed?: number;
+            capped?: boolean;
+            nextCursor?: string | null;
+            synced?: Array<{ soldOn?: string }>;
+          };
+          totalChanged += data.changed ?? 0;
+          newSale =
+            newSale || (data.synced ?? []).some((s) => Boolean(s.soldOn));
+          if (!data.capped || !data.nextCursor) break;
+          afterId = data.nextCursor;
+        }
         // First-sale confetti: if any background-sync result shows a sold
         // album, fire the one-shot celebration. Localstorage guard means
         // it only ever plays once.
-        const newSale = (data.synced ?? []).some((s) => s.soldOn);
         if (newSale) {
           void (async () => {
             const fired = await celebrateFirstSale();
@@ -222,7 +237,7 @@ export function CatalogueClient({
             }
           })();
         }
-        if (!cancelled && (data.changed ?? 0) > 0) {
+        if (!cancelled && totalChanged > 0) {
           router.refresh();
         }
       } catch {

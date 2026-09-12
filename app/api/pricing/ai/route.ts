@@ -44,6 +44,13 @@ export async function POST(request: Request) {
   }
 
   const typedAlbum = album as Album;
+  if (typedAlbum.status === "sold") {
+    return NextResponse.json(
+      { error: "Sold albums cannot be repriced." },
+      { status: 409 }
+    );
+  }
+
   const role = await getRoleForOwner(user, typedAlbum.user_id);
   if (!canManage(role)) {
     return NextResponse.json(
@@ -88,6 +95,23 @@ export async function POST(request: Request) {
       ebaySampleListings: ebayRaw.sampleListings as Array<{ price: number; title: string }> | undefined,
       currentSuggestedPrice,
     });
+
+    const { error: updateError } = await supabase
+      .from("albums")
+      .update({
+        suggested_price: result.suggestedPrice,
+        status:
+          typedAlbum.status === "unlisted" ? "pricing" : typedAlbum.status,
+      })
+      .eq("id", albumId)
+      .eq("user_id", typedAlbum.user_id);
+
+    if (updateError) {
+      return NextResponse.json(
+        { error: `Failed to save AI pricing: ${updateError.message}` },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json(result);
   } catch (err) {
