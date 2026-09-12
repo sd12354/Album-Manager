@@ -7,16 +7,18 @@ import { createBrowserClient } from "@supabase/ssr";
  * inlined into the client bundle at build time once the env vars are set,
  * and a subsequent redeploy picks them up automatically.
  */
+export function hasSupabaseBrowserConfig(): boolean {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  return Boolean(url && key);
+}
+
 export function createClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!url || !key) {
-    if (typeof window !== "undefined") {
-      throw new Error(
-        "Supabase environment variables are not set. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in your Vercel project settings, then redeploy."
-      );
-    }
     return createBrowserClient(
       "https://placeholder.supabase.co",
       "placeholder-anon-key"
