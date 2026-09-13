@@ -54,6 +54,10 @@ interface CatalogueClientProps {
   ownerId?: string;
 }
 
+function normalizedAlbumText(value: string | null | undefined): string {
+  return (value ?? "").trim().toLowerCase();
+}
+
 export function CatalogueClient({
   albums,
   canEdit = true,
@@ -201,17 +205,32 @@ export function CatalogueClient({
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch("/api/ebay/sync", { method: "POST" });
-        if (!res.ok || cancelled) return;
-        const data = await res.json() as {
-          changed?: number;
-          synced?: Array<{ soldOn?: string }>;
-        };
+        let cursor: string | null = null;
+        let totalChanged = 0;
+        let sawSale = false;
+
+        do {
+          const res = await fetch("/api/ebay/sync", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ cursor }),
+          });
+          if (!res.ok || cancelled) return;
+          const data = (await res.json()) as {
+            changed?: number;
+            synced?: Array<{ soldOn?: string }>;
+            capped?: boolean;
+            nextCursor?: string | null;
+          };
+          totalChanged += data.changed ?? 0;
+          sawSale ||= (data.synced ?? []).some((s) => s.soldOn);
+          cursor = data.capped ? data.nextCursor ?? null : null;
+        } while (cursor && !cancelled);
+
         // First-sale confetti: if any background-sync result shows a sold
         // album, fire the one-shot celebration. Localstorage guard means
         // it only ever plays once.
-        const newSale = (data.synced ?? []).some((s) => s.soldOn);
-        if (newSale) {
+        if (sawSale) {
           void (async () => {
             const fired = await celebrateFirstSale();
             if (fired && !cancelled) {
@@ -222,7 +241,7 @@ export function CatalogueClient({
             }
           })();
         }
-        if (!cancelled && (data.changed ?? 0) > 0) {
+        if (!cancelled && totalChanged > 0) {
           router.refresh();
         }
       } catch {
@@ -243,7 +262,7 @@ export function CatalogueClient({
   const duplicateIds = useMemo(() => {
     const buckets = new Map<string, string[]>();
     for (const album of albums) {
-      const key = `${album.artist.trim().toLowerCase()}|${album.title.trim().toLowerCase()}`;
+      const key = `${normalizedAlbumText(album.artist)}|${normalizedAlbumText(album.title)}`;
       if (!key.includes("|") || key === "|") continue; // missing artist/title
       const list = buckets.get(key) ?? [];
       list.push(album.id);
@@ -267,8 +286,8 @@ export function CatalogueClient({
     if (!q) return [];
     const out: Album[] = [];
     for (const album of albums) {
-      const artistMatch = album.artist.toLowerCase().includes(q);
-      const titleMatch = album.title.toLowerCase().includes(q);
+      const artistMatch = normalizedAlbumText(album.artist).includes(q);
+      const titleMatch = normalizedAlbumText(album.title).includes(q);
       if (artistMatch || titleMatch) {
         out.push(album);
         if (out.length >= 8) break;
@@ -304,7 +323,7 @@ export function CatalogueClient({
   const redistributableCount = useMemo(() => {
     const buckets = new Map<string, Album[]>();
     for (const album of albums) {
-      const key = `${album.artist.trim().toLowerCase()}|${album.title.trim().toLowerCase()}`;
+      const key = `${normalizedAlbumText(album.artist)}|${normalizedAlbumText(album.title)}`;
       if (!key.includes("|") || key === "|") continue;
       const list = buckets.get(key) ?? [];
       list.push(album);
@@ -381,8 +400,8 @@ export function CatalogueClient({
     const filtered = albums.filter((album) => {
       const matchesSearch =
         !globalFilter ||
-        album.title.toLowerCase().includes(globalFilter.toLowerCase()) ||
-        album.artist.toLowerCase().includes(globalFilter.toLowerCase());
+        normalizedAlbumText(album.title).includes(globalFilter.toLowerCase()) ||
+        normalizedAlbumText(album.artist).includes(globalFilter.toLowerCase());
       const matchesCondition =
         conditionFilter === "all" || album.condition === conditionFilter;
       const matchesStatus =
@@ -430,9 +449,9 @@ export function CatalogueClient({
       // When viewing duplicates, sort by artist/title so identical copies
       // sit next to each other for easy comparison and deletion.
       filtered.sort((a, b) => {
-        const k = a.artist.trim().toLowerCase().localeCompare(b.artist.trim().toLowerCase());
+        const k = normalizedAlbumText(a.artist).localeCompare(normalizedAlbumText(b.artist));
         if (k !== 0) return k;
-        return a.title.trim().toLowerCase().localeCompare(b.title.trim().toLowerCase());
+        return normalizedAlbumText(a.title).localeCompare(normalizedAlbumText(b.title));
       });
     }
 
@@ -797,7 +816,7 @@ export function CatalogueClient({
     // returns full albums so we can compare photo state).
     const buckets = new Map<string, Album[]>();
     for (const album of albums) {
-      const key = `${album.artist.trim().toLowerCase()}|${album.title.trim().toLowerCase()}`;
+      const key = `${normalizedAlbumText(album.artist)}|${normalizedAlbumText(album.title)}`;
       if (!key.includes("|") || key === "|") continue;
       const list = buckets.get(key) ?? [];
       list.push(album);

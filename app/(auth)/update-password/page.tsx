@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
@@ -9,7 +9,8 @@ import { VinylSpinner } from "@/components/vinyl-spinner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
+import { SupabaseConfigNotice } from "@/components/supabase-config-notice";
+import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 
 const PASSWORD_RULES = [
   { id: "length", label: "at least 8 characters", test: (p: string) => p.length >= 8 },
@@ -19,11 +20,11 @@ const PASSWORD_RULES = [
   { id: "special", label: "one special character", test: (p: string) => /[^A-Za-z0-9]/.test(p) },
 ] as const;
 
-let handledRecoveryCode: string | null = null;
-
 export default function UpdatePasswordPage() {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
+  const supabaseConfigured = isSupabaseConfigured();
+  const handledRecoveryCode = useRef<string | null>(null);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -33,6 +34,8 @@ export default function UpdatePasswordPage() {
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
+    if (!supabaseConfigured) return;
+
     let mounted = true;
 
     async function checkRecoverySession() {
@@ -41,8 +44,8 @@ export default function UpdatePasswordPage() {
           ? new URLSearchParams(window.location.search).get("code")
           : null;
 
-      if (code && handledRecoveryCode !== code) {
-        handledRecoveryCode = code;
+      if (code && handledRecoveryCode.current !== code) {
+        handledRecoveryCode.current = code;
         const { error } = await supabase.auth.exchangeCodeForSession(code);
         if (typeof window !== "undefined") {
           window.history.replaceState(null, "", "/update-password");
@@ -58,11 +61,11 @@ export default function UpdatePasswordPage() {
       }
 
       const {
-        data: { session },
-      } = await supabase.auth.getSession();
+        data: { user },
+      } = await supabase.auth.getUser();
 
       if (!mounted) return;
-      if (!session) {
+      if (!user) {
         setError(
           "This reset link is invalid or has expired. Request a new password reset email."
         );
@@ -74,7 +77,7 @@ export default function UpdatePasswordPage() {
     return () => {
       mounted = false;
     };
-  }, [supabase]);
+  }, [supabase, supabaseConfigured]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -104,6 +107,10 @@ export default function UpdatePasswordPage() {
       router.push("/dashboard");
       router.refresh();
     }, 1200);
+  }
+
+  if (!supabaseConfigured) {
+    return <SupabaseConfigNotice />;
   }
 
   return (

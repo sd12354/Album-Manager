@@ -19,7 +19,7 @@ export const dynamic = "force-dynamic";
 /** Max albums per bulk sync request (each may call eBay + Discogs). */
 const MAX_SYNC = 10;
 
-export async function POST() {
+export async function POST(request: Request) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -29,13 +29,24 @@ export async function POST() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { data: albums } = await supabase
+  const body = (await request.json().catch(() => ({}))) as {
+    cursor?: string | null;
+  };
+  const cursor = body.cursor ?? null;
+
+  let query = supabase
     .from("albums")
     .select("*")
     .eq("user_id", user.id)
     .neq("status", "sold")
     .or("ebay_listing_id.not.is.null,discogs_listing_id.not.is.null")
+    .order("id", { ascending: true })
     .limit(MAX_SYNC);
+  if (cursor) {
+    query = query.gt("id", cursor);
+  }
+
+  const { data: albums } = await query;
 
   const { data: ebayCreds } = await supabase
     .from("ebay_credentials")
@@ -89,7 +100,27 @@ export async function POST() {
     });
 
     if (outcome.changed) {
-      await supabase.from("albums").update(outcome.updates).eq("id", album.id);
+      const { error: updateError } = await supabase
+        .from("albums")
+        .update(outcome.updates)
+        .eq("id", album.id);
+
+      if (updateError) {
+        console.error("[sync]", {
+          scope: "marketplace-sync",
+          event: "bulk_sync_persist_failed",
+          albumId: album.id,
+          message: updateError.message,
+        });
+        return NextResponse.json(
+          {
+            error:
+              "Marketplace state changed, but VinylVault could not save it.",
+            synced,
+          },
+          { status: 500 }
+        );
+      }
 
       if (outcome.soldOn) {
         await crossCancelOtherMarketplace(
@@ -120,5 +151,9 @@ export async function POST() {
     count: synced.length,
     changed,
     capped: (albums?.length ?? 0) >= MAX_SYNC,
+    nextCursor:
+      (albums?.length ?? 0) >= MAX_SYNC
+        ? ((albums?.at(-1) as Album | undefined)?.id ?? null)
+        : null,
   });
 }
