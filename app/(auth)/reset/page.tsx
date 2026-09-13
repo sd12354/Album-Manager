@@ -6,7 +6,8 @@ import { VinylLogo } from "@/components/vinyl-logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
+import { SupabaseConfigNotice } from "@/components/supabase-config-notice";
+import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { getAppUrl } from "@/lib/site-url";
 
 export default function ResetPage() {
@@ -16,6 +17,10 @@ export default function ResetPage() {
   const [error, setError] = useState("");
   const supabase = createClient();
 
+  if (!isSupabaseConfigured()) {
+    return <SupabaseConfigNotice />;
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
@@ -23,7 +28,7 @@ export default function ResetPage() {
 
     const trimmedEmail = email.trim();
     const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
-      redirectTo: `${getAppUrl()}/update-password`,
+      redirectTo: `${getAppUrl()}/auth/callback?next=/update-password`,
     });
 
     if (error) {

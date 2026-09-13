@@ -10,6 +10,7 @@ import {
   checkAlbumMarketplaceState,
   crossCancelOtherMarketplace,
 } from "@/lib/marketplace-sync";
+import { isLocalMarketplaceListingId } from "@/lib/marketplace";
 import type { Album } from "@/types";
 
 export const runtime = "nodejs";
@@ -59,11 +60,13 @@ export async function POST(request: Request) {
   }
 
   // Manually-tracked listings have no marketplace API to query against.
-  const ebayIsManual = typedAlbum.ebay_listing_id?.startsWith("manual-") ?? false;
-  const discogsIsManual = typedAlbum.discogs_listing_id?.startsWith("manual-") ?? false;
+  const ebayIsLocal = isLocalMarketplaceListingId(typedAlbum.ebay_listing_id);
+  const discogsIsLocal = isLocalMarketplaceListingId(
+    typedAlbum.discogs_listing_id
+  );
   if (
-    (!typedAlbum.ebay_listing_id || ebayIsManual) &&
-    (!typedAlbum.discogs_listing_id || discogsIsManual)
+    (!typedAlbum.ebay_listing_id || ebayIsLocal) &&
+    (!typedAlbum.discogs_listing_id || discogsIsLocal)
   ) {
     return NextResponse.json({
       status: typedAlbum.status,
@@ -110,10 +113,23 @@ export async function POST(request: Request) {
     return NextResponse.json({ status: typedAlbum.status, changed: false });
   }
 
-  await supabase
+  const { error: updateError } = await supabase
     .from("albums")
     .update(outcome.updates)
     .eq("id", albumId);
+
+  if (updateError) {
+    console.error("[sync]", {
+      scope: "marketplace-sync",
+      event: "single_sync_persist_failed",
+      albumId,
+      message: updateError.message,
+    });
+    return NextResponse.json(
+      { error: "Marketplace state changed, but VinylVault could not save it." },
+      { status: 500 }
+    );
+  }
 
   if (outcome.soldOn) {
     await crossCancelOtherMarketplace(
