@@ -202,6 +202,10 @@ export function PhotoMatchPanel() {
     };
   }, []);
 
+  const updateRow = useCallback((id: string, patch: Partial<PhotoMatchRow>) => {
+    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  }, []);
+
   const addFiles = useCallback(async (fileList: FileList | null) => {
     if (!fileList) return;
     const files = Array.from(fileList);
@@ -328,7 +332,7 @@ export function PhotoMatchPanel() {
       );
       setConverting(false);
     }
-  }, []);
+  }, [updateRow]);
 
   function removeRow(id: string) {
     setRows((prev) => {
@@ -336,10 +340,6 @@ export function PhotoMatchPanel() {
       if (row) URL.revokeObjectURL(row.previewUrl);
       return prev.filter((r) => r.id !== id);
     });
-  }
-
-  function updateRow(id: string, patch: Partial<PhotoMatchRow>) {
-    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
   }
 
   async function analyzePhotos() {
