@@ -58,6 +58,20 @@ export interface MarketplaceSyncContext {
   isRealEbay: boolean;
 }
 
+export function isLocalMarketplaceListingId(
+  listingId: string | null | undefined
+): boolean {
+  return (
+    listingId?.startsWith("manual-") === true ||
+    listingId?.startsWith("STUB-") === true
+  );
+}
+
+export function parseDiscogsListingId(listingId: string): number | null {
+  const parsed = Number.parseInt(listingId, 10);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
 /**
  * Compares stored listing IDs against live eBay/Discogs state. Detects sales
  * and listings removed directly on the marketplace (ended, deleted, expired).
@@ -76,10 +90,10 @@ export async function checkAlbumMarketplaceState(
   let buyerAddressRaw: string | null = null;
   let ebayToken: string | null = null;
 
-  const ebayIsManual = album.ebay_listing_id?.startsWith("manual-") ?? false;
-  const discogsIsManual = album.discogs_listing_id?.startsWith("manual-") ?? false;
+  const ebayIsLocal = isLocalMarketplaceListingId(album.ebay_listing_id);
+  const discogsIsLocal = isLocalMarketplaceListingId(album.discogs_listing_id);
 
-  if (album.ebay_listing_id && !ebayIsManual && ctx.ebayCreds && ctx.isRealEbay) {
+  if (album.ebay_listing_id && !ebayIsLocal && ctx.ebayCreds && ctx.isRealEbay) {
     try {
       const tokenResult = await getValidEbayToken(ctx.ebayCreds);
       ebayToken = tokenResult.token;
@@ -108,10 +122,14 @@ export async function checkAlbumMarketplaceState(
     }
   }
 
-  if (!soldOn && album.discogs_listing_id && !discogsIsManual && ctx.discogsAuth) {
+  if (!soldOn && album.discogs_listing_id && !discogsIsLocal && ctx.discogsAuth) {
     try {
+      const discogsListingId = parseDiscogsListingId(album.discogs_listing_id);
+      if (!discogsListingId) {
+        throw new Error("Invalid Discogs listing ID");
+      }
       const discogsState = await getDiscogsListingState(
-        parseInt(album.discogs_listing_id, 10),
+        discogsListingId,
         ctx.discogsAuth
       );
 
@@ -120,7 +138,7 @@ export async function checkAlbumMarketplaceState(
         soldPrice = discogsState.price ?? album.list_price ?? undefined;
 
         const order = await getDiscogsOrderForListing(
-          parseInt(album.discogs_listing_id, 10),
+          discogsListingId,
           ctx.discogsAuth
         ).catch(() => null);
 
@@ -215,25 +233,25 @@ export async function crossCancelOtherMarketplace(
   ebayToken: string | null,
   isRealEbay: boolean
 ): Promise<void> {
-  const ebayIsManual = album.ebay_listing_id?.startsWith("manual-") ?? false;
-  const discogsIsManual = album.discogs_listing_id?.startsWith("manual-") ?? false;
+  const ebayIsLocal = isLocalMarketplaceListingId(album.ebay_listing_id);
+  const discogsIsLocal = isLocalMarketplaceListingId(album.discogs_listing_id);
 
   if (
     soldOn === "ebay" &&
     album.discogs_listing_id &&
-    !discogsIsManual &&
+    !discogsIsLocal &&
     discogsAuth
   ) {
-    await deleteDiscogsListing(
-      parseInt(album.discogs_listing_id, 10),
-      discogsAuth
-    ).catch(() => null);
+    const discogsListingId = parseDiscogsListingId(album.discogs_listing_id);
+    if (discogsListingId) {
+      await deleteDiscogsListing(discogsListingId, discogsAuth).catch(() => null);
+    }
   }
 
   if (
     soldOn === "discogs" &&
     album.ebay_listing_id &&
-    !ebayIsManual &&
+    !ebayIsLocal &&
     ebayToken &&
     isRealEbay
   ) {

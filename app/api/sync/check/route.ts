@@ -9,6 +9,7 @@ import {
   buildMarketplaceSyncContext,
   checkAlbumMarketplaceState,
   crossCancelOtherMarketplace,
+  isLocalMarketplaceListingId,
 } from "@/lib/marketplace-sync";
 import type { Album } from "@/types";
 
@@ -59,16 +60,16 @@ export async function POST(request: Request) {
   }
 
   // Manually-tracked listings have no marketplace API to query against.
-  const ebayIsManual = typedAlbum.ebay_listing_id?.startsWith("manual-") ?? false;
-  const discogsIsManual = typedAlbum.discogs_listing_id?.startsWith("manual-") ?? false;
+  const ebayIsLocal = isLocalMarketplaceListingId(typedAlbum.ebay_listing_id);
+  const discogsIsLocal = isLocalMarketplaceListingId(typedAlbum.discogs_listing_id);
   if (
-    (!typedAlbum.ebay_listing_id || ebayIsManual) &&
-    (!typedAlbum.discogs_listing_id || discogsIsManual)
+    (!typedAlbum.ebay_listing_id || ebayIsLocal) &&
+    (!typedAlbum.discogs_listing_id || discogsIsLocal)
   ) {
     return NextResponse.json({
       status: typedAlbum.status,
       changed: false,
-      manualOnly: true,
+      localOnly: true,
     });
   }
 

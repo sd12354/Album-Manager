@@ -12,6 +12,17 @@ export const CONDITION_MULTIPLIERS: Record<AlbumCondition, number> = {
 
 export const DEFAULT_MINIMUM_FLOOR = 3.0;
 
+export function resolveListingPrice(
+  ...candidates: Array<number | string | null | undefined>
+): number | null {
+  for (const candidate of candidates) {
+    if (candidate == null) continue;
+    const price = Number(candidate);
+    return Number.isFinite(price) && price > 0 ? price : null;
+  }
+  return null;
+}
+
 export function computeSuggestedPrice(
   discogsMedian: number | undefined,
   ebayMedian: number | undefined,

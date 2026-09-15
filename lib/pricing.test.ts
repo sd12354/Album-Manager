@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildCombinedPricing, computeSuggestedPrice } from "./pricing";
+import {
+  buildCombinedPricing,
+  computeSuggestedPrice,
+  resolveListingPrice,
+} from "./pricing";
 
 describe("pricing helpers", () => {
   it("applies condition multipliers and minimum floor", () => {
@@ -52,5 +56,13 @@ describe("pricing helpers", () => {
     expect(result.suggestedPrice).toBe(17);
     expect(result.suggestionSource).toBe("ebay-active");
     expect(result.confidence).toBe("high");
+  });
+
+  it("resolves listing prices without falling back to a hard-coded default", () => {
+    expect(resolveListingPrice(undefined, null, 24.5)).toBe(24.5);
+    expect(resolveListingPrice("19.99", 24.5)).toBe(19.99);
+    expect(resolveListingPrice()).toBeNull();
+    expect(resolveListingPrice(0, 24.5)).toBeNull();
+    expect(resolveListingPrice(Number.NaN, 24.5)).toBeNull();
   });
 });

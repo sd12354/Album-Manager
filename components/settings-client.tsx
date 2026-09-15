@@ -166,7 +166,7 @@ export function SettingsClient({
     const { error } = await supabase.auth.updateUser(
       { email: trimmed },
       {
-        emailRedirectTo: `${getAppUrl()}/settings`,
+        emailRedirectTo: `${getAppUrl()}/auth/callback?next=/settings`,
       }
     );
     if (error) {
