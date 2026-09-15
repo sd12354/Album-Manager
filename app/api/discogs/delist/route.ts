@@ -5,6 +5,10 @@ import {
   DiscogsError,
   resolveUserDiscogsAuth,
 } from "@/lib/discogs";
+import {
+  isLocalMarketplaceListingId,
+  parseDiscogsListingId,
+} from "@/lib/marketplace-sync";
 import type { Album } from "@/types";
 
 export const runtime = "nodejs";
@@ -56,9 +60,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Album is not listed on Discogs" }, { status: 400 });
   }
 
-  const isManualListing = typedAlbum.discogs_listing_id.startsWith("manual-");
+  const isLocalListing = isLocalMarketplaceListingId(typedAlbum.discogs_listing_id);
 
-  if (!isManualListing) {
+  if (!isLocalListing) {
+    const discogsListingId = parseDiscogsListingId(typedAlbum.discogs_listing_id);
+    if (!discogsListingId) {
+      return NextResponse.json(
+        { error: "Stored Discogs listing ID is invalid. Refresh sync before delisting." },
+        { status: 400 }
+      );
+    }
+
     const discogsAuth = resolveUserDiscogsAuth(user.user_metadata);
 
     if (!discogsAuth) {
@@ -69,7 +81,7 @@ export async function POST(request: Request) {
     }
 
     try {
-      await deleteDiscogsListing(parseInt(typedAlbum.discogs_listing_id, 10), discogsAuth);
+      await deleteDiscogsListing(discogsListingId, discogsAuth);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Discogs delist failed";
