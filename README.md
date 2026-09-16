@@ -56,13 +56,13 @@ Album catalogue manager for vinyl sellers — import your inventory, auto-price 
 | Backend | Supabase (Postgres, Auth, Storage, RLS) |
 | Deployment | Vercel |
 | APIs | Discogs, eBay (Browse + Trading), Anthropic Claude |
-| Tests | Vitest (`lib/csv.test.ts`, `lib/pricing.test.ts`) |
+| Tests | Vitest (`lib/csv.test.ts`, `lib/pricing.test.ts`, `lib/redirects.test.ts`) |
 
 ---
 
 ## Prerequisites
 
-- Node.js 18+
+- Node.js 22+ (Next.js 16 requires Node.js 20.9 or newer)
 - [Supabase](https://supabase.com) project
 - (Recommended) [Discogs](https://www.discogs.com/settings/developers) OAuth app or personal token
 - (Optional) [eBay Developer](https://developer.ebay.com/) production or sandbox keyset

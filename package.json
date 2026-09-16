@@ -36,7 +36,7 @@
     "jszip": "^3.10.1",
     "libheif-js": "^1.19.8",
     "lucide-react": "^0.469.0",
-    "next": "^16.2.9",
+    "next": "16.3.5",
     "papaparse": "^5.4.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
@@ -50,18 +50,28 @@
   },
   "devDependencies": {
     "@types/canvas-confetti": "^1.9.0",
-    "@types/node": "^20",
+    "@types/node": "22.20.3",
     "@types/papaparse": "^5.3.15",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "eslint": "^9.39.4",
-    "eslint-config-next": "^16.2.9",
-    "postcss": "^8.5.15",
+    "eslint-config-next": "16.3.5",
+    "postcss": "8.5.28",
     "tailwindcss": "^3.4.1",
     "typescript": "^5",
-    "vitest": "^4.1.9"
+    "vitest": "5.0.1"
   },
   "overrides": {
-    "postcss": "^8.5.15"
+    "postcss": "8.5.28",
+    "browserslist": "4.29.0",
+    "baseline-browser-mapping": "2.11.24",
+    "js-yaml": "5.4.2",
+    "postcss-selector-parser": "7.1.6",
+    "minimatch@3.1.5": {
+      "brace-expansion": "1.1.21"
+    },
+    "minimatch@10.2.5": {
+      "brace-expansion": "5.0.12"
+    }
   }
 }
