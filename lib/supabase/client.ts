@@ -1,5 +1,18 @@
 import { createBrowserClient } from "@supabase/ssr";
 
+const MISSING_SUPABASE_CONFIG_MESSAGE =
+  "Supabase environment variables are not set. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in your Vercel project settings, then redeploy.";
+
+export function isSupabaseConfigured() {
+  return Boolean(
+    process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  );
+}
+
+export function getSupabaseConfigError() {
+  return isSupabaseConfigured() ? null : MISSING_SUPABASE_CONFIG_MESSAGE;
+}
+
 /**
  * Browser-side Supabase client. Falls back to safe placeholders during
  * server-side prerender so `next build` doesn't crash before env vars are
@@ -12,11 +25,6 @@ export function createClient() {
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!url || !key) {
-    if (typeof window !== "undefined") {
-      throw new Error(
-        "Supabase environment variables are not set. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in your Vercel project settings, then redeploy."
-      );
-    }
     return createBrowserClient(
       "https://placeholder.supabase.co",
       "placeholder-anon-key"

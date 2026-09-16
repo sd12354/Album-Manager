@@ -2,14 +2,15 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Eye, EyeOff } from "lucide-react";
 import { VinylLogo } from "@/components/vinyl-logo";
 import { VinylSpinner } from "@/components/vinyl-spinner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
+import { createClient, getSupabaseConfigError } from "@/lib/supabase/client";
+import { safeRelativePath } from "@/lib/redirects";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -18,10 +19,16 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const configError = getSupabaseConfigError();
   const supabase = createClient();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (configError) {
+      setError(configError);
+      return;
+    }
     setLoading(true);
     setError("");
 
@@ -34,7 +41,7 @@ export default function LoginPage() {
       setError(error.message);
       setLoading(false);
     } else {
-      router.push("/dashboard");
+      router.push(safeRelativePath(searchParams.get("next")));
       router.refresh();
     }
   }
@@ -94,9 +101,11 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {error && <p className="text-sm text-red-400">{error}</p>}
+        {(configError || error) && (
+          <p className="text-sm text-red-400">{error || configError}</p>
+        )}
 
-        <Button type="submit" className="w-full" size="lg" disabled={loading}>
+        <Button type="submit" className="w-full" size="lg" disabled={loading || Boolean(configError)}>
           {loading ? (
             <>
               <VinylSpinner size="sm" />
