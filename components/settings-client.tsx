@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { EbayConnectButton } from "@/components/ebay-connect-button";
 import { DiscogsConnectButton } from "@/components/discogs-connect-button";
 import { CollaboratorsSection } from "@/components/collaborators-section";
+import { authCallbackUrl } from "@/lib/redirects";
 import { getAppUrl } from "@/lib/site-url";
 import {
   Accordion,
@@ -166,7 +167,7 @@ export function SettingsClient({
     const { error } = await supabase.auth.updateUser(
       { email: trimmed },
       {
-        emailRedirectTo: `${getAppUrl()}/settings`,
+        emailRedirectTo: `${getAppUrl()}${authCallbackUrl("/settings")}`,
       }
     );
     if (error) {

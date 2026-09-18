@@ -6,9 +6,12 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Eye, EyeOff } from "lucide-react";
 import { VinylLogo } from "@/components/vinyl-logo";
 import { VinylSpinner } from "@/components/vinyl-spinner";
+import { SupabaseConfigWarning } from "@/components/supabase-config-warning";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { getSafeNextParam } from "@/lib/redirects";
+import { hasSupabaseConfig } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
@@ -18,6 +21,12 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const router = useRouter();
+  const supabaseConfigured = hasSupabaseConfig();
+
+  if (!supabaseConfigured) {
+    return <SupabaseConfigWarning />;
+  }
+
   const supabase = createClient();
 
   async function handleSubmit(e: React.FormEvent) {
@@ -34,7 +43,11 @@ export default function LoginPage() {
       setError(error.message);
       setLoading(false);
     } else {
-      router.push("/dashboard");
+      const params =
+        typeof window === "undefined"
+          ? new URLSearchParams()
+          : new URLSearchParams(window.location.search);
+      router.push(getSafeNextParam(params));
       router.refresh();
     }
   }

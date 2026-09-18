@@ -2,11 +2,14 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { SupabaseConfigWarning } from "@/components/supabase-config-warning";
 import { VinylLogo } from "@/components/vinyl-logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
+import { authCallbackUrl } from "@/lib/redirects";
+import { hasSupabaseConfig } from "@/lib/supabase/config";
 import { getAppUrl } from "@/lib/site-url";
 
 export default function ResetPage() {
@@ -14,6 +17,12 @@ export default function ResetPage() {
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
+  const supabaseConfigured = hasSupabaseConfig();
+
+  if (!supabaseConfigured) {
+    return <SupabaseConfigWarning />;
+  }
+
   const supabase = createClient();
 
   async function handleSubmit(e: React.FormEvent) {
@@ -23,7 +32,7 @@ export default function ResetPage() {
 
     const trimmedEmail = email.trim();
     const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
-      redirectTo: `${getAppUrl()}/update-password`,
+      redirectTo: `${getAppUrl()}${authCallbackUrl("/update-password")}`,
     });
 
     if (error) {
