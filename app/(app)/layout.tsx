@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/app-shell";
 import {
@@ -17,14 +18,16 @@ export default async function AppLayout({
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Turn any invites addressed to this user's email into memberships.
-  if (user) {
-    await claimPendingInvites(user).catch(() => 0);
+  if (!user) {
+    redirect("/login");
   }
 
-  const collections = user ? await getAccessibleCollections(user) : [];
+  // Turn any invites addressed to this user's email into memberships.
+  await claimPendingInvites(user).catch(() => 0);
+
+  const collections = await getAccessibleCollections(user);
   const active =
-    user && collections.length > 0
+    collections.length > 0
       ? await getActiveCollection(user, collections)
       : null;
   const activeOwnerId = active?.ownerId ?? user?.id ?? "";
@@ -33,7 +36,7 @@ export default async function AppLayout({
   let ebayConnected = false;
   let discogsConnected = false;
 
-  if (user && active) {
+  if (active) {
     const status = await getOwnerConnectionStatus(user, active.ownerId);
     ebayConnected = status.ebayConnected;
     discogsConnected = status.discogsConnected;
