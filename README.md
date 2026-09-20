@@ -56,13 +56,13 @@ Album catalogue manager for vinyl sellers — import your inventory, auto-price 
 | Backend | Supabase (Postgres, Auth, Storage, RLS) |
 | Deployment | Vercel |
 | APIs | Discogs, eBay (Browse + Trading), Anthropic Claude |
-| Tests | Vitest (`lib/csv.test.ts`, `lib/pricing.test.ts`) |
+| Tests | Vitest (`lib/*.test.ts`) |
 
 ---
 
 ## Prerequisites
 
-- Node.js 18+
+- Node.js 22+
 - [Supabase](https://supabase.com) project
 - (Recommended) [Discogs](https://www.discogs.com/settings/developers) OAuth app or personal token
 - (Optional) [eBay Developer](https://developer.ebay.com/) production or sandbox keyset
@@ -132,6 +132,8 @@ Migrations in `supabase/migrations/` (apply in order):
 | `006_listing_description.sql` | AI listing description column |
 | `007_collection_sharing.sql` | `collection_members`, `collection_invites`, shared RLS |
 | `008_advisor_hardening.sql` | Security hardening for advisor findings |
+| `009_lock_album_owner_updates.sql` | Prevent album ownership reassignment |
+| `010_transfer_ownership.sql` | Collection ownership transfer support |
 
 ```bash
 npx supabase db push

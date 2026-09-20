@@ -7,6 +7,7 @@ import {
   type EbayTokenCredentials,
   type SellerLocation,
 } from "@/lib/ebay";
+import { resolveListingPrice } from "@/lib/listing-price";
 import { generateListingDescription } from "@/lib/ai-pricing";
 import type { Album, AlbumCondition, UserSettings } from "@/types";
 
@@ -81,12 +82,10 @@ export async function POST(request: Request) {
     );
   }
 
-  const rawPrice =
-    listPrice ?? typedAlbum.list_price ?? typedAlbum.suggested_price ?? 9.99;
-  const price = Number(rawPrice);
-  if (!Number.isFinite(price) || price <= 0) {
+  const price = resolveListingPrice(listPrice, typedAlbum);
+  if (price == null) {
     return NextResponse.json(
-      { error: "List price must be a positive number." },
+      { error: "List price must be a positive number. Fetch pricing or enter a list price first." },
       { status: 400 }
     );
   }

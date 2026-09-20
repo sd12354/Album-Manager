@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { sanitizeInternalRedirect } from "@/lib/redirects";
 
 function redirectWithSessionCookies(url: URL, supabaseResponse: NextResponse) {
   const response = NextResponse.redirect(url);
@@ -48,12 +49,20 @@ export async function updateSession(request: NextRequest) {
   if (isProtected && !user) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
+    url.search = "";
+    url.searchParams.set(
+      "next",
+      sanitizeInternalRedirect(
+        `${request.nextUrl.pathname}${request.nextUrl.search}`,
+        "/dashboard"
+      )
+    );
     return redirectWithSessionCookies(url, supabaseResponse);
   }
 
   if (isAuthPage && user) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
+    const next = sanitizeInternalRedirect(request.nextUrl.searchParams.get("next"));
+    const url = new URL(next, request.nextUrl.origin);
     return redirectWithSessionCookies(url, supabaseResponse);
   }
 
