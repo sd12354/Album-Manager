@@ -63,9 +63,10 @@ export default function SignupPage() {
       password,
       options: {
         // Ensures the confirmation link (when email confirmation is enabled
-        // in Supabase) returns the user to the canonical production app rather
-        // than an ephemeral deployment URL or localhost.
-        emailRedirectTo: `${getAppUrl()}/login`,
+        // in Supabase) exchanges the PKCE code server-side before redirecting.
+        emailRedirectTo: `${getAppUrl()}/auth/callback?next=${encodeURIComponent(
+          "/dashboard"
+        )}`,
       },
     });
 

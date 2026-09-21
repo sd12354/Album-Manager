@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { getProtectedNextPath, sanitizeRedirectPath } from "@/lib/redirects";
 
 function redirectWithSessionCookies(url: URL, supabaseResponse: NextResponse) {
   const response = NextResponse.redirect(url);
@@ -46,14 +47,16 @@ export async function updateSession(request: NextRequest) {
     request.nextUrl.pathname.startsWith("/signup");
 
   if (isProtected && !user) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
+    const url = new URL("/login", request.url);
+    url.searchParams.set("next", getProtectedNextPath(request.nextUrl));
     return redirectWithSessionCookies(url, supabaseResponse);
   }
 
   if (isAuthPage && user) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
+    const url = new URL(
+      sanitizeRedirectPath(request.nextUrl.searchParams.get("next")),
+      request.url
+    );
     return redirectWithSessionCookies(url, supabaseResponse);
   }
 
