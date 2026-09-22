@@ -4,12 +4,13 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, Eye, EyeOff, X } from "lucide-react";
+import { SupabaseConfigWarning } from "@/components/supabase-config-warning";
 import { VinylLogo } from "@/components/vinyl-logo";
 import { VinylSpinner } from "@/components/vinyl-spinner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
+import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { getAppUrl } from "@/lib/site-url";
 
 const PASSWORD_RULES = [
@@ -34,7 +35,7 @@ export default function SignupPage() {
   const [error, setError] = useState("");
   const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
   const router = useRouter();
-  const supabase = createClient();
+  const supabase = isSupabaseConfigured() ? createClient() : null;
 
   const passwordChecks = PASSWORD_RULES.map((rule) => ({
     ...rule,
@@ -45,6 +46,7 @@ export default function SignupPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!supabase) return;
     setError("");
 
     if (!isPasswordStrong) {
@@ -63,9 +65,8 @@ export default function SignupPage() {
       password,
       options: {
         // Ensures the confirmation link (when email confirmation is enabled
-        // in Supabase) returns the user to the canonical production app rather
-        // than an ephemeral deployment URL or localhost.
-        emailRedirectTo: `${getAppUrl()}/login`,
+        // in Supabase) exchanges the PKCE code before landing in the app.
+        emailRedirectTo: `${getAppUrl()}/auth/callback?next=/dashboard`,
       },
     });
 
@@ -96,6 +97,10 @@ export default function SignupPage() {
       setAwaitingConfirmation(true);
       setLoading(false);
     }
+  }
+
+  if (!supabase) {
+    return <SupabaseConfigWarning />;
   }
 
   if (awaitingConfirmation) {

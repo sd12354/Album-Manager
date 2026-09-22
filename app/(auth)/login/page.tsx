@@ -4,12 +4,14 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Eye, EyeOff } from "lucide-react";
+import { SupabaseConfigWarning } from "@/components/supabase-config-warning";
 import { VinylLogo } from "@/components/vinyl-logo";
 import { VinylSpinner } from "@/components/vinyl-spinner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
+import { sanitizeRedirectPath } from "@/lib/redirects";
+import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -18,10 +20,11 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const router = useRouter();
-  const supabase = createClient();
+  const supabase = isSupabaseConfigured() ? createClient() : null;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!supabase) return;
     setLoading(true);
     setError("");
 
@@ -34,9 +37,17 @@ export default function LoginPage() {
       setError(error.message);
       setLoading(false);
     } else {
-      router.push("/dashboard");
+      const next =
+        typeof window === "undefined"
+          ? null
+          : new URLSearchParams(window.location.search).get("next");
+      router.push(sanitizeRedirectPath(next));
       router.refresh();
     }
+  }
+
+  if (!supabase) {
+    return <SupabaseConfigWarning />;
   }
 
   return (
