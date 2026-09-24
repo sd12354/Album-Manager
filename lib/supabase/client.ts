@@ -12,11 +12,6 @@ export function createClient() {
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!url || !key) {
-    if (typeof window !== "undefined") {
-      throw new Error(
-        "Supabase environment variables are not set. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in your Vercel project settings, then redeploy."
-      );
-    }
     return createBrowserClient(
       "https://placeholder.supabase.co",
       "placeholder-anon-key"
