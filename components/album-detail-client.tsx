@@ -26,10 +26,13 @@ import {
   ACCEPT_ATTRIBUTE,
   convertHeicToJpeg,
   EBAY_MAX_PHOTOS,
-  getOriginalPublicUrl,
-  sanitizeFilename,
   validatePhoto,
 } from "@/lib/photos";
+import {
+  deleteAlbumPhoto,
+  fetchPhotoBlob,
+  uploadAlbumPhoto,
+} from "@/lib/photo-upload";
 import { createClient } from "@/lib/supabase/client";
 import { celebrateFirstListing, celebrateFirstSale } from "@/lib/celebrate";
 import { cn, formatCurrency } from "@/lib/utils";
@@ -612,31 +615,24 @@ export function AlbumDetailClient({
         toast.warning(w, { duration: 7000 })
       );
 
-      const safeName = sanitizeFilename(file.name);
-      // Store under the collection owner's folder so shared editors land in the
-      // right bucket path (storage RLS keys on the owner id).
-      const path = `${album.user_id}/${album.id}/${Date.now()}-${safeName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from("album-photos")
-        .upload(path, file, {
-          // Preserve the original binary and Content-Type so eBay (and any
-          // other consumer) downloads byte-for-byte identical pixels.
+      try {
+        // Uploaded byte-for-byte (no resizing or re-encoding) under the
+        // collection owner's folder, so shared editors land in the right place.
+        const url = await uploadAlbumPhoto({
+          supabase,
+          ownerId: album.user_id,
+          albumId: album.id,
+          file,
+          filename: file.name,
           contentType: file.type,
-          upsert: false,
-          cacheControl: "31536000",
         });
-
-      if (uploadError) {
-        toast.error(`${file.name}: ${uploadError.message}`);
+        uploadedUrls.push(url);
+      } catch (err) {
+        toast.error(
+          `${file.name}: ${err instanceof Error ? err.message : "upload failed"}`
+        );
         continue;
       }
-
-      const { data: urlData } = supabase.storage
-        .from("album-photos")
-        .getPublicUrl(path);
-
-      uploadedUrls.push(getOriginalPublicUrl(urlData.publicUrl));
     }
 
     if (uploadedUrls.length > 0) {
@@ -683,9 +679,7 @@ export function AlbumDetailClient({
   }
 
   async function fetchAsBlob(url: string): Promise<Blob> {
-    const res = await fetch(url, { cache: "force-cache" });
-    if (!res.ok) throw new Error(`Failed to fetch image (${res.status})`);
-    return res.blob();
+    return fetchPhotoBlob(url);
   }
 
   function triggerDownload(blob: Blob, filename: string) {
@@ -802,13 +796,9 @@ export function AlbumDetailClient({
       setAlbum((prev) => ({ ...prev, photo_urls: next }));
 
       // Delete the underlying file from storage too so we don't accumulate
-      // orphans. URL shape: .../storage/v1/object/public/album-photos/{path}
+      // orphans (works for both Supabase Storage and Cloudflare R2 URLs).
       try {
-        const match = url.match(/\/object\/public\/album-photos\/(.+)$/);
-        if (match) {
-          const storagePath = decodeURIComponent(match[1]);
-          await supabase.storage.from("album-photos").remove([storagePath]);
-        }
+        await deleteAlbumPhoto({ supabase, albumId: album.id, url });
       } catch {
         // Non-fatal — the URL is already gone from the album row.
       }

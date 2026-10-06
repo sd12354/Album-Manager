@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
+import { isBackendOutageError } from "@/lib/backend-health";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -31,7 +32,12 @@ export default function LoginPage() {
     });
 
     if (error) {
-      setError(error.message);
+      // "Failed to fetch" means nothing to a seller; say what is going on.
+      setError(
+        isBackendOutageError(error)
+          ? "VinylVault is temporarily unavailable. Please try again in a few minutes."
+          : error.message
+      );
       setLoading(false);
     } else {
       router.push("/dashboard");

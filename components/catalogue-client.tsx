@@ -38,7 +38,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { celebrateFirstSale } from "@/lib/celebrate";
 import { createClient as createSupabaseClient } from "@/lib/supabase/client";
-import { EBAY_MAX_PHOTOS, getOriginalPublicUrl, sanitizeFilename } from "@/lib/photos";
+import { EBAY_MAX_PHOTOS } from "@/lib/photos";
+import { fetchPhotoBlob, uploadAlbumPhoto } from "@/lib/photo-upload";
 import { cn, formatCurrency } from "@/lib/utils";
 import type { Album, AlbumCondition, AlbumStatus } from "@/types";
 
@@ -869,26 +870,29 @@ export function CatalogueClient({
 
           for (const sourceUrl of toCopy) {
             try {
-              const blob = await (await fetch(sourceUrl)).blob();
+              const blob = await fetchPhotoBlob(sourceUrl);
               const m = sourceUrl.match(/\/([^/?#]+?)(?:[?#].*)?$/);
-              const baseName = sanitizeFilename(m ? m[1] : "photo.jpg");
-              const rand = Math.random().toString(36).slice(2, 8);
-              const path = `${folderOwner}/${recipient.id}/${Date.now()}-${rand}-${baseName}`;
-              const { error: uploadError } = await supabaseClient.storage
-                .from("album-photos")
-                .upload(path, blob, {
-                  contentType: blob.type || "image/jpeg",
-                  upsert: false,
-                  cacheControl: "31536000",
-                });
-              if (uploadError) {
+              const baseName = m ? decodeURIComponent(m[1]) : "photo.jpg";
+              try {
+                newUrls.push(
+                  await uploadAlbumPhoto({
+                    supabase: supabaseClient,
+                    ownerId: folderOwner,
+                    albumId: recipient.id,
+                    file: blob,
+                    filename: baseName,
+                    contentType: blob.type || "image/jpeg",
+                  })
+                );
+              } catch (err) {
                 failed += 1;
+                if (failureMessages.length < 3) {
+                  failureMessages.push(
+                    err instanceof Error ? err.message : "Upload failed"
+                  );
+                }
                 continue;
               }
-              const { data: urlData } = supabaseClient.storage
-                .from("album-photos")
-                .getPublicUrl(path);
-              newUrls.push(getOriginalPublicUrl(urlData.publicUrl));
               copiedTotal += 1;
             } catch (err) {
               failed += 1;

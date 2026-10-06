@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
 import { getAppUrl } from "@/lib/site-url";
+import { isBackendOutageError } from "@/lib/backend-health";
 
 export default function ResetPage() {
   const [email, setEmail] = useState("");
@@ -28,9 +29,11 @@ export default function ResetPage() {
 
     if (error) {
       setError(
-        error.message.includes("Error sending")
-          ? "We couldn't send the reset email. Please try again shortly or contact support if it keeps happening."
-          : error.message
+        isBackendOutageError(error)
+          ? "VinylVault is temporarily unavailable. Please try again in a few minutes."
+          : error.message.includes("Error sending")
+            ? "We couldn't send the reset email. Please try again shortly or contact support if it keeps happening."
+            : error.message
       );
     } else {
       setSent(true);

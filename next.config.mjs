@@ -1,12 +1,27 @@
+// Album photos are served from Supabase Storage and/or Cloudflare R2. The R2
+// public URL is either a Cloudflare-managed *.r2.dev address or a custom
+// domain; allow whichever host R2_PUBLIC_URL names so next/image can optimise
+// thumbnails from it.
+const remotePatterns = [
+  { protocol: "https", hostname: "*.supabase.co" },
+  { protocol: "https", hostname: "*.r2.dev" },
+];
+try {
+  const r2PublicUrl = (process.env.R2_PUBLIC_URL ?? "").trim();
+  if (r2PublicUrl) {
+    const { hostname } = new URL(r2PublicUrl);
+    if (!hostname.endsWith(".r2.dev")) {
+      remotePatterns.push({ protocol: "https", hostname });
+    }
+  }
+} catch {
+  // Malformed R2_PUBLIC_URL: lib/r2-core.ts treats R2 as not configured too.
+}
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
-    remotePatterns: [
-      {
-        protocol: "https",
-        hostname: "*.supabase.co",
-      },
-    ],
+    remotePatterns,
     // Hold optimized images in Vercel's edge cache for a full year. The
     // default (60s) means a popular photo gets re-fetched from Supabase
     // hundreds of times a day — main driver of free-tier egress. Photo

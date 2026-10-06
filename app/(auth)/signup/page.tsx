@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
 import { getAppUrl } from "@/lib/site-url";
+import { isBackendOutageError } from "@/lib/backend-health";
 
 const PASSWORD_RULES = [
   { id: "length", label: "At least 8 characters", test: (p: string) => p.length >= 8 },
@@ -70,7 +71,11 @@ export default function SignupPage() {
     });
 
     if (error) {
-      setError(error.message);
+      setError(
+        isBackendOutageError(error)
+          ? "VinylVault is temporarily unavailable. Please try again in a few minutes."
+          : error.message
+      );
       setLoading(false);
       return;
     }
