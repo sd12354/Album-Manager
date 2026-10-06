@@ -53,10 +53,10 @@ Album catalogue manager for vinyl sellers — import your inventory, auto-price 
 | Layer | Stack |
 |-------|--------|
 | Frontend | Next.js 16 (App Router), React 19, Tailwind CSS, shadcn/ui |
-| Backend | Supabase (Postgres, Auth, Storage, RLS) |
+| Backend | Supabase (Postgres, Auth, RLS), photos in Supabase Storage or Cloudflare R2 |
 | Deployment | Vercel |
 | APIs | Discogs, eBay (Browse + Trading), Anthropic Claude |
-| Tests | Vitest (`lib/csv.test.ts`, `lib/pricing.test.ts`) |
+| Tests | Vitest (`lib/*.test.ts`) |
 
 ---
 
@@ -138,6 +138,54 @@ npx supabase db push
 ```
 
 Row Level Security is enforced on all user data. Shared collections use a `is_collection_member()` helper and role checks (`viewer` / `editor` / `owner`).
+
+---
+
+## Photo storage (Cloudflare R2)
+
+Album photos are uploaded at full quality (no resizing or re-encoding). They can live in Supabase Storage (default) or Cloudflare R2. R2 is used when `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` and `R2_PUBLIC_URL` are all set; see [`.env.local.example`](.env.local.example).
+
+- The browser asks `/api/photos/upload-url` for a short-lived signed URL and sends the file straight to R2. Storage keys never reach the browser.
+- Object keys are the same in both backends (`{ownerId}/{albumId}/{file}`), so both URL shapes work side by side.
+- Bucket CORS must allow `GET`, `HEAD`, `PUT` from the app origin with headers `content-type` and `cache-control`.
+
+### Moving existing photos from Supabase to R2
+
+1. **Copy.** While signed in as the collection owner (or an editor), call `POST /api/photos/migrate` with `{"mode":"copy","limit":40}` until `remaining` is `0`. Each file is copied unchanged and checked against its MD5. Album links are not touched and nothing is deleted. `{"mode":"status"}` reports progress and a `fingerprint` of everything copied.
+2. **Verify.** Compare that fingerprint with the same value computed from Supabase's own records:
+
+   ```sql
+   select encode(sha256(convert_to(string_agg(
+            name || ':' || (metadata->>'size') || ':' || lower(trim(both '"' from metadata->>'eTag')),
+            E'\n' order by name collate "C"), 'utf8')), 'hex') as fingerprint
+   from storage.objects o
+   where bucket_id = 'album-photos'
+     and name like '<OWNER_ID>/%'
+     and exists (select 1 from public.albums a, unnest(a.photo_urls) u
+                 where a.user_id = '<OWNER_ID>' and u like '%/album-photos/' || o.name);
+   ```
+3. **Flip the links** (one statement; swap the two prefixes to roll back):
+
+   ```sql
+   begin;
+   alter table public.albums disable trigger albums_updated_at;  -- keep "recently updated" order
+   update public.albums
+      set photo_urls = (select array_agg(replace(u, '<SUPABASE_URL>/storage/v1/object/public/album-photos/', '<R2_PUBLIC_URL>/') order by ord)
+                        from unnest(photo_urls) with ordinality as t(u, ord))
+    where exists (select 1 from unnest(photo_urls) u
+                  where u like '<SUPABASE_URL>/storage/v1/object/public/album-photos/%');
+   alter table public.albums enable trigger albums_updated_at;
+   commit;
+   ```
+4. Only after checking the site, empty the old `album-photos` bucket in Supabase.
+
+---
+
+## Downtime page & keep-alive
+
+- `/maintenance` is shown in place of every page when `MAINTENANCE_MODE=1` (redeploy to apply). Accounts in `MAINTENANCE_ALLOW_EMAILS` keep access via `/login?staff`. `MAINTENANCE_MESSAGE` adds a line of your own.
+- The same page appears automatically on sign-in and app pages when Supabase is unreachable, paused or restricted, and clears by itself when it returns.
+- `vercel.json` schedules a daily request to `/api/keepalive`, a one-row database read, so a free-plan Supabase project is not paused for inactivity.
 
 ---
 

@@ -2,6 +2,12 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { canManage, getRoleForOwner } from "@/lib/collections";
 import { EBAY_MAX_PHOTOS } from "@/lib/photos";
+import {
+  keyBelongsToAlbum,
+  keyFromR2Url,
+  keyFromSupabaseUrl,
+} from "@/lib/photo-storage";
+import { getR2Config } from "@/lib/r2";
 import type { Album } from "@/types";
 
 export const runtime = "nodejs";
@@ -15,9 +21,10 @@ interface AttachItem {
 
 /**
  * Attaches already-uploaded storage photos to albums. Binaries are uploaded
- * directly from the browser to Supabase Storage, so this endpoint only receives
- * a small JSON list of { albumId, url } pairs — keeping it well clear of the
- * serverless request-body limit even for 100+ photo batches.
+ * directly from the browser to storage (Cloudflare R2, or Supabase Storage
+ * when R2 is not configured), so this endpoint only receives a small JSON
+ * list of { albumId, url } pairs — keeping it well clear of the serverless
+ * request-body limit even for 100+ photo batches.
  */
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -41,8 +48,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "No photos to attach" }, { status: 400 });
   }
 
-  // Only accept URLs that point at our own storage bucket, so a tampered
-  // request can't inject arbitrary external image URLs into a listing.
+  // Only accept URLs that point at our own storage (either backend), so a
+  // tampered request can't inject arbitrary external image URLs into a listing.
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   if (!supabaseUrl) {
     return NextResponse.json(
@@ -50,14 +57,17 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
-  const expectedPrefix = `${supabaseUrl}/storage/v1/object/public/album-photos/`;
+  const r2 = getR2Config();
+  const storageKeyFor = (url: string): string | null =>
+    (r2 ? keyFromR2Url(url, r2.publicUrl) : null) ??
+    keyFromSupabaseUrl(url, supabaseUrl);
 
   const valid = items.filter(
     (i) =>
       i &&
       typeof i.albumId === "string" &&
       typeof i.url === "string" &&
-      i.url.startsWith(expectedPrefix)
+      storageKeyFor(i.url) !== null
   );
 
   if (valid.length === 0) {
@@ -111,9 +121,8 @@ export async function POST(request: Request) {
   }
 
   for (const item of valid) {
-    const storagePath = decodeURIComponent(item.url.slice(expectedPrefix.length));
-    const [pathOwnerId, pathAlbumId] = storagePath.split("/");
-    if (pathOwnerId !== ownerId || pathAlbumId !== item.albumId) {
+    const storageKey = storageKeyFor(item.url);
+    if (!storageKey || !keyBelongsToAlbum(storageKey, ownerId, item.albumId)) {
       return NextResponse.json(
         { error: "Photo URL does not match the target album storage path." },
         { status: 400 }

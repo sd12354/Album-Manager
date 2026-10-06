@@ -18,10 +18,9 @@ import { SearchableAlbumPicker } from "@/components/searchable-album-picker";
 import {
   ACCEPT_ATTRIBUTE,
   convertHeicToJpeg,
-  getOriginalPublicUrl,
   isHeic,
-  sanitizeFilename,
 } from "@/lib/photos";
+import { uploadAlbumPhoto } from "@/lib/photo-upload";
 import { createClient } from "@/lib/supabase/client";
 import { fetchAllPages } from "@/lib/paginate";
 import type { AlbumMatchCandidate } from "@/lib/album-matching";
@@ -508,42 +507,24 @@ export function PhotoMatchPanel() {
 
     await runWithConcurrency(toAttach, attachConcurrency, async (row) => {
       try {
-        const safeName = sanitizeFilename(row.file.name || "cover.jpg");
-        const rand = Math.random().toString(36).slice(2, 8);
-        // Upload under the active collection owner's folder (storage RLS keys
-        // on the owner id), falling back to the current user for own albums.
+        // Uploaded under the active collection owner's folder, falling back
+        // to the current user for own albums. Bytes go up untouched.
         const folderOwner = ownerId || user.id;
-        const path = `${folderOwner}/${row.selectedAlbumId}/${Date.now()}-${rand}-${safeName}`;
-
-        const { error: uploadError } = await withTimeout(
-          supabase.storage
-            .from("album-photos")
-            .upload(path, row.file, {
-              contentType: row.file.type || "image/jpeg",
-              upsert: false,
-              cacheControl: "31536000",
-            }),
-          60_000,
+        const url = await withTimeout(
+          uploadAlbumPhoto({
+            supabase,
+            ownerId: folderOwner,
+            albumId: row.selectedAlbumId!,
+            file: row.file,
+            filename: row.file.name || "cover.jpg",
+            contentType: row.file.type || "image/jpeg",
+            timeoutMs: 60_000,
+          }),
+          90_000,
           `Uploading ${row.file.name}`
         );
 
-        if (uploadError) {
-          failed += 1;
-          updateRow(row.id, {
-            status: "error",
-            error: `Upload failed: ${uploadError.message}`,
-          });
-          return;
-        }
-
-        const { data: urlData } = supabase.storage
-          .from("album-photos")
-          .getPublicUrl(path);
-
-        uploaded.push({
-          albumId: row.selectedAlbumId!,
-          url: getOriginalPublicUrl(urlData.publicUrl),
-        });
+        uploaded.push({ albumId: row.selectedAlbumId!, url });
       } catch (err) {
         failed += 1;
         const message =
