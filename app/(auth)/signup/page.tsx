@@ -9,7 +9,11 @@ import { VinylSpinner } from "@/components/vinyl-spinner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
+import { SupabaseConfigWarning } from "@/components/supabase-config-warning";
+import {
+  createClient,
+  hasSupabaseBrowserConfig,
+} from "@/lib/supabase/client";
 import { getAppUrl } from "@/lib/site-url";
 import { isBackendOutageError } from "@/lib/backend-health";
 
@@ -35,6 +39,7 @@ export default function SignupPage() {
   const [error, setError] = useState("");
   const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
   const router = useRouter();
+  const supabaseConfigured = hasSupabaseBrowserConfig();
   const supabase = createClient();
 
   const passwordChecks = PASSWORD_RULES.map((rule) => ({
@@ -66,7 +71,7 @@ export default function SignupPage() {
         // Ensures the confirmation link (when email confirmation is enabled
         // in Supabase) returns the user to the canonical production app rather
         // than an ephemeral deployment URL or localhost.
-        emailRedirectTo: `${getAppUrl()}/login`,
+        emailRedirectTo: `${getAppUrl()}/auth/callback?next=/dashboard`,
       },
     });
 
@@ -101,6 +106,10 @@ export default function SignupPage() {
       setAwaitingConfirmation(true);
       setLoading(false);
     }
+  }
+
+  if (!supabaseConfigured) {
+    return <SupabaseConfigWarning />;
   }
 
   if (awaitingConfirmation) {

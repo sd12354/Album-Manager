@@ -6,7 +6,11 @@ import { VinylLogo } from "@/components/vinyl-logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
+import { SupabaseConfigWarning } from "@/components/supabase-config-warning";
+import {
+  createClient,
+  hasSupabaseBrowserConfig,
+} from "@/lib/supabase/client";
 import { getAppUrl } from "@/lib/site-url";
 import { isBackendOutageError } from "@/lib/backend-health";
 
@@ -15,6 +19,7 @@ export default function ResetPage() {
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
+  const supabaseConfigured = hasSupabaseBrowserConfig();
   const supabase = createClient();
 
   async function handleSubmit(e: React.FormEvent) {
@@ -24,7 +29,7 @@ export default function ResetPage() {
 
     const trimmedEmail = email.trim();
     const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
-      redirectTo: `${getAppUrl()}/update-password`,
+      redirectTo: `${getAppUrl()}/auth/callback?next=/update-password`,
     });
 
     if (error) {
@@ -39,6 +44,10 @@ export default function ResetPage() {
       setSent(true);
     }
     setLoading(false);
+  }
+
+  if (!supabaseConfigured) {
+    return <SupabaseConfigWarning />;
   }
 
   return (
