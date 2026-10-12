@@ -9,8 +9,13 @@ import { VinylSpinner } from "@/components/vinyl-spinner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
+import { SupabaseConfigWarning } from "@/components/supabase-config-warning";
+import {
+  createClient,
+  hasSupabaseBrowserConfig,
+} from "@/lib/supabase/client";
 import { isBackendOutageError } from "@/lib/backend-health";
+import { safeRedirectPath } from "@/lib/redirects";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -19,6 +24,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const router = useRouter();
+  const supabaseConfigured = hasSupabaseBrowserConfig();
   const supabase = createClient();
 
   async function handleSubmit(e: React.FormEvent) {
@@ -40,12 +46,17 @@ export default function LoginPage() {
       );
       setLoading(false);
     } else {
-      router.push("/dashboard");
+      const next =
+        typeof window !== "undefined"
+          ? new URLSearchParams(window.location.search).get("next")
+          : null;
+      router.push(safeRedirectPath(next));
       router.refresh();
     }
   }
 
   return (
+    supabaseConfigured ? (
     <div className="w-full max-w-md animate-fade-in-up">
       <Link
         href="/"
@@ -136,5 +147,8 @@ export default function LoginPage() {
       </p>
     </div>
     </div>
+    ) : (
+      <SupabaseConfigWarning />
+    )
   );
 }

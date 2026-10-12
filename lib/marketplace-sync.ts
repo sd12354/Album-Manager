@@ -74,7 +74,6 @@ export async function checkAlbumMarketplaceState(
   let soldPrice: number | undefined;
   let buyerAddress: EbayBuyerAddress | null = null;
   let buyerAddressRaw: string | null = null;
-  let ebayToken: string | null = null;
 
   const ebayIsManual = album.ebay_listing_id?.startsWith("manual-") ?? false;
   const discogsIsManual = album.discogs_listing_id?.startsWith("manual-") ?? false;
@@ -82,7 +81,6 @@ export async function checkAlbumMarketplaceState(
   if (album.ebay_listing_id && !ebayIsManual && ctx.ebayCreds && ctx.isRealEbay) {
     try {
       const tokenResult = await getValidEbayToken(ctx.ebayCreds);
-      ebayToken = tokenResult.token;
 
       const ebayState = await getEbayListingState(
         album.ebay_listing_id,
