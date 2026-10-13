@@ -35,7 +35,6 @@ export default function SignupPage() {
   const [error, setError] = useState("");
   const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
   const router = useRouter();
-  const supabase = createClient();
 
   const passwordChecks = PASSWORD_RULES.map((rule) => ({
     ...rule,
@@ -59,6 +58,15 @@ export default function SignupPage() {
 
     setLoading(true);
 
+    let supabase: ReturnType<typeof createClient>;
+    try {
+      supabase = createClient();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Supabase is not configured.");
+      setLoading(false);
+      return;
+    }
+
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -66,7 +74,7 @@ export default function SignupPage() {
         // Ensures the confirmation link (when email confirmation is enabled
         // in Supabase) returns the user to the canonical production app rather
         // than an ephemeral deployment URL or localhost.
-        emailRedirectTo: `${getAppUrl()}/login`,
+        emailRedirectTo: `${getAppUrl()}/auth/callback?next=/dashboard`,
       },
     });
 
