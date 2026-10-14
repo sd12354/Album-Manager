@@ -12,6 +12,7 @@ import {
   getDiscogsAuthForOwner,
   getRoleForOwner,
 } from "@/lib/collections";
+import { isLocalMarketplaceListingId } from "@/lib/marketplace-listing";
 import type { Album } from "@/types";
 
 export const runtime = "nodejs";
@@ -114,20 +115,28 @@ export async function POST(request: Request) {
   if (isOwner) {
     const delistErrors: string[] = [];
     for (const album of albums as Album[]) {
-      if (album.discogs_listing_id && !discogsAuth) {
+      const localDiscogs = isLocalMarketplaceListingId(album.discogs_listing_id);
+      const localEbay = isLocalMarketplaceListingId(album.ebay_listing_id);
+
+      if (album.discogs_listing_id && !localDiscogs && !discogsAuth) {
         delistErrors.push(`${album.title} (Discogs): credentials unavailable`);
-      } else if (album.discogs_listing_id && discogsAuth) {
+      } else if (album.discogs_listing_id && !localDiscogs && discogsAuth) {
         try {
-          await deleteDiscogsListing(parseInt(album.discogs_listing_id, 10), discogsAuth);
+          const listingId = Number.parseInt(album.discogs_listing_id, 10);
+          if (!Number.isFinite(listingId)) {
+            delistErrors.push(`${album.title} (Discogs): invalid listing ID`);
+          } else {
+            await deleteDiscogsListing(listingId, discogsAuth);
+          }
         } catch (err) {
           delistErrors.push(
             `${album.title} (Discogs): ${err instanceof Error ? err.message : "delist failed"}`
           );
         }
       }
-      if (album.ebay_listing_id && isRealEbay && !ebayToken) {
+      if (album.ebay_listing_id && !localEbay && isRealEbay && !ebayToken) {
         delistErrors.push(`${album.title} (eBay): credentials unavailable`);
-      } else if (album.ebay_listing_id && ebayToken && isRealEbay) {
+      } else if (album.ebay_listing_id && !localEbay && ebayToken && isRealEbay) {
         try {
           await endEbayListing(album.ebay_listing_id, ebayToken);
         } catch (err) {
