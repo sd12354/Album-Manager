@@ -1575,7 +1575,6 @@ export function AlbumDetailClient({
               backdrop, making the modal feel un-closeable. Direct img is
               simple and predictable; egress hit is minimal because lightbox
               is opt-in. */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={lightboxUrl}
             alt={`${album.artist} — ${album.title}`}
