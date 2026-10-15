@@ -605,7 +605,7 @@ export function deriveRows(
     let purchasePrice: number | undefined;
     if (mapped.purchase_price) {
       purchasePrice = Number.parseFloat(
-        mapped.purchase_price.replace(/[^0-9.\-]/g, "")
+        mapped.purchase_price.replace(/[^0-9.-]/g, "")
       );
       if (!Number.isFinite(purchasePrice) || purchasePrice < 0) {
         rowErrors.push(
