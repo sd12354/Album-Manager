@@ -186,7 +186,7 @@ export function sanitizeFilename(name: string): string {
   const ext = dot > 0 ? name.slice(dot).toLowerCase() : "";
   const cleanBase = base
     .normalize("NFKD")
-    .replace(/[^\w\-]+/g, "-")
+    .replace(/[^\w-]+/g, "-")
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "")
     .slice(0, 80) || "photo";

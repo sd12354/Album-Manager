@@ -95,7 +95,7 @@ export async function pickMatchingRelease(
 {"candidate": <number or -1>, "confidence": "high" | "medium" | "low" | "none"}`,
   });
 
-  let text = "";
+  let text: string;
   try {
     const client = new Anthropic();
     const message = await client.messages.create({

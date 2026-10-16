@@ -117,7 +117,7 @@ export default async function DashboardPage() {
     .select("id", { count: "exact", head: true })
     .eq("user_id", ownerId);
 
-  let albumsWithCache: DashboardAlbum[] = [];
+  let albumsWithCache: DashboardAlbum[];
   try {
     if (albumCount != null) {
       albumsWithCache = await fetchAllPagesParallel<DashboardAlbum>(

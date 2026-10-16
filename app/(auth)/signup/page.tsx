@@ -9,7 +9,7 @@ import { VinylSpinner } from "@/components/vinyl-spinner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
+import { createClient, getSupabaseConfigError } from "@/lib/supabase/client";
 import { getAppUrl } from "@/lib/site-url";
 import { isBackendOutageError } from "@/lib/backend-health";
 
@@ -35,7 +35,7 @@ export default function SignupPage() {
   const [error, setError] = useState("");
   const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
   const router = useRouter();
-  const supabase = createClient();
+  const configError = getSupabaseConfigError();
 
   const passwordChecks = PASSWORD_RULES.map((rule) => ({
     ...rule,
@@ -47,6 +47,10 @@ export default function SignupPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    if (configError) {
+      setError(configError);
+      return;
+    }
 
     if (!isPasswordStrong) {
       setError("Please choose a stronger password that meets all requirements.");
@@ -59,6 +63,7 @@ export default function SignupPage() {
 
     setLoading(true);
 
+    const supabase = createClient();
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -66,7 +71,7 @@ export default function SignupPage() {
         // Ensures the confirmation link (when email confirmation is enabled
         // in Supabase) returns the user to the canonical production app rather
         // than an ephemeral deployment URL or localhost.
-        emailRedirectTo: `${getAppUrl()}/login`,
+        emailRedirectTo: `${getAppUrl()}/auth/callback?next=/dashboard`,
       },
     });
 
@@ -220,13 +225,15 @@ export default function SignupPage() {
           )}
         </div>
 
-        {error && <p className="text-sm text-red-400">{error}</p>}
+          {(configError || error) && (
+            <p className="text-sm text-red-400">{error || configError}</p>
+          )}
 
         <Button
           type="submit"
           className="w-full"
           size="lg"
-          disabled={loading || !isPasswordStrong || !passwordsMatch}
+            disabled={loading || !!configError || !isPasswordStrong || !passwordsMatch}
         >
           {loading ? (
             <>
