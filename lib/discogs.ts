@@ -661,8 +661,8 @@ export async function fetchDiscogsPricing(
   const match = outcome.match;
   const releaseId = match.id;
 
-  let stats: DiscogsStats | null = null;
-  let suggestions: DiscogsPriceSuggestions | null = null;
+  let stats: DiscogsStats | null;
+  let suggestions: DiscogsPriceSuggestions | null;
   try {
     [stats, suggestions] = await Promise.all([
       fetchMarketplaceStats(releaseId, token),
@@ -988,7 +988,7 @@ export function parseDiscogsShippingAddress(
     /^(.+?),?\s+([A-Z]{2})\s+(\d{5}(?:-\d{4})?)$/
   );
 
-  let city = "";
+  let city: string;
   let state = "";
   let zip = "";
 

@@ -6,7 +6,7 @@ import { VinylLogo } from "@/components/vinyl-logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
+import { createClient, getSupabaseConfigError } from "@/lib/supabase/client";
 import { getAppUrl } from "@/lib/site-url";
 import { isBackendOutageError } from "@/lib/backend-health";
 
@@ -15,16 +15,21 @@ export default function ResetPage() {
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
-  const supabase = createClient();
+  const configError = getSupabaseConfigError();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (configError) {
+      setError(configError);
+      return;
+    }
     setLoading(true);
     setError("");
 
     const trimmedEmail = email.trim();
+    const supabase = createClient();
     const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
-      redirectTo: `${getAppUrl()}/update-password`,
+      redirectTo: `${getAppUrl()}/auth/callback?next=/update-password`,
     });
 
     if (error) {
@@ -74,9 +79,11 @@ export default function ResetPage() {
             />
           </div>
 
-          {error && <p className="text-sm text-red-400">{error}</p>}
+          {(configError || error) && (
+            <p className="text-sm text-red-400">{error || configError}</p>
+          )}
 
-          <Button type="submit" className="w-full" size="lg" disabled={loading}>
+          <Button type="submit" className="w-full" size="lg" disabled={loading || !!configError}>
             {loading ? "Sending..." : "Send Reset Link"}
           </Button>
 

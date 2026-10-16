@@ -598,7 +598,7 @@ export function AlbumDetailClient({
     const uploadedUrls: string[] = [];
 
     for (const rawFile of toUpload) {
-      let file = rawFile;
+      let file: File;
       try {
         file = await convertHeicToJpeg(rawFile);
       } catch {
@@ -662,7 +662,7 @@ export function AlbumDetailClient({
   function buildDownloadName(url: string, index: number): string {
     const safe = (s: string) =>
       (s || "")
-        .replace(/[^\w\s\-]+/g, "")
+        .replace(/[^\w\s-]+/g, "")
         .trim()
         .replace(/\s+/g, "_")
         .slice(0, 60);
@@ -750,7 +750,7 @@ export function AlbumDetailClient({
 
       const archive = await zip.generateAsync({ type: "blob" });
       const safe = (s: string) =>
-        (s || "").replace(/[^\w\s\-]+/g, "").trim().replace(/\s+/g, "_");
+        (s || "").replace(/[^\w\s-]+/g, "").trim().replace(/\s+/g, "_");
       const zipName = `${safe(album.artist)}-${safe(album.title)}_photos.zip`;
       triggerDownload(archive, zipName);
 
@@ -1575,7 +1575,6 @@ export function AlbumDetailClient({
               backdrop, making the modal feel un-closeable. Direct img is
               simple and predictable; egress hit is minimal because lightbox
               is opt-in. */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={lightboxUrl}
             alt={`${album.artist} — ${album.title}`}
