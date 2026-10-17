@@ -1,6 +1,5 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@config "../tailwind.config.ts";
 
 @layer base {
   /* ── Light mode (default) ──────────────────────────────────── */
@@ -115,6 +114,24 @@
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.6; }
 }
+@keyframes enter {
+  from {
+    opacity: var(--tw-enter-opacity, 1);
+    transform:
+      translate3d(var(--tw-enter-translate-x, 0), var(--tw-enter-translate-y, 0), 0)
+      scale3d(var(--tw-enter-scale, 1), var(--tw-enter-scale, 1), var(--tw-enter-scale, 1))
+      rotate(var(--tw-enter-rotate, 0));
+  }
+}
+@keyframes exit {
+  to {
+    opacity: var(--tw-exit-opacity, 1);
+    transform:
+      translate3d(var(--tw-exit-translate-x, 0), var(--tw-exit-translate-y, 0), 0)
+      scale3d(var(--tw-exit-scale, 1), var(--tw-exit-scale, 1), var(--tw-exit-scale, 1))
+      rotate(var(--tw-exit-rotate, 0));
+  }
+}
 
 .animate-fade-in-up  { animation: fade-in-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; }
 .animate-fade-in     { animation: fade-in 0.3s ease-out both; }
@@ -134,6 +151,24 @@
 }
 .animate-spin-vinyl  { animation: spin-vinyl 2.4s linear infinite; }
 .animate-pulse-soft  { animation: pulse-soft 1.6s ease-in-out infinite; }
+.animate-in {
+  animation-name: enter;
+  animation-duration: 150ms;
+  animation-fill-mode: both;
+}
+.animate-out {
+  animation-name: exit;
+  animation-duration: 150ms;
+  animation-fill-mode: both;
+}
+.fade-in-0 { --tw-enter-opacity: 0; }
+.fade-out-0 { --tw-exit-opacity: 0; }
+.zoom-in-95 { --tw-enter-scale: .95; }
+.zoom-out-95 { --tw-exit-scale: .95; }
+.slide-in-from-top-2 { --tw-enter-translate-y: -0.5rem; }
+.slide-in-from-bottom-2 { --tw-enter-translate-y: 0.5rem; }
+.slide-in-from-left-2 { --tw-enter-translate-x: -0.5rem; }
+.slide-in-from-right-2 { --tw-enter-translate-x: 0.5rem; }
 
 .stagger-1 { animation-delay:  60ms; }
 .stagger-2 { animation-delay: 120ms; }

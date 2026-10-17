@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { VinylLogo } from "@/components/vinyl-logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
+import { createClient, hasSupabaseBrowserConfig } from "@/lib/supabase/client";
 import { getAppUrl } from "@/lib/site-url";
 import { isBackendOutageError } from "@/lib/backend-health";
 
@@ -15,16 +15,25 @@ export default function ResetPage() {
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
-  const supabase = createClient();
+  const supabaseConfigured = hasSupabaseBrowserConfig();
+  const supabase = useMemo(() => createClient(), []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError("");
 
+    if (!supabaseConfigured) {
+      setError(
+        "Supabase is not configured. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY, then redeploy."
+      );
+      setLoading(false);
+      return;
+    }
+
     const trimmedEmail = email.trim();
     const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
-      redirectTo: `${getAppUrl()}/update-password`,
+      redirectTo: `${getAppUrl()}/auth/callback?next=/update-password`,
     });
 
     if (error) {
@@ -47,6 +56,13 @@ export default function ResetPage() {
         <VinylLogo size="lg" className="mb-3" />
         <p className="text-sm text-muted-foreground">Reset your password</p>
       </div>
+
+      {!supabaseConfigured && (
+        <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">
+          Supabase is not configured. Add the public Supabase URL and anon key,
+          then redeploy before sending reset emails.
+        </div>
+      )}
 
       {sent ? (
         <div className="text-center">

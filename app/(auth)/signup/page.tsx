@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, Eye, EyeOff, X } from "lucide-react";
@@ -9,7 +9,7 @@ import { VinylSpinner } from "@/components/vinyl-spinner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
+import { createClient, hasSupabaseBrowserConfig } from "@/lib/supabase/client";
 import { getAppUrl } from "@/lib/site-url";
 import { isBackendOutageError } from "@/lib/backend-health";
 
@@ -35,7 +35,8 @@ export default function SignupPage() {
   const [error, setError] = useState("");
   const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
   const router = useRouter();
-  const supabase = createClient();
+  const supabaseConfigured = hasSupabaseBrowserConfig();
+  const supabase = useMemo(() => createClient(), []);
 
   const passwordChecks = PASSWORD_RULES.map((rule) => ({
     ...rule,
@@ -56,6 +57,12 @@ export default function SignupPage() {
       setError("Passwords do not match.");
       return;
     }
+    if (!supabaseConfigured) {
+      setError(
+        "Supabase is not configured. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY, then redeploy."
+      );
+      return;
+    }
 
     setLoading(true);
 
@@ -66,7 +73,7 @@ export default function SignupPage() {
         // Ensures the confirmation link (when email confirmation is enabled
         // in Supabase) returns the user to the canonical production app rather
         // than an ephemeral deployment URL or localhost.
-        emailRedirectTo: `${getAppUrl()}/login`,
+        emailRedirectTo: `${getAppUrl()}/auth/callback?next=/login`,
       },
     });
 
@@ -130,6 +137,13 @@ export default function SignupPage() {
           Create your VinylVault account
         </p>
       </div>
+
+      {!supabaseConfigured && (
+        <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">
+          Supabase is not configured. Add the public Supabase URL and anon key,
+          then redeploy before creating accounts.
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">

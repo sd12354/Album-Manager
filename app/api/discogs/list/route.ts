@@ -7,6 +7,7 @@ import {
   DiscogsError,
 } from "@/lib/discogs";
 import { generateListingDescription } from "@/lib/ai-pricing";
+import { resolveListingPrice } from "@/lib/marketplace-listing";
 import type { Album, AlbumCondition } from "@/types";
 
 export const runtime = "nodejs";
@@ -79,12 +80,13 @@ export async function POST(request: Request) {
     );
   }
 
-  const rawPrice =
-    listPrice ?? typedAlbum.list_price ?? typedAlbum.suggested_price ?? 9.99;
-  const price = Number(rawPrice);
-  if (!Number.isFinite(price) || price <= 0) {
+  const price = resolveListingPrice(listPrice, typedAlbum);
+  if (price === null) {
     return NextResponse.json(
-      { error: "List price must be a positive number." },
+      {
+        error:
+          "Set a positive list price or fetch pricing before listing this album.",
+      },
       { status: 400 }
     );
   }
