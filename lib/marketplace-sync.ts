@@ -15,6 +15,7 @@ import {
   resolveUserDiscogsAuth,
   type DiscogsAuth,
 } from "@/lib/discogs";
+import { isLocalMarketplaceListingId } from "@/lib/marketplace-listing";
 import type { Album, AlbumStatus } from "@/types";
 
 function formatAddress(a: {
@@ -74,15 +75,13 @@ export async function checkAlbumMarketplaceState(
   let soldPrice: number | undefined;
   let buyerAddress: EbayBuyerAddress | null = null;
   let buyerAddressRaw: string | null = null;
-  let ebayToken: string | null = null;
 
-  const ebayIsManual = album.ebay_listing_id?.startsWith("manual-") ?? false;
-  const discogsIsManual = album.discogs_listing_id?.startsWith("manual-") ?? false;
+  const ebayIsManual = isLocalMarketplaceListingId(album.ebay_listing_id);
+  const discogsIsManual = isLocalMarketplaceListingId(album.discogs_listing_id);
 
   if (album.ebay_listing_id && !ebayIsManual && ctx.ebayCreds && ctx.isRealEbay) {
     try {
       const tokenResult = await getValidEbayToken(ctx.ebayCreds);
-      ebayToken = tokenResult.token;
 
       const ebayState = await getEbayListingState(
         album.ebay_listing_id,
@@ -215,8 +214,8 @@ export async function crossCancelOtherMarketplace(
   ebayToken: string | null,
   isRealEbay: boolean
 ): Promise<void> {
-  const ebayIsManual = album.ebay_listing_id?.startsWith("manual-") ?? false;
-  const discogsIsManual = album.discogs_listing_id?.startsWith("manual-") ?? false;
+  const ebayIsManual = isLocalMarketplaceListingId(album.ebay_listing_id);
+  const discogsIsManual = isLocalMarketplaceListingId(album.discogs_listing_id);
 
   if (
     soldOn === "ebay" &&
