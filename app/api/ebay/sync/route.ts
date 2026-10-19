@@ -89,7 +89,18 @@ export async function POST() {
     });
 
     if (outcome.changed) {
-      await supabase.from("albums").update(outcome.updates).eq("id", album.id);
+      const { error: updateError } = await supabase
+        .from("albums")
+        .update(outcome.updates)
+        .eq("id", album.id);
+      if (updateError) {
+        synced.push({
+          albumId: album.id,
+          status: album.status,
+          changed: false,
+        });
+        continue;
+      }
 
       if (outcome.soldOn) {
         await crossCancelOtherMarketplace(

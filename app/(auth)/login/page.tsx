@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
 import { isBackendOutageError } from "@/lib/backend-health";
+import { sanitizeInternalRedirect } from "@/lib/redirects";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -40,7 +41,13 @@ export default function LoginPage() {
       );
       setLoading(false);
     } else {
-      router.push("/dashboard");
+      const next =
+        typeof window !== "undefined"
+          ? sanitizeInternalRedirect(
+              new URLSearchParams(window.location.search).get("next")
+            )
+          : "/dashboard";
+      router.push(next);
       router.refresh();
     }
   }
