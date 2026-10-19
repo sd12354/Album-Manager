@@ -6,6 +6,7 @@ import {
   hasRealEbayCredentials,
   type EbayTokenCredentials,
 } from "@/lib/ebay";
+import { isLocalMarketplaceListingId } from "@/lib/marketplace-listing";
 import type { Album } from "@/types";
 
 export const runtime = "nodejs";
@@ -60,7 +61,7 @@ export async function POST(request: Request) {
   const { data: ebayCreds } = await supabase.from("ebay_credentials").select("*").eq("user_id", user.id).maybeSingle();
 
   const isRealEbay = hasRealEbayCredentials(ebayCreds);
-  const isManualListing = typedAlbum.ebay_listing_id.startsWith("manual-");
+  const isManualListing = isLocalMarketplaceListingId(typedAlbum.ebay_listing_id);
 
   if (isRealEbay && ebayCreds && !isManualListing) {
     const tokenResult = await getValidEbayToken(ebayCreds as EbayTokenCredentials);
