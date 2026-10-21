@@ -59,8 +59,14 @@ export async function POST(request: Request) {
   }
 
   // Manually-tracked listings have no marketplace API to query against.
-  const ebayIsManual = typedAlbum.ebay_listing_id?.startsWith("manual-") ?? false;
-  const discogsIsManual = typedAlbum.discogs_listing_id?.startsWith("manual-") ?? false;
+  const ebayIsManual =
+    typedAlbum.ebay_listing_id?.startsWith("manual-") ||
+    typedAlbum.ebay_listing_id?.startsWith("STUB-") ||
+    false;
+  const discogsIsManual =
+    typedAlbum.discogs_listing_id?.startsWith("manual-") ||
+    typedAlbum.discogs_listing_id?.startsWith("STUB-") ||
+    false;
   if (
     (!typedAlbum.ebay_listing_id || ebayIsManual) &&
     (!typedAlbum.discogs_listing_id || discogsIsManual)
@@ -110,10 +116,25 @@ export async function POST(request: Request) {
     return NextResponse.json({ status: typedAlbum.status, changed: false });
   }
 
-  await supabase
+  const { error: updateError } = await supabase
     .from("albums")
     .update(outcome.updates)
-    .eq("id", albumId);
+    .eq("id", albumId)
+    .eq("user_id", user.id);
+  if (updateError) {
+    console.error("[sync-check]", {
+      event: "album_sync_persist_failed",
+      albumId,
+      message: updateError.message,
+    });
+    return NextResponse.json(
+      {
+        error:
+          "Marketplace state changed, but VinylVault could not save the album update. Please retry sync before acting on these results.",
+      },
+      { status: 500 }
+    );
+  }
 
   if (outcome.soldOn) {
     await crossCancelOtherMarketplace(

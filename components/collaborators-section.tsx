@@ -47,17 +47,29 @@ export function CollaboratorsSection() {
   const [role, setRole] = useState<CollectionRole>("viewer");
   const [inviting, setInviting] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    setLoadError(null);
     try {
       const res = await fetch("/api/collection/members");
-      if (!res.ok) return;
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setLoadError(data.error ?? "Could not load collaborators.");
+        setMembers([]);
+        setInvites([]);
+        setSharedWithMe([]);
+        return;
+      }
       const data = await res.json();
       setMembers(data.members ?? []);
       setInvites(data.invites ?? []);
       setSharedWithMe(data.sharedWithMe ?? []);
     } catch {
-      // ignore — surfaced via empty state
+      setLoadError("Network error loading collaborators.");
+      setMembers([]);
+      setInvites([]);
+      setSharedWithMe([]);
     } finally {
       setLoading(false);
     }
@@ -194,6 +206,16 @@ export function CollaboratorsSection() {
           Marketplace listing and shipping stay with you as the owner.
         </p>
       </div>
+
+      {loadError && (
+        <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-4 text-sm">
+          <p className="font-medium text-red-300">Could not load collaborators</p>
+          <p className="mt-1 text-muted-foreground">{loadError}</p>
+          <Button variant="outline" size="sm" className="mt-3" onClick={load}>
+            Try again
+          </Button>
+        </div>
+      )}
 
       {/* Invite form */}
       <div className="space-y-3 rounded-lg border border-border p-4">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -79,6 +79,27 @@ export default function ImportPage() {
   const jsonInputRef = useRef<HTMLInputElement>(null);
   const [canEditCollection, setCanEditCollection] = useState<boolean | null>(null);
 
+  const resetImportState = useCallback(() => {
+    setMode("csv");
+    setStep(0);
+    setFile(null);
+    setRawRows([]);
+    setHeaders([]);
+    setColumnMapping({});
+    setDetectionDetail({});
+    setParseError(null);
+    setHeaderless(false);
+    setImporting(false);
+    setProgress(0);
+    setImportedCount(0);
+    setImportError(null);
+    setShowAllErrors(false);
+    setBoxFiles([]);
+    setJsonImporting(false);
+    setJsonProgress(0);
+    setJsonResult(null);
+  }, []);
+
   // ── CSV derived ────────────────────────────────────────────────────────────
   const { rows, errors, invalidCount } = useMemo(
     () =>
@@ -96,6 +117,7 @@ export default function ImportPage() {
   useEffect(() => {
     let cancelled = false;
     async function loadActiveCollection() {
+      setCanEditCollection(null);
       try {
         const res = await fetch("/api/collection/active");
         const data = await res.json().catch(() => ({}));
@@ -108,10 +130,16 @@ export default function ImportPage() {
     }
 
     void loadActiveCollection();
+    const onCollectionChanged = () => {
+      resetImportState();
+      void loadActiveCollection();
+    };
+    window.addEventListener("vinylvault:collection-changed", onCollectionChanged);
     return () => {
       cancelled = true;
+      window.removeEventListener("vinylvault:collection-changed", onCollectionChanged);
     };
-  }, []);
+  }, [resetImportState]);
 
   // ── CSV handlers ───────────────────────────────────────────────────────────
   async function handleFileSelect(selectedFile: File) {
@@ -241,6 +269,12 @@ export default function ImportPage() {
       toast.success(
         `Imported ${data.count} albums${data.skipped ? ` (${data.skipped} skipped)` : ""}`
       );
+      if (data.pricingCacheFailed) {
+        toast.warning(
+          `${data.pricingCacheFailed} imported price record${data.pricingCacheFailed === 1 ? "" : "s"} could not be preloaded. Refresh pricing from the catalogue if needed.`,
+          { duration: 8000 }
+        );
+      }
     } catch {
       toast.error("Import failed");
     }

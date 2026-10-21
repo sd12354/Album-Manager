@@ -12,6 +12,10 @@ export const runtime = "nodejs";
 export const maxDuration = 30;
 export const dynamic = "force-dynamic";
 
+function isLocalEbayListing(listingId: string) {
+  return listingId.startsWith("manual-") || listingId.startsWith("STUB-");
+}
+
 export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -60,18 +64,30 @@ export async function POST(request: Request) {
   const { data: ebayCreds } = await supabase.from("ebay_credentials").select("*").eq("user_id", user.id).maybeSingle();
 
   const isRealEbay = hasRealEbayCredentials(ebayCreds);
-  const isManualListing = typedAlbum.ebay_listing_id.startsWith("manual-");
+  const isLocalListing = isLocalEbayListing(typedAlbum.ebay_listing_id);
 
-  if (isRealEbay && ebayCreds && !isManualListing) {
-    const tokenResult = await getValidEbayToken(ebayCreds as EbayTokenCredentials);
-    if (tokenResult.refreshed) {
-      await supabase.from("ebay_credentials").update({
-        access_token: tokenResult.token,
-        token_expiry: tokenResult.expiry,
-        updated_at: new Date().toISOString(),
-      }).eq("user_id", user.id);
+  if (isRealEbay && ebayCreds && !isLocalListing) {
+    try {
+      const tokenResult = await getValidEbayToken(ebayCreds as EbayTokenCredentials);
+      if (tokenResult.refreshed) {
+        await supabase.from("ebay_credentials").update({
+          access_token: tokenResult.token,
+          token_expiry: tokenResult.expiry,
+          updated_at: new Date().toISOString(),
+        }).eq("user_id", user.id);
+      }
+      await endEbayListing(typedAlbum.ebay_listing_id, tokenResult.token);
+    } catch (err) {
+      return NextResponse.json(
+        {
+          error:
+            err instanceof Error
+              ? err.message
+              : "Could not end the eBay listing.",
+        },
+        { status: 502 }
+      );
     }
-    await endEbayListing(typedAlbum.ebay_listing_id, tokenResult.token);
   }
 
   // Determine new status — if still listed on Discogs, keep as listed
@@ -100,5 +116,5 @@ export async function POST(request: Request) {
     );
   }
 
-  return NextResponse.json({ ok: true, stub: !isRealEbay });
+  return NextResponse.json({ ok: true, stub: !isRealEbay || isLocalListing });
 }

@@ -51,6 +51,13 @@ function deriveListedStatus(
   return "unlisted";
 }
 
+function isLocalMarketplaceListing(listingId: string | null | undefined) {
+  return (
+    typeof listingId === "string" &&
+    (listingId.startsWith("manual-") || listingId.startsWith("STUB-"))
+  );
+}
+
 export interface MarketplaceSyncContext {
   album: Album;
   discogsAuth: DiscogsAuth | null;
@@ -76,8 +83,8 @@ export async function checkAlbumMarketplaceState(
   let buyerAddressRaw: string | null = null;
   let ebayToken: string | null = null;
 
-  const ebayIsManual = album.ebay_listing_id?.startsWith("manual-") ?? false;
-  const discogsIsManual = album.discogs_listing_id?.startsWith("manual-") ?? false;
+  const ebayIsManual = isLocalMarketplaceListing(album.ebay_listing_id);
+  const discogsIsManual = isLocalMarketplaceListing(album.discogs_listing_id);
 
   if (album.ebay_listing_id && !ebayIsManual && ctx.ebayCreds && ctx.isRealEbay) {
     try {
@@ -215,8 +222,8 @@ export async function crossCancelOtherMarketplace(
   ebayToken: string | null,
   isRealEbay: boolean
 ): Promise<void> {
-  const ebayIsManual = album.ebay_listing_id?.startsWith("manual-") ?? false;
-  const discogsIsManual = album.discogs_listing_id?.startsWith("manual-") ?? false;
+  const ebayIsManual = isLocalMarketplaceListing(album.ebay_listing_id);
+  const discogsIsManual = isLocalMarketplaceListing(album.discogs_listing_id);
 
   if (
     soldOn === "ebay" &&
@@ -224,10 +231,19 @@ export async function crossCancelOtherMarketplace(
     !discogsIsManual &&
     discogsAuth
   ) {
-    await deleteDiscogsListing(
-      parseInt(album.discogs_listing_id, 10),
-      discogsAuth
-    ).catch(() => null);
+    try {
+      await deleteDiscogsListing(
+        parseInt(album.discogs_listing_id, 10),
+        discogsAuth
+      );
+    } catch (err) {
+      console.error("[marketplace-sync]", {
+        event: "cross_cancel_discogs_failed",
+        albumId: album.id,
+        listingId: album.discogs_listing_id,
+        message: err instanceof Error ? err.message : "unknown error",
+      });
+    }
   }
 
   if (
@@ -237,7 +253,16 @@ export async function crossCancelOtherMarketplace(
     ebayToken &&
     isRealEbay
   ) {
-    await endEbayListing(album.ebay_listing_id, ebayToken).catch(() => null);
+    try {
+      await endEbayListing(album.ebay_listing_id, ebayToken);
+    } catch (err) {
+      console.error("[marketplace-sync]", {
+        event: "cross_cancel_ebay_failed",
+        albumId: album.id,
+        listingId: album.ebay_listing_id,
+        message: err instanceof Error ? err.message : "unknown error",
+      });
+    }
   }
 }
 

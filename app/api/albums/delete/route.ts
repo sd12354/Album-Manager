@@ -18,6 +18,13 @@ export const runtime = "nodejs";
 export const maxDuration = 30;
 export const dynamic = "force-dynamic";
 
+function isLocalMarketplaceListing(listingId: string | null | undefined) {
+  return (
+    typeof listingId === "string" &&
+    (listingId.startsWith("manual-") || listingId.startsWith("STUB-"))
+  );
+}
+
 export async function POST(request: Request) {
   const supabase = await createClient();
   const {
@@ -114,22 +121,32 @@ export async function POST(request: Request) {
   if (isOwner) {
     const delistErrors: string[] = [];
     for (const album of albums as Album[]) {
-      if (album.discogs_listing_id && !discogsAuth) {
+      const discogsListingId = album.discogs_listing_id;
+      const ebayListingId = album.ebay_listing_id;
+      const discogsIsLocal = isLocalMarketplaceListing(discogsListingId);
+      const ebayIsLocal = isLocalMarketplaceListing(ebayListingId);
+
+      if (discogsListingId && !discogsIsLocal && !discogsAuth) {
         delistErrors.push(`${album.title} (Discogs): credentials unavailable`);
-      } else if (album.discogs_listing_id && discogsAuth) {
+      } else if (discogsListingId && !discogsIsLocal && discogsAuth) {
+        const numericListingId = parseInt(discogsListingId, 10);
+        if (!Number.isFinite(numericListingId)) {
+          delistErrors.push(`${album.title} (Discogs): invalid listing id`);
+          continue;
+        }
         try {
-          await deleteDiscogsListing(parseInt(album.discogs_listing_id, 10), discogsAuth);
+          await deleteDiscogsListing(numericListingId, discogsAuth);
         } catch (err) {
           delistErrors.push(
             `${album.title} (Discogs): ${err instanceof Error ? err.message : "delist failed"}`
           );
         }
       }
-      if (album.ebay_listing_id && isRealEbay && !ebayToken) {
+      if (ebayListingId && !ebayIsLocal && isRealEbay && !ebayToken) {
         delistErrors.push(`${album.title} (eBay): credentials unavailable`);
-      } else if (album.ebay_listing_id && ebayToken && isRealEbay) {
+      } else if (ebayListingId && !ebayIsLocal && ebayToken && isRealEbay) {
         try {
-          await endEbayListing(album.ebay_listing_id, ebayToken);
+          await endEbayListing(ebayListingId, ebayToken);
         } catch (err) {
           delistErrors.push(
             `${album.title} (eBay): ${err instanceof Error ? err.message : "delist failed"}`
