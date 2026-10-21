@@ -15,6 +15,7 @@ import {
   resolveUserDiscogsAuth,
   type DiscogsAuth,
 } from "@/lib/discogs";
+import { isLocalMarketplaceListingId } from "@/lib/marketplace-ids";
 import type { Album, AlbumStatus } from "@/types";
 
 function formatAddress(a: {
@@ -76,10 +77,10 @@ export async function checkAlbumMarketplaceState(
   let buyerAddressRaw: string | null = null;
   let ebayToken: string | null = null;
 
-  const ebayIsManual = album.ebay_listing_id?.startsWith("manual-") ?? false;
-  const discogsIsManual = album.discogs_listing_id?.startsWith("manual-") ?? false;
+  const ebayIsLocal = isLocalMarketplaceListingId(album.ebay_listing_id);
+  const discogsIsLocal = isLocalMarketplaceListingId(album.discogs_listing_id);
 
-  if (album.ebay_listing_id && !ebayIsManual && ctx.ebayCreds && ctx.isRealEbay) {
+  if (album.ebay_listing_id && !ebayIsLocal && ctx.ebayCreds && ctx.isRealEbay) {
     try {
       const tokenResult = await getValidEbayToken(ctx.ebayCreds);
       ebayToken = tokenResult.token;
@@ -108,7 +109,7 @@ export async function checkAlbumMarketplaceState(
     }
   }
 
-  if (!soldOn && album.discogs_listing_id && !discogsIsManual && ctx.discogsAuth) {
+  if (!soldOn && album.discogs_listing_id && !discogsIsLocal && ctx.discogsAuth) {
     try {
       const discogsState = await getDiscogsListingState(
         parseInt(album.discogs_listing_id, 10),
@@ -215,13 +216,13 @@ export async function crossCancelOtherMarketplace(
   ebayToken: string | null,
   isRealEbay: boolean
 ): Promise<void> {
-  const ebayIsManual = album.ebay_listing_id?.startsWith("manual-") ?? false;
-  const discogsIsManual = album.discogs_listing_id?.startsWith("manual-") ?? false;
+  const ebayIsLocal = isLocalMarketplaceListingId(album.ebay_listing_id);
+  const discogsIsLocal = isLocalMarketplaceListingId(album.discogs_listing_id);
 
   if (
     soldOn === "ebay" &&
     album.discogs_listing_id &&
-    !discogsIsManual &&
+    !discogsIsLocal &&
     discogsAuth
   ) {
     await deleteDiscogsListing(
@@ -233,7 +234,7 @@ export async function crossCancelOtherMarketplace(
   if (
     soldOn === "discogs" &&
     album.ebay_listing_id &&
-    !ebayIsManual &&
+    !ebayIsLocal &&
     ebayToken &&
     isRealEbay
   ) {

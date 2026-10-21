@@ -107,9 +107,37 @@ export default function ImportPage() {
       }
     }
 
+    function resetCollectionScopedState() {
+      setMode("csv");
+      setStep(0);
+      setFile(null);
+      setRawRows([]);
+      setHeaders([]);
+      setColumnMapping({});
+      setDetectionDetail({});
+      setParseError(null);
+      setHeaderless(false);
+      setImporting(false);
+      setProgress(0);
+      setImportedCount(0);
+      setImportError(null);
+      setShowAllErrors(false);
+      setBoxFiles([]);
+      setJsonImporting(false);
+      setJsonProgress(0);
+      setJsonResult(null);
+      setCanEditCollection(null);
+      void loadActiveCollection();
+    }
+
     void loadActiveCollection();
+    window.addEventListener("vinylvault:collection-change", resetCollectionScopedState);
     return () => {
       cancelled = true;
+      window.removeEventListener(
+        "vinylvault:collection-change",
+        resetCollectionScopedState
+      );
     };
   }, []);
 
