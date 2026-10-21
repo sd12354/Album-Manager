@@ -70,9 +70,16 @@ begin
   -- Open the trigger bypass for the rest of this transaction.
   perform set_config('vinylvault.allow_owner_transfer', 'true', true);
 
-  -- Move every album the caller owns to the new owner.
+  -- Move every album the caller owns to the new owner. Marketplace listings are
+  -- account-bound and cannot transfer safely, so clear local listing metadata
+  -- and put actively listed rows back into pricing for the new owner.
   update public.albums
-    set user_id = new_owner_id
+    set user_id = new_owner_id,
+        ebay_listing_id = null,
+        ebay_listing_url = null,
+        discogs_listing_id = null,
+        discogs_listing_url = null,
+        status = case when status = 'listed' then 'pricing' else status end
     where user_id = caller_id;
   get diagnostics affected_albums = row_count;
 
