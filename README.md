@@ -132,6 +132,8 @@ Migrations in `supabase/migrations/` (apply in order):
 | `006_listing_description.sql` | AI listing description column |
 | `007_collection_sharing.sql` | `collection_members`, `collection_invites`, shared RLS |
 | `008_advisor_hardening.sql` | Security hardening for advisor findings |
+| `009_lock_album_owner_updates.sql` | Prevent direct album ownership changes |
+| `010_transfer_ownership.sql` | Transfer collections and clear owner-bound marketplace data |
 
 ```bash
 npx supabase db push
