@@ -20,6 +20,7 @@ const PASSWORD_RULES = [
 ] as const;
 
 let handledRecoveryCode: string | null = null;
+const recoveryExchangePromises = new Map<string, Promise<{ error: Error | null }>>();
 
 export default function UpdatePasswordPage() {
   const router = useRouter();
@@ -42,8 +43,16 @@ export default function UpdatePasswordPage() {
           : null;
 
       if (code && handledRecoveryCode !== code) {
-        handledRecoveryCode = code;
-        const { error } = await supabase.auth.exchangeCodeForSession(code);
+        let exchangePromise = recoveryExchangePromises.get(code);
+        if (!exchangePromise) {
+          exchangePromise = supabase.auth
+            .exchangeCodeForSession(code)
+            .then(({ error }) => ({ error }));
+          recoveryExchangePromises.set(code, exchangePromise);
+        }
+
+        const { error } = await exchangePromise;
+        recoveryExchangePromises.delete(code);
         if (typeof window !== "undefined") {
           window.history.replaceState(null, "", "/update-password");
         }
@@ -55,14 +64,15 @@ export default function UpdatePasswordPage() {
           setCheckingSession(false);
           return;
         }
+        handledRecoveryCode = code;
       }
 
       const {
-        data: { session },
-      } = await supabase.auth.getSession();
+        data: { user },
+      } = await supabase.auth.getUser();
 
       if (!mounted) return;
-      if (!session) {
+      if (!user) {
         setError(
           "This reset link is invalid or has expired. Request a new password reset email."
         );

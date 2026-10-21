@@ -29,7 +29,7 @@ export async function POST() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { data: albums } = await supabase
+  const { data: albums, error: albumsError } = await supabase
     .from("albums")
     .select("*")
     .eq("user_id", user.id)
@@ -37,11 +37,25 @@ export async function POST() {
     .or("ebay_listing_id.not.is.null,discogs_listing_id.not.is.null")
     .limit(MAX_SYNC);
 
-  const { data: ebayCreds } = await supabase
+  if (albumsError) {
+    return NextResponse.json(
+      { error: "Could not load albums for marketplace sync." },
+      { status: 500 }
+    );
+  }
+
+  const { data: ebayCreds, error: ebayCredsError } = await supabase
     .from("ebay_credentials")
     .select("*")
     .eq("user_id", user.id)
     .maybeSingle();
+
+  if (ebayCredsError) {
+    return NextResponse.json(
+      { error: "Could not load eBay credentials for marketplace sync." },
+      { status: 500 }
+    );
+  }
 
   const isRealEbay = hasRealEbayCredentials(ebayCreds);
   let ebayToken: string | null = null;
@@ -52,7 +66,7 @@ export async function POST() {
         ebayCreds as EbayTokenCredentials
       );
       if (tokenResult.refreshed) {
-        await supabase
+        const { error: tokenUpdateError } = await supabase
           .from("ebay_credentials")
           .update({
             access_token: tokenResult.token,
@@ -60,6 +74,12 @@ export async function POST() {
             updated_at: new Date().toISOString(),
           })
           .eq("user_id", user.id);
+        if (tokenUpdateError) {
+          return NextResponse.json(
+            { error: "Could not save refreshed eBay credentials." },
+            { status: 500 }
+          );
+        }
       }
       ebayToken = tokenResult.token;
     } catch {
@@ -89,7 +109,27 @@ export async function POST() {
     });
 
     if (outcome.changed) {
-      await supabase.from("albums").update(outcome.updates).eq("id", album.id);
+      const { error: updateError } = await supabase
+        .from("albums")
+        .update(outcome.updates)
+        .eq("id", album.id);
+
+      if (updateError) {
+        console.error("[sync]", {
+          scope: "marketplace-sync",
+          event: "bulk_sync_persist_failed",
+          albumId: album.id,
+          message: updateError.message,
+        });
+        return NextResponse.json(
+          {
+            error:
+              "Marketplace state changed, but VinylVault could not save the updated album state. Please retry before taking further listing actions.",
+            albumId: album.id,
+          },
+          { status: 500 }
+        );
+      }
 
       if (outcome.soldOn) {
         await crossCancelOtherMarketplace(

@@ -36,11 +36,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "albumId required" }, { status: 400 });
   }
 
-  const { data: creds } = await supabase
+  const { data: creds, error: credsError } = await supabase
     .from("ebay_credentials")
     .select("*")
     .eq("user_id", user.id)
     .maybeSingle();
+
+  if (credsError) {
+    return NextResponse.json(
+      { error: "Could not load eBay credentials." },
+      { status: 500 }
+    );
+  }
 
   if (!creds) {
     return NextResponse.json({ error: "eBay account not connected" }, { status: 400 });
@@ -81,8 +88,13 @@ export async function POST(request: Request) {
     );
   }
 
-  const rawPrice =
-    listPrice ?? typedAlbum.list_price ?? typedAlbum.suggested_price ?? 9.99;
+  const rawPrice = listPrice ?? typedAlbum.list_price ?? typedAlbum.suggested_price;
+  if (rawPrice == null) {
+    return NextResponse.json(
+      { error: "Enter a list price before publishing this album." },
+      { status: 400 }
+    );
+  }
   const price = Number(rawPrice);
   if (!Number.isFinite(price) || price <= 0) {
     return NextResponse.json(
@@ -133,7 +145,7 @@ export async function POST(request: Request) {
   const tokenResult = await getValidEbayToken(creds as EbayTokenCredentials);
 
   if (tokenResult.refreshed) {
-    await supabase
+    const { error: tokenUpdateError } = await supabase
       .from("ebay_credentials")
       .update({
         access_token: tokenResult.token,
@@ -141,6 +153,12 @@ export async function POST(request: Request) {
         updated_at: new Date().toISOString(),
       })
       .eq("user_id", user.id);
+    if (tokenUpdateError) {
+      return NextResponse.json(
+        { error: "Could not save refreshed eBay credentials." },
+        { status: 500 }
+      );
+    }
   }
 
   // Pull seller location from user settings so eBay gets a valid <Location>.
