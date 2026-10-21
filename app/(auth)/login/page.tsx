@@ -12,6 +12,15 @@ import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
 import { isBackendOutageError } from "@/lib/backend-health";
 
+function getSafeNextDestination(): string {
+  if (typeof window === "undefined") return "/dashboard";
+  const next = new URLSearchParams(window.location.search).get("next");
+  if (!next || !next.startsWith("/") || next.startsWith("//")) {
+    return "/dashboard";
+  }
+  return next;
+}
+
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -40,7 +49,7 @@ export default function LoginPage() {
       );
       setLoading(false);
     } else {
-      router.push("/dashboard");
+      router.push(getSafeNextDestination());
       router.refresh();
     }
   }
