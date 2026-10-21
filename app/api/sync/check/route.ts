@@ -59,8 +59,11 @@ export async function POST(request: Request) {
   }
 
   // Manually-tracked listings have no marketplace API to query against.
-  const ebayIsManual = typedAlbum.ebay_listing_id?.startsWith("manual-") ?? false;
-  const discogsIsManual = typedAlbum.discogs_listing_id?.startsWith("manual-") ?? false;
+  const ebayListingId = typedAlbum.ebay_listing_id ?? "";
+  const discogsListingId = typedAlbum.discogs_listing_id ?? "";
+  const ebayIsManual =
+    ebayListingId.startsWith("manual-") || ebayListingId.startsWith("STUB-");
+  const discogsIsManual = discogsListingId.startsWith("manual-");
   if (
     (!typedAlbum.ebay_listing_id || ebayIsManual) &&
     (!typedAlbum.discogs_listing_id || discogsIsManual)
@@ -72,11 +75,17 @@ export async function POST(request: Request) {
     });
   }
 
-  const { data: ebayCreds } = await supabase
+  const { data: ebayCreds, error: ebayCredsError } = await supabase
     .from("ebay_credentials")
     .select("*")
     .eq("user_id", user.id)
     .maybeSingle();
+  if (ebayCredsError) {
+    return NextResponse.json(
+      { error: `Could not load eBay credentials: ${ebayCredsError.message}` },
+      { status: 500 }
+    );
+  }
 
   const isRealEbay = hasRealEbayCredentials(ebayCreds);
   let ebayToken: string | null = null;
@@ -87,7 +96,7 @@ export async function POST(request: Request) {
         ebayCreds as EbayTokenCredentials
       );
       if (tokenResult.refreshed) {
-        await supabase
+        const { error: refreshError } = await supabase
           .from("ebay_credentials")
           .update({
             access_token: tokenResult.token,
@@ -95,6 +104,14 @@ export async function POST(request: Request) {
             updated_at: new Date().toISOString(),
           })
           .eq("user_id", user.id);
+        if (refreshError) {
+          return NextResponse.json(
+            {
+              error: `Could not save refreshed eBay token: ${refreshError.message}`,
+            },
+            { status: 500 }
+          );
+        }
       }
       ebayToken = tokenResult.token;
     } catch {
@@ -110,10 +127,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ status: typedAlbum.status, changed: false });
   }
 
-  await supabase
+  const { error: updateError } = await supabase
     .from("albums")
     .update(outcome.updates)
     .eq("id", albumId);
+  if (updateError) {
+    return NextResponse.json(
+      { error: `Could not save marketplace sync result: ${updateError.message}` },
+      { status: 500 }
+    );
+  }
 
   if (outcome.soldOn) {
     await crossCancelOtherMarketplace(
