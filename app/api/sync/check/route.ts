@@ -10,6 +10,7 @@ import {
   checkAlbumMarketplaceState,
   crossCancelOtherMarketplace,
 } from "@/lib/marketplace-sync";
+import { isLocalMarketplaceListingId } from "@/lib/marketplace-ids";
 import type { Album } from "@/types";
 
 export const runtime = "nodejs";
@@ -38,7 +39,10 @@ export async function POST(request: Request) {
     .single();
 
   if (error || !album) {
-    return NextResponse.json({ error: "Album not found" }, { status: 404 });
+    return NextResponse.json(
+      { error: error?.message ?? "Album not found" },
+      { status: error?.code === "PGRST116" ? 404 : 500 }
+    );
   }
 
   if ((album as Album).user_id !== user.id) {
@@ -59,11 +63,11 @@ export async function POST(request: Request) {
   }
 
   // Manually-tracked listings have no marketplace API to query against.
-  const ebayIsManual = typedAlbum.ebay_listing_id?.startsWith("manual-") ?? false;
-  const discogsIsManual = typedAlbum.discogs_listing_id?.startsWith("manual-") ?? false;
+  const ebayIsLocal = isLocalMarketplaceListingId(typedAlbum.ebay_listing_id);
+  const discogsIsLocal = isLocalMarketplaceListingId(typedAlbum.discogs_listing_id);
   if (
-    (!typedAlbum.ebay_listing_id || ebayIsManual) &&
-    (!typedAlbum.discogs_listing_id || discogsIsManual)
+    (!typedAlbum.ebay_listing_id || ebayIsLocal) &&
+    (!typedAlbum.discogs_listing_id || discogsIsLocal)
   ) {
     return NextResponse.json({
       status: typedAlbum.status,
@@ -72,11 +76,18 @@ export async function POST(request: Request) {
     });
   }
 
-  const { data: ebayCreds } = await supabase
+  const { data: ebayCreds, error: ebayCredsError } = await supabase
     .from("ebay_credentials")
     .select("*")
     .eq("user_id", user.id)
     .maybeSingle();
+
+  if (ebayCredsError) {
+    return NextResponse.json(
+      { error: `Failed to load eBay credentials: ${ebayCredsError.message}` },
+      { status: 500 }
+    );
+  }
 
   const isRealEbay = hasRealEbayCredentials(ebayCreds);
   let ebayToken: string | null = null;
@@ -87,7 +98,7 @@ export async function POST(request: Request) {
         ebayCreds as EbayTokenCredentials
       );
       if (tokenResult.refreshed) {
-        await supabase
+        const { error: tokenUpdateError } = await supabase
           .from("ebay_credentials")
           .update({
             access_token: tokenResult.token,
@@ -95,6 +106,12 @@ export async function POST(request: Request) {
             updated_at: new Date().toISOString(),
           })
           .eq("user_id", user.id);
+        if (tokenUpdateError) {
+          return NextResponse.json(
+            { error: `Failed to save refreshed eBay token: ${tokenUpdateError.message}` },
+            { status: 500 }
+          );
+        }
       }
       ebayToken = tokenResult.token;
     } catch {
@@ -102,25 +119,35 @@ export async function POST(request: Request) {
     }
   }
 
-  const outcome = await checkAlbumMarketplaceState(
-    buildMarketplaceSyncContext(typedAlbum, user.user_metadata, ebayCreds)
+  const syncCtx = buildMarketplaceSyncContext(
+    typedAlbum,
+    user.user_metadata,
+    ebayCreds
   );
+  const outcome = await checkAlbumMarketplaceState(syncCtx);
 
   if (!outcome.changed) {
     return NextResponse.json({ status: typedAlbum.status, changed: false });
   }
 
-  await supabase
+  const { error: updateError } = await supabase
     .from("albums")
     .update(outcome.updates)
-    .eq("id", albumId);
+    .eq("id", albumId)
+    .eq("user_id", user.id);
+
+  if (updateError) {
+    return NextResponse.json(
+      { error: `Failed to save marketplace sync result: ${updateError.message}` },
+      { status: 500 }
+    );
+  }
 
   if (outcome.soldOn) {
     await crossCancelOtherMarketplace(
       typedAlbum,
       outcome.soldOn,
-      buildMarketplaceSyncContext(typedAlbum, user.user_metadata, ebayCreds)
-        .discogsAuth,
+      syncCtx.discogsAuth,
       ebayToken,
       isRealEbay
     );

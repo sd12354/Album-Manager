@@ -95,6 +95,29 @@ export default function ImportPage() {
 
   useEffect(() => {
     let cancelled = false;
+
+    function resetCollectionScopedState() {
+      setMode("csv");
+      setStep(0);
+      setFile(null);
+      setRawRows([]);
+      setHeaders([]);
+      setColumnMapping({});
+      setDetectionDetail({});
+      setParseError(null);
+      setImporting(false);
+      setProgress(0);
+      setImportedCount(0);
+      setImportError(null);
+      setShowAllErrors(false);
+      setBoxFiles([]);
+      setJsonImporting(false);
+      setJsonProgress(0);
+      setJsonResult(null);
+      setCanEditCollection(null);
+      if (jsonInputRef.current) jsonInputRef.current.value = "";
+    }
+
     async function loadActiveCollection() {
       try {
         const res = await fetch("/api/collection/active");
@@ -107,9 +130,19 @@ export default function ImportPage() {
       }
     }
 
+    function onCollectionChange() {
+      resetCollectionScopedState();
+      void loadActiveCollection();
+    }
+
     void loadActiveCollection();
+    window.addEventListener("vinylvault:collection-change", onCollectionChange);
     return () => {
       cancelled = true;
+      window.removeEventListener(
+        "vinylvault:collection-change",
+        onCollectionChange
+      );
     };
   }, []);
 
