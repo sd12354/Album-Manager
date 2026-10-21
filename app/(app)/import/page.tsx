@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -93,25 +93,63 @@ export default function ImportPage() {
   );
   const missingRequired = REQUIRED_TARGETS.filter((t) => !mappedTargets.has(t));
 
+  const resetImportState = useCallback(() => {
+    setMode("csv");
+    setStep(0);
+    setFile(null);
+    setRawRows([]);
+    setHeaders([]);
+    setColumnMapping({});
+    setDetectionDetail({});
+    setParseError(null);
+    setHeaderless(false);
+    setImporting(false);
+    setProgress(0);
+    setImportedCount(0);
+    setImportError(null);
+    setShowAllErrors(false);
+    setBoxFiles([]);
+    setJsonImporting(false);
+    setJsonProgress(0);
+    setJsonResult(null);
+    if (jsonInputRef.current) {
+      jsonInputRef.current.value = "";
+    }
+  }, []);
+
+  const loadActiveCollection = useCallback(async (cancelled: () => boolean) => {
+    try {
+      const res = await fetch("/api/collection/active");
+      const data = await res.json().catch(() => ({}));
+      if (!cancelled()) {
+        setCanEditCollection(res.ok && data.active?.role !== "viewer");
+      }
+    } catch {
+      if (!cancelled()) setCanEditCollection(false);
+    }
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
-    async function loadActiveCollection() {
-      try {
-        const res = await fetch("/api/collection/active");
-        const data = await res.json().catch(() => ({}));
-        if (!cancelled) {
-          setCanEditCollection(res.ok && data.active?.role !== "viewer");
-        }
-      } catch {
-        if (!cancelled) setCanEditCollection(false);
-      }
-    }
-
-    void loadActiveCollection();
+    void loadActiveCollection(() => cancelled);
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [loadActiveCollection]);
+
+  useEffect(() => {
+    const onCollectionChanged = () => {
+      resetImportState();
+      setCanEditCollection(null);
+      void loadActiveCollection(() => false);
+    };
+    window.addEventListener("vinylvault:collection-changed", onCollectionChanged);
+    return () =>
+      window.removeEventListener(
+        "vinylvault:collection-changed",
+        onCollectionChanged
+      );
+  }, [loadActiveCollection, resetImportState]);
 
   // ── CSV handlers ───────────────────────────────────────────────────────────
   async function handleFileSelect(selectedFile: File) {

@@ -57,19 +57,33 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Album is not listed on eBay" }, { status: 400 });
   }
 
-  const { data: ebayCreds } = await supabase.from("ebay_credentials").select("*").eq("user_id", user.id).maybeSingle();
+  const { data: ebayCreds, error: ebayCredsError } = await supabase.from("ebay_credentials").select("*").eq("user_id", user.id).maybeSingle();
+  if (ebayCredsError) {
+    return NextResponse.json(
+      { error: `Could not load eBay credentials: ${ebayCredsError.message}` },
+      { status: 500 }
+    );
+  }
 
   const isRealEbay = hasRealEbayCredentials(ebayCreds);
-  const isManualListing = typedAlbum.ebay_listing_id.startsWith("manual-");
+  const isLocalOnlyListing =
+    typedAlbum.ebay_listing_id.startsWith("manual-") ||
+    typedAlbum.ebay_listing_id.startsWith("STUB-");
 
-  if (isRealEbay && ebayCreds && !isManualListing) {
+  if (isRealEbay && ebayCreds && !isLocalOnlyListing) {
     const tokenResult = await getValidEbayToken(ebayCreds as EbayTokenCredentials);
     if (tokenResult.refreshed) {
-      await supabase.from("ebay_credentials").update({
+      const { error: refreshError } = await supabase.from("ebay_credentials").update({
         access_token: tokenResult.token,
         token_expiry: tokenResult.expiry,
         updated_at: new Date().toISOString(),
       }).eq("user_id", user.id);
+      if (refreshError) {
+        return NextResponse.json(
+          { error: `Could not save refreshed eBay credentials: ${refreshError.message}` },
+          { status: 500 }
+        );
+      }
     }
     await endEbayListing(typedAlbum.ebay_listing_id, tokenResult.token);
   }
@@ -100,5 +114,5 @@ export async function POST(request: Request) {
     );
   }
 
-  return NextResponse.json({ ok: true, stub: !isRealEbay });
+  return NextResponse.json({ ok: true, stub: !isRealEbay || isLocalOnlyListing });
 }

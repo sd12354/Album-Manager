@@ -79,8 +79,16 @@ export async function POST(request: Request) {
     );
   }
 
-  const rawPrice =
-    listPrice ?? typedAlbum.list_price ?? typedAlbum.suggested_price ?? 9.99;
+  const rawPrice = listPrice ?? typedAlbum.list_price ?? typedAlbum.suggested_price;
+  if (rawPrice == null) {
+    return NextResponse.json(
+      {
+        error:
+          "Set a list price or generate a suggested price before listing this album on Discogs.",
+      },
+      { status: 400 }
+    );
+  }
   const price = Number(rawPrice);
   if (!Number.isFinite(price) || price <= 0) {
     return NextResponse.json(
