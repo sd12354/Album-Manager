@@ -87,7 +87,7 @@ export async function POST(request: Request) {
         ebayCreds as EbayTokenCredentials
       );
       if (tokenResult.refreshed) {
-        await supabase
+        const { error: tokenUpdateError } = await supabase
           .from("ebay_credentials")
           .update({
             access_token: tokenResult.token,
@@ -95,6 +95,12 @@ export async function POST(request: Request) {
             updated_at: new Date().toISOString(),
           })
           .eq("user_id", user.id);
+        if (tokenUpdateError) {
+          return NextResponse.json(
+            { error: `Failed to refresh eBay credentials: ${tokenUpdateError.message}` },
+            { status: 502 }
+          );
+        }
       }
       ebayToken = tokenResult.token;
     } catch {
@@ -110,10 +116,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ status: typedAlbum.status, changed: false });
   }
 
-  await supabase
+  const { error: updateError } = await supabase
     .from("albums")
     .update(outcome.updates)
-    .eq("id", albumId);
+    .eq("id", albumId)
+    .eq("user_id", user.id);
+
+  if (updateError) {
+    return NextResponse.json(
+      { error: `Failed to save marketplace sync result: ${updateError.message}` },
+      { status: 502 }
+    );
+  }
 
   if (outcome.soldOn) {
     await crossCancelOtherMarketplace(
