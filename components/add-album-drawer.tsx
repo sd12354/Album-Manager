@@ -36,7 +36,8 @@ const albumSchema = z.object({
   notes: z.string().optional(),
 });
 
-type AlbumFormData = z.infer<typeof albumSchema>;
+type AlbumFormInput = z.input<typeof albumSchema>;
+type AlbumFormData = z.output<typeof albumSchema>;
 
 interface AddAlbumDrawerProps {
   open: boolean;
@@ -61,7 +62,7 @@ export function AddAlbumDrawer({
     reset,
     watch,
     formState: { errors },
-  } = useForm<AlbumFormData>({
+  } = useForm<AlbumFormInput, unknown, AlbumFormData>({
     resolver: zodResolver(albumSchema),
     defaultValues: { condition: "Great" },
   });

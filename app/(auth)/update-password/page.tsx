@@ -19,8 +19,6 @@ const PASSWORD_RULES = [
   { id: "special", label: "one special character", test: (p: string) => /[^A-Za-z0-9]/.test(p) },
 ] as const;
 
-let handledRecoveryCode: string | null = null;
-
 export default function UpdatePasswordPage() {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -41,8 +39,7 @@ export default function UpdatePasswordPage() {
           ? new URLSearchParams(window.location.search).get("code")
           : null;
 
-      if (code && handledRecoveryCode !== code) {
-        handledRecoveryCode = code;
+      if (code) {
         const { error } = await supabase.auth.exchangeCodeForSession(code);
         if (typeof window !== "undefined") {
           window.history.replaceState(null, "", "/update-password");
@@ -58,11 +55,11 @@ export default function UpdatePasswordPage() {
       }
 
       const {
-        data: { session },
-      } = await supabase.auth.getSession();
+        data: { user },
+      } = await supabase.auth.getUser();
 
       if (!mounted) return;
-      if (!session) {
+      if (!user) {
         setError(
           "This reset link is invalid or has expired. Request a new password reset email."
         );
