@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { VinylSpinner } from "@/components/vinyl-spinner";
@@ -20,6 +21,7 @@ export function DiscogsConnectButton({
   onStatusChange,
 }: DiscogsConnectButtonProps) {
   const [loading, setLoading] = useState(false);
+  const router = useRouter();
   const supabase = createClient();
 
   function handleConnect() {
@@ -31,7 +33,7 @@ export function DiscogsConnectButton({
       return;
     }
     setLoading(true);
-    window.location.href = "/api/discogs/connect";
+    router.push("/api/discogs/connect");
   }
 
   async function handleDisconnect() {
