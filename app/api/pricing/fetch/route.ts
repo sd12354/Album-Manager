@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { fetchDiscogsPricing } from "@/lib/discogs";
+import { fetchDiscogsPricing, type DiscogsPriceResult } from "@/lib/discogs";
 import { searchEbayActiveListings, type EbayPriceResult } from "@/lib/ebay";
 import { buildCombinedPricing } from "@/lib/pricing";
 import {
@@ -38,46 +38,69 @@ function buildFromCache(
   discogsRow?: CacheRow,
   ebayRow?: CacheRow
 ): PricingResult {
-  const result: PricingResult = {
-    suggestedPrice: album.suggested_price ?? 0,
-    confidence: "low",
-  };
+  const discogsRaw = (discogsRow?.raw_data ?? {}) as Record<string, unknown>;
+  const ebayRaw = (ebayRow?.raw_data ?? {}) as Record<string, unknown>;
+  const discogsResult: DiscogsPriceResult | null = discogsRow
+    ? {
+        releaseId: discogsRaw.releaseId as number | undefined,
+        releaseTitle: discogsRaw.releaseTitle as string | undefined,
+        releaseYear: discogsRaw.releaseYear as string | undefined,
+        median: discogsRow.median_price ?? undefined,
+        lowest: discogsRow.lowest_price ?? undefined,
+        numForSale: discogsRow.num_sales ?? undefined,
+        priceForCondition: discogsRaw.priceForCondition as number | undefined,
+        allConditionPrices: discogsRaw.allConditionPrices as
+          | Record<string, number>
+          | undefined,
+      }
+    : null;
+  const ebayResult: EbayPriceResult | null = ebayRow
+    ? {
+        median: ebayRow.median_price ?? 0,
+        lowest: ebayRow.lowest_price ?? 0,
+        highest: (ebayRaw.highest as number | undefined) ?? 0,
+        count: ebayRow.num_sales ?? 0,
+        comparables: (ebayRaw.comparables as number[] | undefined) ?? [],
+        sampleListings:
+          (ebayRaw.sampleListings as EbayPriceResult["sampleListings"]) ?? [],
+      }
+    : null;
+
+  const result = buildCombinedPricing(
+    discogsResult,
+    ebayResult,
+    album.condition as AlbumCondition
+  );
+
+  if (!result.suggestionSource && album.suggested_price) {
+    result.suggestedPrice = album.suggested_price;
+  }
 
   if (discogsRow) {
-    const raw = (discogsRow.raw_data ?? {}) as Record<string, unknown>;
     result.discogsMedian = discogsRow.median_price ?? undefined;
     result.discogsLowest = discogsRow.lowest_price ?? undefined;
     result.discogsSalesCount = discogsRow.num_sales ?? undefined;
-    result.discogsReleaseId = raw.releaseId as number | undefined;
-    result.discogsReleaseTitle = raw.releaseTitle as string | undefined;
-    result.discogsReleaseYear = raw.releaseYear as string | undefined;
-    result.discogsPriceForCondition = raw.priceForCondition as
+    result.discogsReleaseId = discogsRaw.releaseId as number | undefined;
+    result.discogsReleaseTitle = discogsRaw.releaseTitle as string | undefined;
+    result.discogsReleaseYear = discogsRaw.releaseYear as string | undefined;
+    result.discogsPriceForCondition = discogsRaw.priceForCondition as
       | number
       | undefined;
-    result.discogsConditionPrices = raw.allConditionPrices as
+    result.discogsConditionPrices = discogsRaw.allConditionPrices as
       | Record<string, number>
       | undefined;
-    if (result.discogsPriceForCondition != null) {
-      result.suggestionSource = "discogs-condition";
-    } else if (result.discogsMedian != null) {
-      result.suggestionSource = "discogs-median";
-    }
     result.confidence =
-      (raw.confidence as PricingResult["confidence"]) ?? "low";
+      (discogsRaw.confidence as PricingResult["confidence"]) ?? result.confidence;
   }
 
   if (ebayRow) {
-    const raw = (ebayRow.raw_data ?? {}) as Record<string, unknown>;
     result.ebayMedian = ebayRow.median_price ?? undefined;
     result.ebayLowest = ebayRow.lowest_price ?? undefined;
-    result.ebayHighest = raw.highest as number | undefined;
-    result.ebayComparables = raw.comparables as number[] | undefined;
+    result.ebayHighest = ebayRaw.highest as number | undefined;
+    result.ebayComparables = ebayRaw.comparables as number[] | undefined;
     result.ebayCount = ebayRow.num_sales ?? undefined;
-    result.ebaySampleListings = raw.sampleListings as
+    result.ebaySampleListings = ebayRaw.sampleListings as
       | PricingResult["ebaySampleListings"];
-    if (!result.suggestionSource && result.ebayMedian != null) {
-      result.suggestionSource = "ebay-active";
-    }
   }
 
   result.notice = "Showing cached pricing (fetched within last 24h).";
@@ -160,12 +183,30 @@ export async function POST(request: Request) {
         typedAlbum.user_id,
         cachedReleaseId
       );
+      const cachedPricing = buildFromCache(
+        typedAlbum,
+        isFresh(discogsRow) ? discogsRow : undefined,
+        isFresh(ebayRow) ? ebayRow : undefined
+      );
+      if (
+        cachedPricing.suggestionSource &&
+        cachedPricing.suggestedPrice > 0 &&
+        typedAlbum.suggested_price !== cachedPricing.suggestedPrice
+      ) {
+        const { error: updateError } = await supabase
+          .from("albums")
+          .update({
+            suggested_price: cachedPricing.suggestedPrice,
+            status: typedAlbum.status === "unlisted" ? "pricing" : typedAlbum.status,
+          })
+          .eq("id", albumId)
+          .eq("user_id", typedAlbum.user_id);
+        if (updateError) {
+          throw new Error(`Failed to backfill cached pricing: ${updateError.message}`);
+        }
+      }
       return NextResponse.json(
-        buildFromCache(
-          typedAlbum,
-          isFresh(discogsRow) ? discogsRow : undefined,
-          isFresh(ebayRow) ? ebayRow : undefined
-        )
+        cachedPricing
       );
     }
   }

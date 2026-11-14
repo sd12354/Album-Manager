@@ -8,6 +8,7 @@ import {
   maintenanceAllowsEmail,
   markBackendUnhealthy,
 } from "@/lib/backend-health";
+import { sanitizeInternalRedirect } from "@/lib/redirects";
 
 function redirectWithSessionCookies(url: URL, supabaseResponse: NextResponse) {
   const response = NextResponse.redirect(url);
@@ -113,12 +114,21 @@ export async function updateSession(request: NextRequest) {
   if (isProtected && !user) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
+    url.search = "";
+    const next = sanitizeInternalRedirect(
+      `${request.nextUrl.pathname}${request.nextUrl.search}`,
+      "/dashboard"
+    );
+    url.searchParams.set("next", next);
     return redirectWithSessionCookies(url, supabaseResponse);
   }
 
   if (isAuthPage && user) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
+    const next = sanitizeInternalRedirect(
+      request.nextUrl.searchParams.get("next"),
+      "/dashboard"
+    );
+    const url = new URL(next, request.url);
     return redirectWithSessionCookies(url, supabaseResponse);
   }
 
