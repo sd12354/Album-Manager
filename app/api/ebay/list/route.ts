@@ -8,6 +8,7 @@ import {
   type SellerLocation,
 } from "@/lib/ebay";
 import { generateListingDescription } from "@/lib/ai-pricing";
+import { resolveListingPrice } from "@/lib/marketplace-listing";
 import type { Album, AlbumCondition, UserSettings } from "@/types";
 
 export const runtime = "nodejs";
@@ -81,12 +82,13 @@ export async function POST(request: Request) {
     );
   }
 
-  const rawPrice =
-    listPrice ?? typedAlbum.list_price ?? typedAlbum.suggested_price ?? 9.99;
-  const price = Number(rawPrice);
-  if (!Number.isFinite(price) || price <= 0) {
+  const price = resolveListingPrice(typedAlbum, listPrice);
+  if (price === null) {
     return NextResponse.json(
-      { error: "List price must be a positive number." },
+      {
+        error:
+          "Set a positive list price or fetch pricing before listing this album on eBay.",
+      },
       { status: 400 }
     );
   }
@@ -133,7 +135,7 @@ export async function POST(request: Request) {
   const tokenResult = await getValidEbayToken(creds as EbayTokenCredentials);
 
   if (tokenResult.refreshed) {
-    await supabase
+    const { error: refreshError } = await supabase
       .from("ebay_credentials")
       .update({
         access_token: tokenResult.token,
@@ -141,6 +143,12 @@ export async function POST(request: Request) {
         updated_at: new Date().toISOString(),
       })
       .eq("user_id", user.id);
+    if (refreshError) {
+      return NextResponse.json(
+        { error: "Could not save refreshed eBay credentials." },
+        { status: 500 }
+      );
+    }
   }
 
   // Pull seller location from user settings so eBay gets a valid <Location>.

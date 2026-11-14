@@ -6,6 +6,7 @@ import {
   hasRealEbayCredentials,
   type EbayTokenCredentials,
 } from "@/lib/ebay";
+import { isLocalMarketplaceListingId } from "@/lib/marketplace-listing";
 import type { Album } from "@/types";
 
 export const runtime = "nodejs";
@@ -60,16 +61,22 @@ export async function POST(request: Request) {
   const { data: ebayCreds } = await supabase.from("ebay_credentials").select("*").eq("user_id", user.id).maybeSingle();
 
   const isRealEbay = hasRealEbayCredentials(ebayCreds);
-  const isManualListing = typedAlbum.ebay_listing_id.startsWith("manual-");
+  const isManualListing = isLocalMarketplaceListingId(typedAlbum.ebay_listing_id);
 
   if (isRealEbay && ebayCreds && !isManualListing) {
     const tokenResult = await getValidEbayToken(ebayCreds as EbayTokenCredentials);
     if (tokenResult.refreshed) {
-      await supabase.from("ebay_credentials").update({
+      const { error: refreshError } = await supabase.from("ebay_credentials").update({
         access_token: tokenResult.token,
         token_expiry: tokenResult.expiry,
         updated_at: new Date().toISOString(),
       }).eq("user_id", user.id);
+      if (refreshError) {
+        return NextResponse.json(
+          { error: "Could not save refreshed eBay credentials." },
+          { status: 500 }
+        );
+      }
     }
     await endEbayListing(typedAlbum.ebay_listing_id, tokenResult.token);
   }

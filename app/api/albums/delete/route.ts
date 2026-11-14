@@ -7,6 +7,7 @@ import {
   type EbayTokenCredentials,
 } from "@/lib/ebay";
 import { deleteDiscogsListing } from "@/lib/discogs";
+import { isLocalMarketplaceListingId } from "@/lib/marketplace-listing";
 import {
   canManage,
   getDiscogsAuthForOwner,
@@ -100,11 +101,17 @@ export async function POST(request: Request) {
     if (tokenResult) {
       ebayToken = tokenResult.token;
       if (tokenResult.refreshed) {
-        await supabase.from("ebay_credentials").update({
+        const { error: refreshError } = await supabase.from("ebay_credentials").update({
           access_token: tokenResult.token,
           token_expiry: tokenResult.expiry,
           updated_at: new Date().toISOString(),
         }).eq("user_id", ownerId);
+        if (refreshError) {
+          return NextResponse.json(
+            { error: "Could not save refreshed eBay credentials." },
+            { status: 500 }
+          );
+        }
       }
     }
   }
@@ -114,9 +121,11 @@ export async function POST(request: Request) {
   if (isOwner) {
     const delistErrors: string[] = [];
     for (const album of albums as Album[]) {
-      if (album.discogs_listing_id && !discogsAuth) {
+      const discogsIsLocal = isLocalMarketplaceListingId(album.discogs_listing_id);
+      const ebayIsLocal = isLocalMarketplaceListingId(album.ebay_listing_id);
+      if (album.discogs_listing_id && !discogsIsLocal && !discogsAuth) {
         delistErrors.push(`${album.title} (Discogs): credentials unavailable`);
-      } else if (album.discogs_listing_id && discogsAuth) {
+      } else if (album.discogs_listing_id && !discogsIsLocal && discogsAuth) {
         try {
           await deleteDiscogsListing(parseInt(album.discogs_listing_id, 10), discogsAuth);
         } catch (err) {
@@ -125,9 +134,9 @@ export async function POST(request: Request) {
           );
         }
       }
-      if (album.ebay_listing_id && isRealEbay && !ebayToken) {
+      if (album.ebay_listing_id && !ebayIsLocal && isRealEbay && !ebayToken) {
         delistErrors.push(`${album.title} (eBay): credentials unavailable`);
-      } else if (album.ebay_listing_id && ebayToken && isRealEbay) {
+      } else if (album.ebay_listing_id && !ebayIsLocal && ebayToken && isRealEbay) {
         try {
           await endEbayListing(album.ebay_listing_id, ebayToken);
         } catch (err) {
