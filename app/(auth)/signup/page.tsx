@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
 import { getAppUrl } from "@/lib/site-url";
 import { isBackendOutageError } from "@/lib/backend-health";
+import { sanitizeInternalRedirect } from "@/lib/redirects";
 
 const PASSWORD_RULES = [
   { id: "length", label: "At least 8 characters", test: (p: string) => p.length >= 8 },
@@ -36,6 +37,12 @@ export default function SignupPage() {
   const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
   const router = useRouter();
   const supabase = createClient();
+  const next =
+    typeof window === "undefined"
+      ? "/dashboard"
+      : sanitizeInternalRedirect(
+          new URLSearchParams(window.location.search).get("next")
+        );
 
   const passwordChecks = PASSWORD_RULES.map((rule) => ({
     ...rule,
@@ -66,7 +73,7 @@ export default function SignupPage() {
         // Ensures the confirmation link (when email confirmation is enabled
         // in Supabase) returns the user to the canonical production app rather
         // than an ephemeral deployment URL or localhost.
-        emailRedirectTo: `${getAppUrl()}/login`,
+        emailRedirectTo: `${getAppUrl()}/login?next=${encodeURIComponent(next)}`,
       },
     });
 
@@ -92,8 +99,8 @@ export default function SignupPage() {
 
     if (data.session) {
       // Email confirmation is disabled on the project — the user is already
-      // signed in, so go straight to the dashboard.
-      router.push("/dashboard");
+      // signed in, so go straight to the requested internal destination.
+      router.push(next);
       router.refresh();
     } else {
       // Confirmation is enabled — a verification email was sent. Show a
