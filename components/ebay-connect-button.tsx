@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
+import { useRouter } from "next/navigation";
 
 interface EbayConnectButtonProps {
   connected: boolean;
@@ -16,11 +17,12 @@ export function EbayConnectButton({
   onStatusChange,
 }: EbayConnectButtonProps) {
   const [loading, setLoading] = useState(false);
+  const router = useRouter();
   const supabase = createClient();
 
   async function handleConnect() {
     setLoading(true);
-    window.location.href = "/api/ebay/connect";
+    router.push("/api/ebay/connect");
   }
 
   async function handleDisconnect() {
