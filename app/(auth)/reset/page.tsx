@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
 import { getAppUrl } from "@/lib/site-url";
 import { isBackendOutageError } from "@/lib/backend-health";
+import { authCallbackUrl } from "@/lib/redirects";
 
 export default function ResetPage() {
   const [email, setEmail] = useState("");
@@ -24,7 +25,7 @@ export default function ResetPage() {
 
     const trimmedEmail = email.trim();
     const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
-      redirectTo: `${getAppUrl()}/update-password`,
+      redirectTo: `${getAppUrl()}${authCallbackUrl("/update-password")}`,
     });
 
     if (error) {

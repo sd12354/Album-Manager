@@ -3,7 +3,6 @@ import { createClient } from "@/lib/supabase/server";
 import { AlbumDetailClient } from "@/components/album-detail-client";
 import {
   canManage,
-  getActiveCollection,
   getOwnerConnectionStatus,
   getRoleForOwner,
 } from "@/lib/collections";
@@ -44,13 +43,11 @@ export default async function AlbumDetailPage({ params }: AlbumDetailPageProps) 
     notFound();
   }
 
-  const activeCollection = await getActiveCollection(user);
-  if (typedAlbum.user_id !== activeCollection.ownerId) {
-    notFound();
-  }
-
   const isOwner = typedAlbum.user_id === user.id;
   const role = await getRoleForOwner(user, typedAlbum.user_id);
+  if (!role) {
+    notFound();
+  }
   const canEdit = canManage(role);
   const ownerStatus = await getOwnerConnectionStatus(user, typedAlbum.user_id);
 
