@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, Eye, EyeOff, X } from "lucide-react";
@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
 import { getAppUrl } from "@/lib/site-url";
 import { isBackendOutageError } from "@/lib/backend-health";
+import { safePostAuthRedirectPath } from "@/lib/redirects";
 
 const PASSWORD_RULES = [
   { id: "length", label: "At least 8 characters", test: (p: string) => p.length >= 8 },
@@ -34,8 +35,15 @@ export default function SignupPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
+  const [nextPath, setNextPath] = useState("/dashboard");
   const router = useRouter();
   const supabase = createClient();
+
+  useEffect(() => {
+    setNextPath(
+      safePostAuthRedirectPath(new URLSearchParams(window.location.search).get("next"))
+    );
+  }, []);
 
   const passwordChecks = PASSWORD_RULES.map((rule) => ({
     ...rule,
@@ -66,7 +74,7 @@ export default function SignupPage() {
         // Ensures the confirmation link (when email confirmation is enabled
         // in Supabase) returns the user to the canonical production app rather
         // than an ephemeral deployment URL or localhost.
-        emailRedirectTo: `${getAppUrl()}/login`,
+        emailRedirectTo: `${getAppUrl()}/auth/callback?next=${encodeURIComponent(nextPath)}`,
       },
     });
 
@@ -93,7 +101,7 @@ export default function SignupPage() {
     if (data.session) {
       // Email confirmation is disabled on the project — the user is already
       // signed in, so go straight to the dashboard.
-      router.push("/dashboard");
+      router.push(nextPath);
       router.refresh();
     } else {
       // Confirmation is enabled — a verification email was sent. Show a
@@ -116,7 +124,7 @@ export default function SignupPage() {
           link to verify your account, then sign in.
         </p>
         <Button asChild className="mt-6 w-full" size="lg">
-          <Link href="/login">Go to Sign In</Link>
+          <Link href={`/login?next=${encodeURIComponent(nextPath)}`}>Go to Sign In</Link>
         </Button>
       </div>
     );
@@ -250,7 +258,7 @@ export default function SignupPage() {
 
       <p className="text-center text-sm">
         Already have an account?{" "}
-        <Link href="/login" className="font-medium text-accent hover:underline">
+        <Link href={`/login?next=${encodeURIComponent(nextPath)}`} className="font-medium text-accent hover:underline">
           Sign in
         </Link>
       </p>

@@ -29,13 +29,20 @@ export async function POST() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { data: albums } = await supabase
+  const { data: albums, error: albumsError } = await supabase
     .from("albums")
     .select("*")
     .eq("user_id", user.id)
     .neq("status", "sold")
     .or("ebay_listing_id.not.is.null,discogs_listing_id.not.is.null")
     .limit(MAX_SYNC);
+
+  if (albumsError) {
+    return NextResponse.json(
+      { error: `Failed to load albums for sync: ${albumsError.message}` },
+      { status: 500 }
+    );
+  }
 
   const { data: ebayCreds } = await supabase
     .from("ebay_credentials")
@@ -89,7 +96,19 @@ export async function POST() {
     });
 
     if (outcome.changed) {
-      await supabase.from("albums").update(outcome.updates).eq("id", album.id);
+      const { error: updateError } = await supabase
+        .from("albums")
+        .update(outcome.updates)
+        .eq("id", album.id);
+
+      if (updateError) {
+        return NextResponse.json(
+          {
+            error: `Failed to save marketplace sync state for ${album.title}: ${updateError.message}`,
+          },
+          { status: 500 }
+        );
+      }
 
       if (outcome.soldOn) {
         await crossCancelOtherMarketplace(
