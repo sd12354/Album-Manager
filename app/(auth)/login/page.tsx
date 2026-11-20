@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Eye, EyeOff } from "lucide-react";
 import { VinylLogo } from "@/components/vinyl-logo";
 import { VinylSpinner } from "@/components/vinyl-spinner";
@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
 import { isBackendOutageError } from "@/lib/backend-health";
+import { getSafePostAuthRedirectPath } from "@/lib/redirects";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -19,6 +20,8 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const nextPath = getSafePostAuthRedirectPath(searchParams.get("next"));
   const supabase = createClient();
 
   async function handleSubmit(e: React.FormEvent) {
@@ -40,7 +43,7 @@ export default function LoginPage() {
       );
       setLoading(false);
     } else {
-      router.push("/dashboard");
+      router.push(nextPath);
       router.refresh();
     }
   }
@@ -124,7 +127,10 @@ export default function LoginPage() {
       </div>
 
       <p className="text-center text-sm">
-        <Link href="/signup" className="font-medium text-accent hover:underline">
+        <Link
+          href={`/signup?next=${encodeURIComponent(nextPath)}`}
+          className="font-medium text-accent hover:underline"
+        >
           Create an account
         </Link>
       </p>
