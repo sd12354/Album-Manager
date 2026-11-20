@@ -8,6 +8,10 @@ import {
   maintenanceAllowsEmail,
   markBackendUnhealthy,
 } from "@/lib/backend-health";
+import {
+  buildLoginRedirectUrl,
+  getSafePostAuthRedirectPath,
+} from "@/lib/redirects";
 
 function redirectWithSessionCookies(url: URL, supabaseResponse: NextResponse) {
   const response = NextResponse.redirect(url);
@@ -111,14 +115,17 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (isProtected && !user) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    return redirectWithSessionCookies(url, supabaseResponse);
+    return redirectWithSessionCookies(
+      buildLoginRedirectUrl(request.nextUrl),
+      supabaseResponse
+    );
   }
 
   if (isAuthPage && user) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
+    const url = new URL(
+      getSafePostAuthRedirectPath(request.nextUrl.searchParams.get("next")),
+      request.url
+    );
     return redirectWithSessionCookies(url, supabaseResponse);
   }
 
