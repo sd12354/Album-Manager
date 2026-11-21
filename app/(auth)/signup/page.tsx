@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
 import { getAppUrl } from "@/lib/site-url";
 import { isBackendOutageError } from "@/lib/backend-health";
+import { sanitizeRedirectPath } from "@/lib/redirects";
 
 const PASSWORD_RULES = [
   { id: "length", label: "At least 8 characters", test: (p: string) => p.length >= 8 },
@@ -58,6 +59,9 @@ export default function SignupPage() {
     }
 
     setLoading(true);
+    const destination = sanitizeRedirectPath(
+      new URLSearchParams(window.location.search).get("next")
+    );
 
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -66,7 +70,7 @@ export default function SignupPage() {
         // Ensures the confirmation link (when email confirmation is enabled
         // in Supabase) returns the user to the canonical production app rather
         // than an ephemeral deployment URL or localhost.
-        emailRedirectTo: `${getAppUrl()}/login`,
+        emailRedirectTo: `${getAppUrl()}/auth/callback?next=${encodeURIComponent(destination)}`,
       },
     });
 
@@ -93,7 +97,7 @@ export default function SignupPage() {
     if (data.session) {
       // Email confirmation is disabled on the project — the user is already
       // signed in, so go straight to the dashboard.
-      router.push("/dashboard");
+      router.push(destination);
       router.refresh();
     } else {
       // Confirmation is enabled — a verification email was sent. Show a

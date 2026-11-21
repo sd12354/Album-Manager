@@ -32,11 +32,15 @@ const albumSchema = z.object({
   genre: z.string().optional(),
   condition: z.enum(["Mint", "Great", "Good", "Fair", "Poor"]),
   catalog_number: z.string().optional(),
-  purchase_price: z.coerce.number().optional(),
+  purchase_price: z.preprocess(
+    (value) => (value === "" || value == null ? undefined : value),
+    z.coerce.number().nonnegative("Purchase price cannot be negative").optional()
+  ),
   notes: z.string().optional(),
 });
 
 type AlbumFormData = z.infer<typeof albumSchema>;
+type AlbumFormInput = z.input<typeof albumSchema>;
 
 interface AddAlbumDrawerProps {
   open: boolean;
@@ -61,7 +65,7 @@ export function AddAlbumDrawer({
     reset,
     watch,
     formState: { errors },
-  } = useForm<AlbumFormData>({
+  } = useForm<AlbumFormInput, unknown, AlbumFormData>({
     resolver: zodResolver(albumSchema),
     defaultValues: { condition: "Great" },
   });
