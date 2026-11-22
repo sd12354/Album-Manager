@@ -8,6 +8,7 @@ import {
   maintenanceAllowsEmail,
   markBackendUnhealthy,
 } from "@/lib/backend-health";
+import { protectedLoginPath } from "@/lib/redirects";
 
 function redirectWithSessionCookies(url: URL, supabaseResponse: NextResponse) {
   const response = NextResponse.redirect(url);
@@ -111,8 +112,10 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (isProtected && !user) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
+    const url = new URL(
+      protectedLoginPath(pathname, request.nextUrl.search),
+      request.url
+    );
     return redirectWithSessionCookies(url, supabaseResponse);
   }
 
