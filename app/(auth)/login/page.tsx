@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Eye, EyeOff } from "lucide-react";
@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
 import { isBackendOutageError } from "@/lib/backend-health";
+import { redirectPathFromSearch, sanitizeInternalRedirect } from "@/lib/redirects";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -18,8 +19,18 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [signupHref, setSignupHref] = useState("/signup");
   const router = useRouter();
   const supabase = createClient();
+
+  useEffect(() => {
+    const next = new URLSearchParams(window.location.search).get("next");
+    if (next) {
+      setSignupHref(
+        `/signup?next=${encodeURIComponent(sanitizeInternalRedirect(next))}`
+      );
+    }
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -40,7 +51,7 @@ export default function LoginPage() {
       );
       setLoading(false);
     } else {
-      router.push("/dashboard");
+      router.push(redirectPathFromSearch(window.location.search));
       router.refresh();
     }
   }
@@ -124,7 +135,7 @@ export default function LoginPage() {
       </div>
 
       <p className="text-center text-sm">
-        <Link href="/signup" className="font-medium text-accent hover:underline">
+        <Link href={signupHref} className="font-medium text-accent hover:underline">
           Create an account
         </Link>
       </p>

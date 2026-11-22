@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { VinylSpinner } from "@/components/vinyl-spinner";
 import { createClient } from "@/lib/supabase/client";
+import { useRouter } from "next/navigation";
 
 interface DiscogsConnectButtonProps {
   connected: boolean;
@@ -21,6 +22,7 @@ export function DiscogsConnectButton({
 }: DiscogsConnectButtonProps) {
   const [loading, setLoading] = useState(false);
   const supabase = createClient();
+  const router = useRouter();
 
   function handleConnect() {
     if (!oauthConfigured) {
@@ -31,7 +33,7 @@ export function DiscogsConnectButton({
       return;
     }
     setLoading(true);
-    window.location.href = "/api/discogs/connect";
+    router.push("/api/discogs/connect");
   }
 
   async function handleDisconnect() {
