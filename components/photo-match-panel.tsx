@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -201,7 +201,7 @@ export function PhotoMatchPanel() {
     };
   }, []);
 
-  const addFiles = useCallback(async (fileList: FileList | null) => {
+  async function addFiles(fileList: FileList | null) {
     if (!fileList) return;
     const files = Array.from(fileList);
     if (files.length === 0) return;
@@ -327,7 +327,7 @@ export function PhotoMatchPanel() {
       );
       setConverting(false);
     }
-  }, []);
+  }
 
   function removeRow(id: string) {
     setRows((prev) => {
